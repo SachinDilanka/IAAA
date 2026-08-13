@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <title>Showing Message – AssistComm</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/card_view.css') }}">
+</head>
+<body class="card-body-bg">
+    <div class="card-page">
+        <!-- Toolbar -->
+        <header class="card-toolbar">
+            <a href="{% if location_slug and location_slug != 'other' %}{{ url_for('views.location_dashboard', slug=location_slug) }}{% else %}{{ url_for('views.index') }}{% endif %}"
+               class="btn btn-outline-dark"
+               aria-label="Go back to messages">
+                <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Back
+            </a>
+            <button id="flip-btn" class="btn btn-flip" aria-label="Flip text 180 degrees for person across the table">
+                <i class="fa-solid fa-rotate" aria-hidden="true"></i> Flip 180°
+            </button>
+        </header>
+
+        <!-- Fullscreen Message Display -->
+        <main id="billboard" class="billboard" role="main">
+            <div class="billboard-icon" aria-hidden="true">
+                <i class="fa-solid {{ icon }}"></i>
+            </div>
+            <p id="billboard-text" class="billboard-text">{{ message_text }}</p>
+        </main>
+    </div>
+
+    <script>
+        document.getElementById('flip-btn').addEventListener('click', function () {
+            const billboard = document.getElementById('billboard');
+            billboard.classList.toggle('flipped');
+            this.classList.toggle('active');
+        });
+    </script>
+</body>
+</html>

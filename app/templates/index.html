@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+
+{% block title %}AssistComm - Home{% endblock %}
+
+{% block content %}
+<!-- Application Purpose Explanation -->
+<section class="intro-banner">
+    <h1 class="intro-title">Accessible Communication Assistant</h1>
+    <p class="intro-desc">
+        Empowering deaf and non-verbal users to communicate easily in everyday situations. Select your current location to display ready-made, high-contrast messages to show to people around you.
+    </p>
+</section>
+
+<!-- Detect My Location Button Section -->
+<section class="location-detect-card">
+    <div class="detect-header">
+        <i class="fa-solid fa-location-crosshairs detect-icon"></i>
+        <h2 class="detect-title">Automatic Location Detection</h2>
+    </div>
+    
+    <button id="detect-location-btn" class="btn-detect" type="button" aria-label="Detect My Location">
+        <i class="fa-solid fa-compass"></i> Detect My Location
+    </button>
+
+    <div id="detection-feedback" class="detection-feedback">
+        <!-- Message populated via main.js -->
+    </div>
+</section>
+
+<!-- Manual Location Selection Section -->
+<section class="manual-section" aria-labelledby="manual-select-title">
+    <h2 id="manual-select-title" class="section-title">Select Location Manually</h2>
+
+    <div class="location-grid" role="navigation" aria-label="Location List">
+        {% for location in locations %}
+        <a href="#" class="location-card" aria-label="Select location {{ location.name }}">
+            <div class="card-icon-box">
+                <i class="fa-solid {{ location.icon }}"></i>
+            </div>
+            <div class="card-content">
+                <h3 class="card-title">{{ location.name }}</h3>
+                <p class="card-desc">{{ location.description }}</p>
+            </div>
+            <div class="card-arrow">
+                <i class="fa-solid fa-chevron-right"></i>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

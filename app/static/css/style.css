@@ -1,0 +1,305 @@
+/* Accessible CSS Design for Deaf & Non-Verbal Communication Assistant */
+
+:root {
+    --bg-main: #0d1117;
+    --bg-card: #161b22;
+    --bg-card-hover: #21262d;
+    --text-primary: #ffffff;
+    --text-secondary: #c9d1d9;
+    --text-muted: #8b949e;
+    
+    --accent-yellow: #ffee00;
+    --accent-cyan: #38bdf8;
+    --border-color: #30363d;
+    --border-highlight: #ffee00;
+    
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-heading: 'Outfit', 'Inter', sans-serif;
+    
+    --focus-ring: 4px solid #ffee00;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 19px;
+    line-height: 1.6;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Accessibility Focus States */
+:focus-visible {
+    outline: var(--focus-ring) !important;
+    outline-offset: 3px !important;
+}
+
+.skip-link {
+    position: absolute;
+    top: -100px;
+    left: 10px;
+    background: var(--accent-yellow);
+    color: #000000;
+    padding: 12px 20px;
+    font-weight: 800;
+    z-index: 9999;
+    border-radius: 8px;
+    transition: top 0.2s ease;
+}
+
+.skip-link:focus {
+    top: 10px;
+}
+
+/* App Header */
+.app-header {
+    background-color: var(--bg-card);
+    border-bottom: 3px solid var(--border-color);
+    padding: 1.25rem 1.5rem;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.header-container {
+    max-width: 1000px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.brand-logo {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    text-decoration: none;
+    color: var(--text-primary);
+}
+
+.brand-icon {
+    font-size: 2.2rem;
+    color: var(--accent-cyan);
+}
+
+.brand-title {
+    font-family: var(--font-heading);
+    font-size: 1.85rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+}
+
+/* Main Content Layout */
+.main-container {
+    max-width: 1000px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+}
+
+/* App Purpose Explanation Banner */
+.intro-banner {
+    background-color: var(--bg-card);
+    border: 3px solid var(--accent-cyan);
+    border-radius: 20px;
+    padding: 2rem;
+}
+
+.intro-title {
+    font-family: var(--font-heading);
+    font-size: 2.1rem;
+    font-weight: 800;
+    color: var(--accent-cyan);
+    margin-bottom: 0.75rem;
+}
+
+.intro-desc {
+    font-size: 1.25rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+/* Detect My Location Section */
+.location-detect-card {
+    background-color: var(--bg-card);
+    border: 3px solid var(--border-color);
+    border-radius: 20px;
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.detect-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.detect-icon {
+    font-size: 2rem;
+    color: var(--accent-yellow);
+}
+
+.detect-title {
+    font-family: var(--font-heading);
+    font-size: 1.6rem;
+    font-weight: 700;
+}
+
+.btn-detect {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.85rem;
+    min-height: 64px;
+    padding: 1rem 2rem;
+    background-color: var(--accent-yellow);
+    color: #000000;
+    font-size: 1.35rem;
+    font-weight: 800;
+    border-radius: 14px;
+    border: none;
+    cursor: pointer;
+    transition: transform 0.15s ease, background-color 0.15s ease;
+    touch-action: manipulation;
+}
+
+.btn-detect:hover {
+    background-color: #e6d700;
+    transform: translateY(-2px);
+}
+
+.detection-feedback {
+    display: none;
+    background-color: rgba(255, 238, 0, 0.1);
+    border: 2px solid var(--accent-yellow);
+    color: var(--accent-yellow);
+    padding: 1rem;
+    border-radius: 10px;
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+/* Manual Selection Section */
+.manual-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.section-title {
+    font-family: var(--font-heading);
+    font-size: 1.85rem;
+    font-weight: 800;
+    border-left: 6px solid var(--accent-yellow);
+    padding-left: 0.85rem;
+}
+
+.location-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+}
+
+.location-card {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    background-color: var(--bg-card);
+    border: 3px solid var(--border-color);
+    border-radius: 20px;
+    padding: 1.75rem;
+    text-decoration: none;
+    color: var(--text-primary);
+    min-height: 120px;
+    transition: border-color 0.2s ease, transform 0.2s ease, background-color 0.2s ease;
+    touch-action: manipulation;
+}
+
+.location-card:hover {
+    border-color: var(--accent-yellow);
+    background-color: var(--bg-card-hover);
+    transform: translateY(-4px);
+}
+
+.card-icon-box {
+    width: 64px;
+    height: 64px;
+    background-color: rgba(56, 189, 248, 0.15);
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    color: var(--accent-cyan);
+    flex-shrink: 0;
+}
+
+.location-card:hover .card-icon-box {
+    background-color: var(--accent-yellow);
+    color: #000000;
+}
+
+.card-content {
+    flex: 1;
+}
+
+.card-title {
+    font-family: var(--font-heading);
+    font-size: 1.6rem;
+    font-weight: 800;
+    margin-bottom: 0.25rem;
+}
+
+.card-desc {
+    font-size: 1rem;
+    color: var(--text-muted);
+}
+
+.card-arrow {
+    font-size: 1.5rem;
+    color: var(--accent-yellow);
+}
+
+/* App Footer */
+.app-footer {
+    background-color: var(--bg-card);
+    border-top: 2px solid var(--border-color);
+    padding: 1.5rem;
+    text-align: center;
+    font-size: 1rem;
+    color: var(--text-secondary);
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+    .main-container {
+        padding: 1.25rem 1rem;
+    }
+    .intro-title {
+        font-size: 1.75rem;
+    }
+    .brand-title {
+        font-size: 1.5rem;
+    }
+    .location-card {
+        padding: 1.25rem;
+    }
+    .btn-detect {
+        font-size: 1.15rem;
+        padding: 0.85rem 1.25rem;
+    }
+}

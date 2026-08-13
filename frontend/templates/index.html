@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+
+{% block title %}AssistComm – Where Are You?{% endblock %}
+
+{% block content %}
+<!-- App Purpose Banner -->
+<section class="intro-banner" aria-labelledby="intro-heading">
+    <h1 id="intro-heading" class="intro-title">Accessible Communication Assistant</h1>
+    <p class="intro-desc">
+        Empowering deaf and non-verbal users to communicate easily in everyday situations.
+        Select your current location to display ready-made, high-contrast messages to show to people around you.
+    </p>
+</section>
+
+<!-- Detect My Location -->
+<section class="detect-section" aria-labelledby="detect-heading">
+    <div class="detect-card">
+        <div class="detect-card-header">
+            <i class="fa-solid fa-location-crosshairs detect-icon" aria-hidden="true"></i>
+            <h2 id="detect-heading" class="detect-title">Automatic Location Detection</h2>
+        </div>
+        <p class="detect-desc">Allow the app to detect your current location and automatically show relevant messages.</p>
+        <button id="detect-btn" class="btn btn-detect" type="button" aria-label="Detect my current location">
+            <i class="fa-solid fa-compass" aria-hidden="true"></i>
+            Detect My Location
+        </button>
+        <div id="detect-feedback" class="detect-feedback" role="status" aria-live="polite"></div>
+    </div>
+</section>
+
+<!-- Manual Location Selection -->
+<section class="manual-section" aria-labelledby="manual-heading">
+    <h2 id="manual-heading" class="section-title">
+        <span class="section-title-accent"></span>
+        Select Location Manually
+    </h2>
+    <p class="section-desc">Tap the place type you are visiting to see relevant communication messages.</p>
+
+    <nav class="location-grid" aria-label="Location types">
+        {% for loc in locations %}
+        <a href="{{ url_for('views.location_dashboard', slug=loc.slug) }}"
+           class="location-card"
+           aria-label="Go to {{ loc.name }} messages">
+            <div class="card-icon-wrap">
+                <i class="fa-solid {{ loc.icon }}" aria-hidden="true"></i>
+            </div>
+            <div class="card-body">
+                <h3 class="card-title">{{ loc.name }}</h3>
+                <p class="card-desc">{{ loc.description }}</p>
+            </div>
+            <div class="card-arrow" aria-hidden="true">
+                <i class="fa-solid fa-chevron-right"></i>
+            </div>
+        </a>
+        {% endfor %}
+    </nav>
+</section>
+{% endblock %}

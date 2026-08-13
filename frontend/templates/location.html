@@ -1,0 +1,150 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ location.name }} – AssistComm{% endblock %}
+
+{% block content %}
+<!-- Location Header -->
+<div class="dash-header-card">
+    <a href="{{ url_for('views.index') }}" class="btn btn-outline back-btn">
+        <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Change Location
+    </a>
+
+    <div class="location-banner">
+        <div class="location-badge">
+            <i class="fa-solid {{ location.icon }}" aria-hidden="true"></i>
+        </div>
+        <div>
+            <h1 class="location-page-title">{{ location.name }}</h1>
+            <p class="location-page-desc">{{ location.description }}</p>
+        </div>
+    </div>
+</div>
+
+<!-- Search + Custom Message Bar -->
+<div class="action-bar">
+    <form action="{{ url_for('views.location_dashboard', slug=location.slug) }}" method="GET" class="search-form" role="search">
+        <div class="search-wrap">
+            <i class="fa-solid fa-magnifying-glass search-icon" aria-hidden="true"></i>
+            <input type="text" name="q" value="{{ search_query }}"
+                   placeholder="Search messages…"
+                   class="search-input"
+                   aria-label="Search messages">
+            {% if search_query %}
+            <a href="{{ url_for('views.location_dashboard', slug=location.slug) }}"
+               class="search-clear" aria-label="Clear search">&times;</a>
+            {% endif %}
+        </div>
+        <button type="submit" class="btn btn-primary">Search</button>
+    </form>
+    <button id="open-custom-btn" class="btn btn-accent" type="button">
+        <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i> Custom Message
+    </button>
+</div>
+
+<!-- Category Filter Chips -->
+<nav class="chip-nav" aria-label="Message categories">
+    <a href="#all" class="chip active" data-category="all">
+        <i class="fa-solid fa-layer-group" aria-hidden="true"></i> All
+    </a>
+    {% for item in categories_with_messages %}
+    <a href="#cat-{{ item.category.slug }}" class="chip" data-category="{{ item.category.slug }}">
+        <i class="fa-solid {{ item.category.icon }}" aria-hidden="true"></i>
+        {{ item.category.name }}
+    </a>
+    {% endfor %}
+</nav>
+
+<!-- Message Groups -->
+<div class="messages-wrap">
+    {% if not categories_with_messages %}
+    <div class="empty-state">
+        <i class="fa-solid fa-face-meh empty-icon" aria-hidden="true"></i>
+        <h3>No messages found</h3>
+        <p>Try a different search term or create a custom message.</p>
+        <button class="btn btn-primary open-custom-trigger">Create Custom Message</button>
+    </div>
+    {% else %}
+    {% for item in categories_with_messages %}
+    <section id="cat-{{ item.category.slug }}"
+             class="cat-group"
+             data-cat="{{ item.category.slug }}"
+             aria-labelledby="cat-title-{{ item.category.slug }}">
+        <h2 id="cat-title-{{ item.category.slug }}" class="cat-group-title">
+            <i class="fa-solid {{ item.category.icon }}" aria-hidden="true"></i>
+            {{ item.category.name }}
+        </h2>
+
+        <div class="msg-grid">
+            {% for msg in item.messages %}
+
+            {% if msg.has_slot %}
+            <div class="msg-card slot-card">
+                <div class="msg-icon"><i class="fa-solid {{ msg.icon }}" aria-hidden="true"></i></div>
+                <div class="msg-body">
+                    <span class="badge-slot">Fill-in Prompt</span>
+                    <p class="msg-preview">{{ msg.template.replace('{slot}', '_____') }}</p>
+                    <div class="slot-group">
+                        <label for="slot-{{ msg.id }}" class="sr-only">Enter item for prompt</label>
+                        <input type="text"
+                               id="slot-{{ msg.id }}"
+                               class="slot-input"
+                               placeholder="{{ msg.slot_placeholder or 'Type item name…' }}">
+                        <button type="button"
+                                class="btn btn-primary show-slot-btn"
+                                data-template="{{ msg.template }}"
+                                data-input="slot-{{ msg.id }}"
+                                data-icon="{{ msg.icon }}"
+                                data-location="{{ location.slug }}">
+                            <i class="fa-solid fa-expand" aria-hidden="true"></i> Show
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {% else %}
+            <a href="{{ url_for('views.show_card', text=msg.template, icon=msg.icon, location=location.slug) }}"
+               class="msg-card direct-card"
+               aria-label="Display message: {{ msg.template }}">
+                <div class="msg-icon"><i class="fa-solid {{ msg.icon }}" aria-hidden="true"></i></div>
+                <div class="msg-body">
+                    <p class="msg-text">{{ msg.template }}</p>
+                </div>
+                <div class="msg-arrow" aria-hidden="true">
+                    <i class="fa-solid fa-expand"></i>
+                </div>
+            </a>
+            {% endif %}
+
+            {% endfor %}
+        </div>
+    </section>
+    {% endfor %}
+    {% endif %}
+</div>
+
+<!-- Custom Message Modal -->
+<div id="custom-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h2 id="modal-title"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i> Custom Message</h2>
+            <button id="close-modal-btn" class="btn-icon-close" aria-label="Close modal">&times;</button>
+        </div>
+        <form action="{{ url_for('views.show_card') }}" method="GET">
+            <input type="hidden" name="location" value="{{ location.slug }}">
+            <input type="hidden" name="icon" value="fa-comment-dots">
+            <div class="form-group">
+                <label for="custom-text" class="form-label">Type message to display:</label>
+                <textarea id="custom-text" name="text" rows="4" class="form-textarea"
+                          placeholder="e.g. I need to find the children's section." required></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary btn-full btn-lg">
+                <i class="fa-solid fa-expand" aria-hidden="true"></i> Display Full Screen
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/location.js') }}"></script>
+{% endblock %}
