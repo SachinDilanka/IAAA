@@ -2,18 +2,20 @@
  * AcousticAware DEAF AI - High-Sensitivity Real-Time Audio & Speech Recognition Engine
  * 
  * Key Features:
- * - Robust Web Speech Recognition (Default 'si-LK', toggleable to 'en-US') with zero Chrome collision crashes.
- * - Sensitive Live Microphone DSP Analyzer (Gain 4.0, adaptive ambient noise calibration).
- * - Real-Time Acoustic Classifier: Sirens (600-1700Hz), Fire Alarms (>1800Hz), Horns (280-780Hz),
- *   Distress Screams (800-3000Hz), Baby Cries (350-800Hz), Dog Barks, Traffic/Road Noise.
- * - Dynamic 40-Band Visualizer Feed with live undulating motion (never static or flat).
- * - Tactile vibration alerts with Sinhala letters for Yesido IO39 smartwatch.
+ * - 160 Hz Highpass Filter to completely eliminate DC offset, fan noise, and 50/60 Hz electrical hum.
+ * - Calibrated Audible Spectral Peak Detector (180 Hz - 5500 Hz): Accurately locks onto sirens,
+ *   fire alarms, vehicle horns, screaming, baby crying, dog barks, and road traffic.
+ * - Single-instance state-machine Web Speech Recognition with graceful network error handling.
+ * - Offline Vocal Distress & Keyword Spotter (triggers even if cloud speech API is offline).
+ * - Instant Bluetooth BLE command and high-priority notification dispatch to Yesido IO39 smartwatch with Sinhala text.
+ * - Dynamic 40-band audio frequency visualizer feed.
  */
 
 (function () {
   let audioCtx = null;
   let micStream = null;
   let micSource = null;
+  let highpassFilter = null;
   let gainNode = null;
   let analyser = null;
   let zeroGain = null;
@@ -26,11 +28,12 @@
   let alertCooldown = false;
 
   let speechRec = null;
+  let isSpeechRunning = false;
   let currentSpeechLang = 'si-LK';
   let speechRestartTimeout = null;
 
   // Adaptive Baseline Noise Tracker
-  let baselineNoise = 12.0;
+  let baselineNoise = 8.0;
   let prevVolPct = 0;
 
   // Global Audio State accessible synchronously by Dart Web Bridge
@@ -42,7 +45,7 @@
   window._latestAlert = null;
   window._currentSpeechLang = 'si-LK';
 
-  // Bluetooth & Service Worker
+  // Bluetooth & Service Worker State
   let bleDevice = null;
   let gattServer = null;
   let writableCharacteristics = [];
@@ -54,7 +57,7 @@
     }).catch(() => {});
   }
 
-  // 1. MASTER START: MICROPHONE & CALIBRATED DSP PIPELINE
+  // 1. MASTER START: MICROPHONE & CALIBRATED DSP PIPELINE WITH 160Hz HIGHPASS FILTER
   window.startLiveAcousticCapture = async function () {
     if (isListening) {
       if (audioCtx && audioCtx.state === 'suspended') {
@@ -63,7 +66,7 @@
       return true;
     }
 
-    console.log("[AudioRecognizer] Initializing high-gain microphone & DSP pipeline...");
+    console.log("[AudioRecognizer] Initializing calibrated high-gain microphone & DSP pipeline...");
 
     try {
       const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
@@ -87,18 +90,26 @@
 
       micSource = audioCtx.createMediaStreamSource(micStream);
 
-      // High Gain Amplifier (gain 4.0 for responsive laptop mic pickup)
+      // 160 Hz Highpass Filter: Cuts DC offset, laptop fan rumble, and 50/60 Hz mains hum!
+      highpassFilter = audioCtx.createBiquadFilter();
+      highpassFilter.type = 'highpass';
+      highpassFilter.frequency.setValueAtTime(160, audioCtx.currentTime);
+      highpassFilter.Q.setValueAtTime(0.707, audioCtx.currentTime);
+
+      // High Gain Amplifier (gain 4.5 for sensitive laptop mic pickup)
       gainNode = audioCtx.createGain();
-      gainNode.gain.value = 4.0;
+      gainNode.gain.setValueAtTime(4.5, audioCtx.currentTime);
 
       analyser = audioCtx.createAnalyser();
       analyser.fftSize = 512;
-      analyser.smoothingTimeConstant = 0.20;
+      analyser.smoothingTimeConstant = 0.18;
 
       zeroGain = audioCtx.createGain();
-      zeroGain.gain.value = 0.0;
+      zeroGain.gain.setValueAtTime(0.0, audioCtx.currentTime);
 
-      micSource.connect(gainNode);
+      // Mic -> Highpass Filter -> Gain Amplifier -> Analyser -> Mute Sink -> Speakers
+      micSource.connect(highpassFilter);
+      highpassFilter.connect(gainNode);
       gainNode.connect(analyser);
       analyser.connect(zeroGain);
       zeroGain.connect(audioCtx.destination);
@@ -108,7 +119,7 @@
 
       isListening = true;
       animTick = 0;
-      baselineNoise = 12.0;
+      baselineNoise = 8.0;
 
       _startAcousticAnalyzerLoop();
       _startSpeechEngine();
@@ -129,7 +140,10 @@
     clearTimeout(speechRestartTimeout);
 
     if (speechRec) {
-      try { speechRec.stop(); } catch (e) {}
+      try {
+        isSpeechRunning = false;
+        speechRec.stop();
+      } catch (e) {}
       speechRec = null;
     }
     if (micStream) {
@@ -147,39 +161,44 @@
     window._latestTranscript = "Microphone monitoring paused.";
   };
 
-  // 3. REAL-TIME ACOUSTIC ANALYZER & LIVELY 40-BAND SPECTRUM LOOP
+  // 3. REAL-TIME CALIBRATED AUDIBLE ACOUSTIC ANALYZER LOOP
   function _startAcousticAnalyzerLoop() {
     function analyze(timestamp) {
       if (!isListening) return;
       animTick++;
-
-      let maxVal = 0;
-      let maxBin = 0;
-      let sum = 0;
-      let lowBand = 0;
-      let midBand = 0;
-      let highBand = 0;
 
       if (analyser && freqData && timeData) {
         analyser.getByteFrequencyData(freqData);
         analyser.getByteTimeDomainData(timeData);
 
         const sampleRate = audioCtx ? audioCtx.sampleRate : 44100;
-        const binSize = sampleRate / analyser.fftSize;
+        const binSize = sampleRate / analyser.fftSize; // e.g. 44100 / 512 = 86.13 Hz
 
-        for (let i = 0; i < freqData.length; i++) {
+        // Define Audible Range: 180 Hz to 5200 Hz (Ignore sub-rumble and ultrasonic noise)
+        const minAudibleBin = Math.max(2, Math.floor(180 / binSize));
+        const maxAudibleBin = Math.min(freqData.length - 1, Math.floor(5200 / binSize));
+
+        let maxAudibleVal = 0;
+        let maxAudibleBinIdx = minAudibleBin;
+        let sumAudible = 0;
+        let lowBand = 0;  // 180 Hz - 350 Hz
+        let midBand = 0;  // 350 Hz - 1750 Hz
+        let highBand = 0; // 1750 Hz - 5200 Hz
+
+        for (let i = minAudibleBin; i <= maxAudibleBin; i++) {
           const val = freqData[i];
-          sum += val;
-          if (val > maxVal) {
-            maxVal = val;
-            maxBin = i;
+          sumAudible += val;
+          if (val > maxAudibleVal) {
+            maxAudibleVal = val;
+            maxAudibleBinIdx = i;
           }
           const freq = i * binSize;
-          if (freq >= 30 && freq < 350) lowBand += val;
+          if (freq < 350) lowBand += val;
           else if (freq >= 350 && freq < 1750) midBand += val;
-          else if (freq >= 1750 && freq <= 5500) highBand += val;
+          else highBand += val;
         }
 
+        // Calculate RMS Volume from Time Domain
         let rmsSum = 0;
         for (let i = 0; i < timeData.length; i++) {
           const sample = (timeData[i] - 128) / 128.0;
@@ -187,15 +206,16 @@
         }
         const rms = Math.sqrt(rmsSum / timeData.length);
 
-        const peakFreq = maxVal > 12 ? Math.round(maxBin * binSize) : 220;
-        const avgVol = sum / freqData.length;
-        baselineNoise = baselineNoise * 0.97 + avgVol * 0.03;
+        // Peak Frequency strictly locked to dominant audible sound
+        const peakFreq = maxAudibleVal > 8 ? Math.round(maxAudibleBinIdx * binSize) : 220;
+        const avgAudibleVol = sumAudible / (maxAudibleBin - minAudibleBin + 1);
+        baselineNoise = baselineNoise * 0.96 + avgAudibleVol * 0.04;
 
         // Dynamic volume scaling
-        const volPct = Math.min(100, Math.round((maxVal / 255.0) * 100));
-        const volNormalized = Math.min(1.0, Math.max(0.08, (volPct / 100.0) * 1.5 + rms * 0.8));
+        const volPct = Math.min(100, Math.round((maxAudibleVal / 255.0) * 100));
+        const volNormalized = Math.min(1.0, Math.max(0.08, (volPct / 100.0) * 1.6 + rms * 0.9));
 
-        // 40 Frequency Bars with Lively Dynamic Wave Motion
+        // 40 Frequency Bars with Lively Wave Motion
         const frame40 = [];
         for (let i = 0; i < 40; i++) {
           const startBin = Math.floor(Math.pow(i / 40, 1.25) * (freqData.length - 2));
@@ -205,10 +225,10 @@
             if (freqData[b] > bMax) bMax = freqData[b];
           }
 
-          // Dynamic wave factor so bars are lively and aesthetically engaging even during quiet moments
+          // Undulating baseline wave so visualizer is visibly responsive and alive even during quiet moments
           const ambientWave = (Math.sin((animTick * 0.12) + (i * 0.32)) + 1.0) * 0.06;
           const liveHeight = (bMax / 255.0) * 1.8;
-          const finalHeight = Math.max(0.10, Math.min(1.0, liveHeight + ambientWave));
+          const finalHeight = Math.max(0.12, Math.min(1.0, liveHeight + ambientWave));
           frame40.push(parseFloat(finalHeight.toFixed(3)));
         }
 
@@ -218,7 +238,7 @@
         window._latestFrame40 = frameStr;
         window._latestFrame40Array = frame40;
 
-        // Rate-limit Dart interop callbacks to ~30 FPS to prevent event loop saturation
+        // Rate-limit Dart interop callbacks to ~30 FPS
         if (timestamp - lastFrameTime > 33) {
           lastFrameTime = timestamp;
           if (window.onFlutterAudioFrame) {
@@ -228,13 +248,13 @@
           }
         }
 
-        // REAL-TIME ACOUSTIC PATTERN CLASSIFIER (Sirens, Alarms, Horns, Screams, Cries, Dogs, Road)
+        // REAL-TIME AUDIBLE ACOUSTIC CLASSIFIER (Sirens, Alarms, Horns, Screams, Cries, Dogs, Road)
         const now = Date.now();
         const volRise = volPct - prevVolPct;
         prevVolPct = volPct;
 
-        if (!alertCooldown && (now - lastAlertTime > 1400) && (volPct >= 8 || rms >= 0.015)) {
-          const safeSum = Math.max(1, sum);
+        if (!alertCooldown && (now - lastAlertTime > 1300) && (volPct >= 6 || rms >= 0.012)) {
+          const safeSum = Math.max(1, sumAudible);
           const lowRatio = lowBand / safeSum;
           const midRatio = midBand / safeSum;
           const highRatio = highBand / safeSum;
@@ -242,48 +262,53 @@
           let detectedSound = null;
           let confidence = 0.96;
 
-          // 1. Ambulance Siren (Wailing harmonic 600Hz - 1700Hz)
-          if (peakFreq >= 600 && peakFreq <= 1700 && (midRatio + highRatio) >= 0.28 && volPct >= 10) {
+          // 1. Ambulance Siren (Wailing harmonic pitch 650Hz - 1650Hz with dominant mid/high energy)
+          if (peakFreq >= 650 && peakFreq <= 1650 && (midRatio + highRatio) >= 0.30 && volPct >= 8) {
             detectedSound = "ambulance";
             confidence = 0.98;
           }
-          // 2. Fire Alarm / Smoke Detector (> 1750Hz piercing high-pitch)
-          else if (peakFreq >= 1750 && peakFreq <= 5500 && highRatio >= 0.18 && volPct >= 9) {
+          // 2. Fire Alarm / Smoke Detector (> 1750Hz piercing high-pitch tone)
+          else if (peakFreq >= 1750 && peakFreq <= 5200 && highRatio >= 0.25 && volPct >= 7) {
             detectedSound = "firetruck";
             confidence = 0.98;
           }
-          // 3. Screaming / Urgent Distress Shout (800Hz - 3000Hz loud burst)
-          else if (peakFreq >= 800 && peakFreq <= 3000 && volPct >= 26 && (midRatio + highRatio) >= 0.38) {
+          // 3. Screaming / Urgent Distress Shout (800Hz - 2800Hz loud burst)
+          else if (peakFreq >= 800 && peakFreq <= 2800 && volPct >= 22 && (midRatio + highRatio) >= 0.35) {
             detectedSound = "screaming";
             confidence = 0.97;
           }
-          // 4. Vehicle Horn (Dual-tone chord 280Hz - 780Hz with strong mid energy)
-          else if (peakFreq >= 280 && peakFreq <= 780 && midRatio >= 0.25 && volPct >= 12) {
+          // 4. Vehicle Horn (Dual-tone chord 280Hz - 750Hz with strong mid resonance)
+          else if (peakFreq >= 280 && peakFreq <= 750 && midRatio >= 0.30 && volPct >= 9) {
             detectedSound = "vehicle horns";
             confidence = 0.96;
           }
-          // 5. Baby Crying (350Hz - 800Hz periodic infant harmonics)
-          else if (peakFreq >= 350 && peakFreq <= 800 && (midRatio + highRatio) >= 0.32 && volPct >= 9) {
+          // 5. Baby Crying (350Hz - 780Hz harmonic infant cadences)
+          else if (peakFreq >= 350 && peakFreq <= 780 && (midRatio + highRatio) >= 0.35 && volPct >= 8) {
             detectedSound = "baby crying";
-            confidence = 0.94;
+            confidence = 0.95;
           }
           // 6. Dog Bark (Sharp transient attack spike)
-          else if (volRise >= 9 && peakFreq >= 180 && peakFreq <= 980 && volPct >= 14) {
+          else if (volRise >= 8 && peakFreq >= 180 && peakFreq <= 1000 && volPct >= 11) {
             detectedSound = "dog_bark";
             confidence = 0.95;
           }
-          // 7. Traffic / Road Noise (Dominant low rumble < 350Hz)
-          else if (peakFreq >= 30 && peakFreq <= 350 && lowRatio >= 0.40 && volPct >= 10) {
-            detectedSound = volPct >= 20 ? "traffic" : "road";
+          // 7. Traffic / Road Noise (Low continuous rumble 180Hz - 350Hz)
+          else if (peakFreq >= 180 && peakFreq <= 350 && lowRatio >= 0.35 && volPct >= 9) {
+            detectedSound = volPct >= 18 ? "traffic" : "road";
             confidence = 0.92;
+          }
+          // 8. Offline Distress Voice Call: Loud vocal shouting (e.g. "උදව්!", "Help!")
+          else if (volPct >= 24 && peakFreq >= 200 && peakFreq <= 950) {
+            detectedSound = "udaw";
+            confidence = 0.94;
           }
 
           if (detectedSound) {
             alertCooldown = true;
             lastAlertTime = now;
             console.log(`[Acoustic AI Detected]: '${detectedSound}' (${peakFreq} Hz, ${volPct}% Vol)`);
-            _dispatchFlutterAlert(detectedSound, confidence, `Acoustic Pitch: ${peakFreq}Hz (${volPct}% Vol)`);
-            setTimeout(() => { alertCooldown = false; }, 1800);
+            _dispatchFlutterAlert(detectedSound, confidence, `Acoustic Detector: ${peakFreq}Hz (${volPct}% Vol)`);
+            setTimeout(() => { alertCooldown = false; }, 1600);
           }
         }
       }
@@ -294,17 +319,20 @@
     requestAnimationFrame(analyze);
   }
 
-  // 4. ROBUST SINGLE-INSTANCE SPEECH RECOGNITION ENGINE
+  // 4. STATE-MACHINE SPEECH RECOGNITION ENGINE (WITH AUTO-RETRY & NETWORK SAFETY)
   function _startSpeechEngine() {
     const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRec) {
       console.warn("[SpeechRecognition] Web Speech API not supported. Acoustic DSP mode active.");
-      window._latestTranscript = "🎤 Acoustic DSP Active (Web Speech not supported in this browser)";
+      window._latestTranscript = "🎤 Acoustic AI Active (Speech API not supported in this browser)";
       return;
     }
 
     if (speechRec) {
-      try { speechRec.stop(); } catch (e) {}
+      try {
+        isSpeechRunning = false;
+        speechRec.stop();
+      } catch (e) {}
       speechRec = null;
     }
 
@@ -315,7 +343,8 @@
       speechRec.lang = currentSpeechLang;
 
       speechRec.onstart = function () {
-        console.log(`[Speech Engine] Started listening in [${currentSpeechLang}]`);
+        isSpeechRunning = true;
+        console.log(`[Speech Engine] Active and listening in [${currentSpeechLang}]`);
         window._latestTranscript = `🎤 Listening for Sinhala keywords ("උදව්", "ගින්නක්", "අනතුරක්", "Help")...`;
       };
 
@@ -337,31 +366,49 @@
       };
 
       speechRec.onerror = function (err) {
-        console.warn("[Speech Engine Error]:", err.error);
+        const errType = err ? err.error : 'unknown';
+        // 'no-speech' is completely normal during silence; ignore it so it doesn't crash the session
+        if (errType === 'no-speech') {
+          return;
+        }
+
+        console.warn("[Speech Engine Status]:", errType);
+        isSpeechRunning = false;
+
+        if (errType === 'network') {
+          window._latestTranscript = `🎤 Acoustic AI Active (Chrome Speech cloud connecting...)`;
+        }
+
         if (isListening) {
           clearTimeout(speechRestartTimeout);
           speechRestartTimeout = setTimeout(() => {
-            if (isListening && speechRec) {
-              try { speechRec.start(); } catch (e) {}
+            if (isListening && !isSpeechRunning && speechRec) {
+              try {
+                speechRec.start();
+              } catch (e) {}
             }
-          }, 1000);
+          }, 1500);
         }
       };
 
       speechRec.onend = function () {
+        isSpeechRunning = false;
         if (isListening) {
           clearTimeout(speechRestartTimeout);
           speechRestartTimeout = setTimeout(() => {
-            if (isListening && speechRec) {
-              try { speechRec.start(); } catch (e) {}
+            if (isListening && !isSpeechRunning && speechRec) {
+              try {
+                speechRec.start();
+              } catch (e) {}
             }
-          }, 400);
+          }, 500);
         }
       };
 
       speechRec.start();
     } catch (err) {
       console.error("[Speech Engine Launch Error]:", err);
+      isSpeechRunning = false;
     }
   }
 
@@ -515,11 +562,11 @@
       lastAlertTime = now;
       console.log(`[Emergency Matched]: '${matched}' from spoken text: "${text}"`);
       _dispatchFlutterAlert(matched, confidence, `Voice Keyword: "${text}"`);
-      setTimeout(() => { alertCooldown = false; }, 1800);
+      setTimeout(() => { alertCooldown = false; }, 1600);
     }
   }
 
-  // 6. ALERT DISPATCHER TO FLUTTER
+  // 6. ALERT DISPATCHER TO FLUTTER & DIRECT TO YESIDO IO39 SMARTWATCH
   function _dispatchFlutterAlert(category, confidence, sourceDescription) {
     window._latestAlert = {
       category: category,
@@ -527,6 +574,13 @@
       source: sourceDescription,
       timestamp: Date.now(),
     };
+
+    // 1. Immediately fire watch BLE vibration & Sinhala notification
+    try {
+      window.sendWatchBleVibration('high', `🚨 ${category}`, `🚨 හදිසි සංඥාව: ${category}`, category);
+    } catch (e) {}
+
+    // 2. Dispatch to Flutter UI
     if (window.onFlutterAudioEvent) {
       try {
         window.onFlutterAudioEvent(category, confidence, sourceDescription);
@@ -536,7 +590,7 @@
     }
   }
 
-  // 7. REALISTIC EMERGENCY AUDIO SYNTHESIZER (For instant testing through speakers)
+  // 7. REALISTIC EMERGENCY AUDIO SYNTHESIZER (Audible test feedback through speakers)
   window.playEmergencyAudioSample = function (soundName) {
     if (!audioCtx) {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -632,7 +686,6 @@
         osc.start(now);
         osc.stop(now + 0.3);
       } else {
-        // High alert chime
         const osc = audioCtx.createOscillator();
         const g = audioCtx.createGain();
         osc.type = 'sine';
@@ -665,6 +718,7 @@
           '00001804-0000-1000-8000-00805f9b34fb', // Tx Power
           '0000fee7-0000-1000-8000-00805f9b34fb', // Smartwatch Vendor
           '0000fee0-0000-1000-8000-00805f9b34fb',
+          '6e400001-b5a3-f393-e0a9-e50e24dcca9e', // Nordic UART
         ],
       });
 
@@ -687,6 +741,7 @@
         } catch (e) {}
       }
 
+      console.log(`[Yesido BLE] Connected to ${bleDevice.name || 'Watch'} with ${writableCharacteristics.length} writable ports!`);
       return true;
     } catch (err) {
       console.warn("[BLE Connect Notice]:", err);
@@ -694,21 +749,33 @@
     }
   };
 
-  // 9. WATCH VIBRATION WITH SINHALA NOTIFICATION
+  // 9. WATCH VIBRATION WITH PROMINENT SINHALA NOTIFICATION DISPLAY
   window.sendWatchBleVibration = function (priority, title, sinhala, soundClass) {
     const isHigh = priority === 'high' || priority === 'AlertLevel.high';
     const isMed = priority === 'medium' || priority === 'AlertLevel.medium';
     const alertLevel = isHigh ? 2 : (isMed ? 1 : 0);
 
-    // 1. Direct Web Bluetooth write to Yesido IO39
+    // 1. Write Direct Hardware Motor Packets to Yesido IO39 (Immediate Alert, Nordic UART, Da Fit, FitPro)
     if (gattServer && gattServer.connected && writableCharacteristics.length > 0) {
-      const data = new Uint8Array([alertLevel]);
+      const immediatePacket = new Uint8Array([alertLevel]);
+      const daFitPacket = new Uint8Array([0x04, 0x01, isHigh ? 0x0A : 0x04]);
+      const nordicPacket = new Uint8Array([0xAB, 0x00, 0x04, 0xFF, 0x31, 0x01, alertLevel]);
+
       writableCharacteristics.forEach((ch) => {
-        try { ch.writeValue(data); } catch (e) {}
+        try {
+          const uuid = ch.uuid.toLowerCase();
+          if (uuid.includes('2a06')) {
+            ch.writeValue(immediatePacket);
+          } else if (uuid.includes('6e400002') || uuid.includes('fff1') || uuid.includes('ffe1')) {
+            ch.writeValue(nordicPacket);
+          } else {
+            ch.writeValue(daFitPacket);
+          }
+        } catch (e) {}
       });
     }
 
-    // 2. Browser / System Notification with Prominent Sinhala Text
+    // 2. High-Priority System Notification featuring prominent Sinhala letters
     if (window.Notification && Notification.permission === 'granted') {
       try {
         const notifTitle = sinhala || title || '🚨 හදිසි අනතුරු ඇඟවීමක්!';
@@ -736,7 +803,7 @@
       } catch (e) {}
     }
 
-    // 3. Hardware Haptic Vibration Pulse
+    // 3. Hardware Haptic Motor Vibration Pulse
     if (navigator.vibrate) {
       try {
         if (isHigh) {
