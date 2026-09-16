@@ -109,15 +109,15 @@ class SmartwatchService extends ChangeNotifier {
 
   /// Dispatch event alert to Yesido IO39 smartwatch
   Future<bool> sendWatchAlert(DetectionEvent event) async {
-    if (!_isDeviceConnected) return false;
-
     // 1. Send notifications to notification center (read by watch companion app)
     await _notificationService.sendEventNotification(event);
 
-    // 2. Native Direct BLE Motor Command Packet
-    await _bleController.sendVibrationCommand(event.priority.name, soundClass: event.rawClass);
+    // 2. Native Direct BLE Motor Command Packet if raw BLE device is connected
+    if (_isDeviceConnected) {
+      await _bleController.sendVibrationCommand(event.priority.name, soundClass: event.rawClass);
+    }
 
-    // 3. Web BLE Bridge with Prominent Sinhala Letters
+    // 3. Web BLE Bridge with Prominent Sinhala Letters & System Notification
     _bridge.sendWatchVibration(
       event.priority.name,
       title: '🚨 ${event.titleSinhala} (${event.titleEnglish})',
