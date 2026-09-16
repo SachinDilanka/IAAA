@@ -316,16 +316,23 @@
     for (let j = 0; j < 13; j++) probs[j] /= expSum;
 
     let bestIdx = 0, bestProb = 0;
+    let bestEmergIdx = -1, bestEmergProb = 0;
     for (let j = 0; j < 13; j++) {
       if (probs[j] > bestProb) {
         bestProb = probs[j];
         bestIdx = j;
+      }
+      if (model.classes[j] !== 'background_traffic' && probs[j] > bestEmergProb) {
+        bestEmergProb = probs[j];
+        bestEmergIdx = j;
       }
     }
 
     return {
       class: model.classes[bestIdx],
       prob: bestProb,
+      emergClass: bestEmergIdx >= 0 ? model.classes[bestEmergIdx] : null,
+      emergProb: bestEmergProb,
     };
   }
 
@@ -384,7 +391,7 @@
       highpassFilter.frequency.setValueAtTime(140, audioCtx.currentTime);
       highpassFilter.Q.setValueAtTime(0.707, audioCtx.currentTime);
 
-      // High Gain Pre-Amplifier (5.0x) so normal speech and ambient sounds register lively
+      // High Gain Pre-Amplifier (5.0x) so normal speech and ambient sounds register lively on visualizer
       gainNode = audioCtx.createGain();
       gainNode.gain.setValueAtTime(5.0, audioCtx.currentTime);
 
@@ -406,20 +413,24 @@
         if (!isListening) return;
         const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
 
-        let maxAbs = 0;
         for (let i = 0; i < inputData.length; i++) {
-          const abs = Math.abs(inputData[i]);
-          if (abs > maxAbs) maxAbs = abs;
           rollingAudioBuffer[rollingBufferIndex] = inputData[i];
           rollingBufferIndex = (rollingBufferIndex + 1) % rollingBufferCapacity;
         }
 
-        // Deep Neural Network periodic evaluation (every ~200ms)
+        // Deep Neural Network periodic evaluation (every ~180ms)
         const now = Date.now();
-        if (now - lastMlInferenceTime > 200 && !alertCooldown && (now - lastAlertTime > 1100)) {
+        if (now - lastMlInferenceTime > 180 && !alertCooldown && (now - lastAlertTime > 1100)) {
           lastMlInferenceTime = now;
 
-          if (maxAbs >= 0.004) {
+          // Check if any sound is present in the rolling 1-second audio buffer
+          let bufferMax = 0;
+          for (let i = 0; i < rollingBufferCapacity; i += 16) {
+            const a = Math.abs(rollingAudioBuffer[i]);
+            if (a > bufferMax) bufferMax = a;
+          }
+
+          if (bufferMax >= 0.003) {
             try {
               // Extract unrolled 1-second audio
               const orderedSignal = new Float32Array(rollingBufferCapacity);
@@ -431,21 +442,24 @@
               const resampled16k = _resampleTo16k(orderedSignal, sampleRate);
               const mlResult = _predictNeuralNet(resampled16k);
 
-              if (mlResult && mlResult.class && mlResult.class !== 'background_traffic') {
-                const flutterClass = MODEL_TO_FLUTTER_CLASS[mlResult.class];
-                const confidence = mlResult.prob;
+              // Detect when the model finds an emergency sound or Sinhala keyword
+              const targetClass = (mlResult && mlResult.class && mlResult.class !== 'background_traffic' && mlResult.prob >= 0.22)
+                ? mlResult.class
+                : (mlResult && mlResult.emergProb >= 0.22 ? mlResult.emergClass : null);
+              const targetConfidence = (mlResult && targetClass === mlResult.class) ? mlResult.prob : (mlResult ? mlResult.emergProb : 0);
 
-                // Sensitive calibrated threshold (>= 26%) for lively room acoustics
-                if (flutterClass && confidence >= 0.26) {
+              if (targetClass && targetConfidence >= 0.22) {
+                const flutterClass = MODEL_TO_FLUTTER_CLASS[targetClass];
+                if (flutterClass) {
                   alertCooldown = true;
                   lastAlertTime = now;
-                  const sinhalaName = MODEL_CLASS_SINHALA_NAMES[mlResult.class] || flutterClass;
-                  console.log(`[Deep ML AI Detected]: '${flutterClass}' (${(confidence * 100).toFixed(1)}%) - ${sinhalaName}`);
+                  const sinhalaName = MODEL_CLASS_SINHALA_NAMES[targetClass] || flutterClass;
+                  console.log(`[Deep ML AI Detected]: '${flutterClass}' (${(targetConfidence * 100).toFixed(1)}%) - ${sinhalaName}`);
 
                   _dispatchFlutterAlert(
                     flutterClass,
-                    confidence,
-                    `AI Neural Network: ${(confidence * 100).toFixed(1)}%`
+                    targetConfidence,
+                    `AI Neural Network: ${(targetConfidence * 100).toFixed(1)}%`
                   );
 
                   setTimeout(() => { alertCooldown = false; }, 1400);
@@ -458,15 +472,14 @@
         }
       };
 
-      // Connect DSP chain:
-      // micSource -> highpassFilter -> gainNode -> analyser -> zeroGain -> destination
-      // gainNode -> scriptNode -> zeroGain
+      // Connect clean signal to Neural Net, amplified signal to visualizer:
+      micSource.connect(scriptNode);
+      scriptNode.connect(zeroGain);
+
       micSource.connect(highpassFilter);
       highpassFilter.connect(gainNode);
       gainNode.connect(analyser);
-      gainNode.connect(scriptNode);
       analyser.connect(zeroGain);
-      scriptNode.connect(zeroGain);
       zeroGain.connect(audioCtx.destination);
 
       timeData = new Uint8Array(analyser.frequencyBinCount);
@@ -752,7 +765,7 @@
             if (isListening && !isSpeechRunning && speechRec) {
               try { speechRec.start(); } catch (e) {}
             }
-          }, 1500);
+          }, 3000);
         }
       };
 

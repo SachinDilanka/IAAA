@@ -8,7 +8,7 @@ class PriorityEngine {
   DetectionEvent? processPrediction({
     required String rawClass,
     required double confidence,
-    double minThreshold = 0.50,
+    double minThreshold = 0.20,
     bool bypassCooldown = false,
   }) {
     if (confidence < minThreshold || rawClass == 'background_other' || rawClass == 'background_traffic') {

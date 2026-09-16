@@ -183,6 +183,7 @@ class SoundClassifierService extends ChangeNotifier {
     final event = _priorityEngine.processPrediction(
       rawClass: rawClass,
       confidence: confidence,
+      minThreshold: 0.18,
       bypassCooldown: true, // Always trigger immediately when spoken or clicked!
     );
 
