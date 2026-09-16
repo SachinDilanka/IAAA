@@ -1,4 +1,6 @@
+// ignore_for_file: avoid_web_libraries_in_flutter, undefined_function, uri_does_not_exist
 import 'dart:js' as js;
+import 'dart:js_util' as js_util;
 import 'audio_capture_interface.dart';
 
 AudioCaptureInterface getAudioCaptureBridge() => AudioCaptureWeb();
@@ -11,7 +13,7 @@ class AudioCaptureWeb implements AudioCaptureInterface {
     required Function(String transcript) onSpeechTranscript,
   }) {
     // 1. Event detector callback (100% type-safe string parsing)
-    js.context['onFlutterAudioEvent'] = js.allowInterop((dynamic jsClass, dynamic jsConf, dynamic jsSrc) {
+    js.context['onFlutterAudioEvent'] = js_util.allowInterop((dynamic jsClass, dynamic jsConf, dynamic jsSrc) {
       try {
         final String rawClass = jsClass != null ? jsClass.toString().trim() : 'udaw';
         final double conf = double.tryParse(jsConf?.toString() ?? '') ?? 0.95;
@@ -21,7 +23,7 @@ class AudioCaptureWeb implements AudioCaptureInterface {
     });
 
     // 2. Speech transcript callback
-    js.context['onFlutterSpeechTranscript'] = js.allowInterop((dynamic jsText) {
+    js.context['onFlutterSpeechTranscript'] = js_util.allowInterop((dynamic jsText) {
       try {
         final String text = jsText != null ? jsText.toString() : '';
         onSpeechTranscript(text);
@@ -29,7 +31,7 @@ class AudioCaptureWeb implements AudioCaptureInterface {
     });
 
     // 3. Frame visualizer callback
-    js.context['onFlutterAudioFrame'] = js.allowInterop((dynamic jsFrame, dynamic jsVol, dynamic jsFreq) {
+    js.context['onFlutterAudioFrame'] = js_util.allowInterop((dynamic jsFrame, dynamic jsVol, dynamic jsFreq) {
       try {
         final double volume = double.tryParse(jsVol?.toString() ?? '') ?? 0.08;
         final int peakFreq = int.tryParse(jsFreq?.toString() ?? '') ??

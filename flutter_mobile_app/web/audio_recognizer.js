@@ -32,12 +32,15 @@
   let highpassFilter = null;
   let gainNode = null;
   let analyser = null;
+  let rawAnalyser = null;
+  let rawWaveform = null;
   let scriptNode = null;
   let zeroGain = null;
   let timeData = null;
   let freqData = null;
 
   let isListening = false;
+  let isStartingCapture = false;
   let animTick = 0;
   let lastFrameTime = 0;
   let lastAlertTime = 0;
@@ -48,11 +51,13 @@
   let rollingBufferIndex = 0;
   let rollingBufferCapacity = 48000;
   let lastMlInferenceTime = 0;
+  let lastAnimTimestamp = 0;
 
   let speechRec = null;
   let isSpeechRunning = false;
   let currentSpeechLang = 'si-LK';
   let speechRestartTimeout = null;
+  let speechFailCount = 0;
 
   // Adaptive Baseline Noise Tracker
   let baselineNoise = 8.0;
@@ -79,7 +84,7 @@
     }).catch(() => {});
   }
 
-  // Global auto-resume & auto-wake listener on any user click, touch, or keypress
+  // Global auto-resume listener on user interaction
   function _ensureAudioContextActive() {
     if (!audioCtx) {
       try {
@@ -92,17 +97,9 @@
     }
   }
 
-  function _wakeAudioOnUserAction() {
-    _ensureAudioContextActive();
-    if (!isListening || !micStream || !micStream.active) {
-      window.startLiveAcousticCapture().catch(() => {});
-    }
-  }
-
-  window.addEventListener('click', _wakeAudioOnUserAction, { passive: true });
-  window.addEventListener('pointerdown', _wakeAudioOnUserAction, { passive: true });
-  window.addEventListener('touchstart', _wakeAudioOnUserAction, { passive: true });
-  window.addEventListener('keydown', _wakeAudioOnUserAction, { passive: true });
+  window.addEventListener('click', _ensureAudioContextActive, { passive: true });
+  window.addEventListener('touchstart', _ensureAudioContextActive, { passive: true });
+  window.addEventListener('keydown', _ensureAudioContextActive, { passive: true });
 
   // Model Class Mapping to Flutter Sound Engine
   const MODEL_TO_FLUTTER_CLASS = {
@@ -113,11 +110,19 @@
     'karadarayak': 'karadarayak',
     'balagena': 'balagena',
     'parissamin': 'parissamin',
+    'ehata_wenna': 'ehata_wenna',
+    'nawaththanna': 'nawaththanna',
+    'screaming': 'screaming',
     'ambulance_siren': 'ambulance',
+    'ambulance': 'ambulance',
     'fire_alarm': 'firetruck',
+    'firetruck': 'firetruck',
     'vehicle_horn': 'vehicle horns',
     'baby_crying': 'baby crying',
     'dog_barking': 'dog_bark',
+    'dog_bark': 'dog_bark',
+    'road': 'road',
+    'traffic': 'traffic',
     'background_traffic': null,
   };
 
@@ -129,11 +134,19 @@
     'karadarayak': 'කරදරයක්!',
     'balagena': 'බලාගෙන!',
     'parissamin': 'පරිස්සමින්!',
+    'ehata_wenna': 'එහාට වෙන්න!',
+    'nawaththanna': 'නවත්තන්න!',
+    'screaming': 'කෑගැසීමක්!',
     'ambulance_siren': 'ගිලන් රථ සයිරන්',
+    'ambulance': 'ගිලන් රථ සයිරන්',
     'fire_alarm': 'ගිනි නිවන සංඥාව',
+    'firetruck': 'ගිනි නිවන සංඥාව',
     'vehicle_horn': 'වාහන හෝන්',
     'baby_crying': 'ළදරු හැඬීම',
     'dog_barking': 'බල්ලා බිරීම',
+    'dog_bark': 'බල්ලා බිරීම',
+    'road': 'මාර්ග ඝෝෂාව',
+    'traffic': 'රථවාහන ශබ්දය',
   };
 
   // =========================================================================
@@ -340,6 +353,15 @@
   // 2. MASTER START: MICROPHONE, DSP PIPELINE & REAL-TIME ML ENGINE
   // =========================================================================
   window.startLiveAcousticCapture = async function () {
+    if (isStartingCapture) {
+      console.log("[AudioRecognizer] Capture already in progress of starting...");
+      return true;
+    }
+    if (isListening && micStream && micStream.active) {
+      return true;
+    }
+    isStartingCapture = true;
+
     // 1. SYNCHRONOUSLY initialize and resume AudioContext immediately on user click
     _ensureAudioContextActive();
     if (audioCtx && audioCtx.state === 'suspended') {
@@ -351,14 +373,14 @@
       Notification.requestPermission().catch(() => {});
     }
 
-    if (isListening && micStream && micStream.active) {
-      return true;
-    }
-
     console.log("[AudioRecognizer] Initializing high-gain microphone & DSP pipeline...");
 
     try {
-      if (!audioCtx) {
+      if (micStream) {
+        try { micStream.getTracks().forEach(t => t.stop()); } catch (e) {}
+        micStream = null;
+      }
+      if (!audioCtx || audioCtx.state === 'closed') {
         const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
         audioCtx = new AudioCtxClass();
       }
@@ -385,16 +407,23 @@
 
       micSource = audioCtx.createMediaStreamSource(micStream);
 
-      // 140 Hz Highpass Filter: Cuts DC offset and low fan rumble
+      // 1. Raw Analyser for continuous Neural Network waveform polling (FFT 2048)
+      rawAnalyser = audioCtx.createAnalyser();
+      rawAnalyser.fftSize = 2048;
+      rawAnalyser.smoothingTimeConstant = 0.0;
+      rawWaveform = new Float32Array(rawAnalyser.fftSize);
+
+      // 2. 140 Hz Highpass Filter: Cuts DC offset and low fan rumble
       highpassFilter = audioCtx.createBiquadFilter();
       highpassFilter.type = 'highpass';
       highpassFilter.frequency.setValueAtTime(140, audioCtx.currentTime);
       highpassFilter.Q.setValueAtTime(0.707, audioCtx.currentTime);
 
-      // High Gain Pre-Amplifier (5.0x) so normal speech and ambient sounds register lively on visualizer
+      // 3. High Gain Pre-Amplifier (5.0x) so normal speech and ambient sounds register lively on visualizer
       gainNode = audioCtx.createGain();
       gainNode.gain.setValueAtTime(5.0, audioCtx.currentTime);
 
+      // 4. Visualizer Analyser
       analyser = audioCtx.createAnalyser();
       analyser.fftSize = 512;
       analyser.smoothingTimeConstant = 0.18;
@@ -402,85 +431,22 @@
       zeroGain = audioCtx.createGain();
       zeroGain.gain.setValueAtTime(0.0, audioCtx.currentTime);
 
-      // Streaming ScriptProcessor for Deep Neural Network evaluation (4096 samples chunk)
-      const sampleRate = audioCtx.sampleRate || 44100;
-      rollingBufferCapacity = sampleRate; // 1.0 second capacity
-      rollingAudioBuffer = new Float32Array(rollingBufferCapacity);
-      rollingBufferIndex = 0;
-
-      scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
-      scriptNode.onaudioprocess = function (audioProcessingEvent) {
-        if (!isListening) return;
-        const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
-
-        for (let i = 0; i < inputData.length; i++) {
-          rollingAudioBuffer[rollingBufferIndex] = inputData[i];
-          rollingBufferIndex = (rollingBufferIndex + 1) % rollingBufferCapacity;
-        }
-
-        // Deep Neural Network periodic evaluation (every ~180ms)
-        const now = Date.now();
-        if (now - lastMlInferenceTime > 180 && !alertCooldown && (now - lastAlertTime > 1100)) {
-          lastMlInferenceTime = now;
-
-          // Check if any sound is present in the rolling 1-second audio buffer
-          let bufferMax = 0;
-          for (let i = 0; i < rollingBufferCapacity; i += 16) {
-            const a = Math.abs(rollingAudioBuffer[i]);
-            if (a > bufferMax) bufferMax = a;
-          }
-
-          if (bufferMax >= 0.003) {
-            try {
-              // Extract unrolled 1-second audio
-              const orderedSignal = new Float32Array(rollingBufferCapacity);
-              const firstPart = rollingAudioBuffer.subarray(rollingBufferIndex);
-              const secondPart = rollingAudioBuffer.subarray(0, rollingBufferIndex);
-              orderedSignal.set(firstPart, 0);
-              orderedSignal.set(secondPart, firstPart.length);
-
-              const resampled16k = _resampleTo16k(orderedSignal, sampleRate);
-              const mlResult = _predictNeuralNet(resampled16k);
-
-              // Detect when the model finds an emergency sound or Sinhala keyword
-              const targetClass = (mlResult && mlResult.class && mlResult.class !== 'background_traffic' && mlResult.prob >= 0.22)
-                ? mlResult.class
-                : (mlResult && mlResult.emergProb >= 0.22 ? mlResult.emergClass : null);
-              const targetConfidence = (mlResult && targetClass === mlResult.class) ? mlResult.prob : (mlResult ? mlResult.emergProb : 0);
-
-              if (targetClass && targetConfidence >= 0.22) {
-                const flutterClass = MODEL_TO_FLUTTER_CLASS[targetClass];
-                if (flutterClass) {
-                  alertCooldown = true;
-                  lastAlertTime = now;
-                  const sinhalaName = MODEL_CLASS_SINHALA_NAMES[targetClass] || flutterClass;
-                  console.log(`[Deep ML AI Detected]: '${flutterClass}' (${(targetConfidence * 100).toFixed(1)}%) - ${sinhalaName}`);
-
-                  _dispatchFlutterAlert(
-                    flutterClass,
-                    targetConfidence,
-                    `AI Neural Network: ${(targetConfidence * 100).toFixed(1)}%`
-                  );
-
-                  setTimeout(() => { alertCooldown = false; }, 1400);
-                }
-              }
-            } catch (err) {
-              console.warn("[ML Inference Error]:", err);
-            }
-          }
-        }
-      };
-
-      // Connect clean signal to Neural Net, amplified signal to visualizer:
-      micSource.connect(scriptNode);
-      scriptNode.connect(zeroGain);
+      // DSP Routing:
+      // micSource -> rawAnalyser -> zeroGain -> destination (Clean unclipped audio for neural net)
+      // micSource -> highpassFilter -> gainNode -> analyser -> zeroGain -> destination (Visuals)
+      micSource.connect(rawAnalyser);
+      rawAnalyser.connect(zeroGain);
 
       micSource.connect(highpassFilter);
       highpassFilter.connect(gainNode);
       gainNode.connect(analyser);
       analyser.connect(zeroGain);
       zeroGain.connect(audioCtx.destination);
+
+      const sampleRate = audioCtx.sampleRate || 44100;
+      rollingBufferCapacity = sampleRate; // 1.0 second capacity
+      rollingAudioBuffer = new Float32Array(rollingBufferCapacity);
+      rollingBufferIndex = 0;
 
       timeData = new Uint8Array(analyser.frequencyBinCount);
       freqData = new Uint8Array(analyser.frequencyBinCount);
@@ -499,6 +465,8 @@
       isListening = false;
       micStream = null;
       return false;
+    } finally {
+      isStartingCapture = false;
     }
   };
 
@@ -542,6 +510,90 @@
     function analyze(timestamp) {
       if (!isListening) return;
       animTick++;
+
+      // 1. Continuous Waveform Capture into Rolling 1-Second Audio Buffer
+      if (rawAnalyser && rawWaveform && rollingAudioBuffer) {
+        rawAnalyser.getFloatTimeDomainData(rawWaveform);
+        const sampleRate = audioCtx ? audioCtx.sampleRate : 44100;
+
+        let dt = 0.0166;
+        if (lastAnimTimestamp > 0 && timestamp > lastAnimTimestamp) {
+          dt = Math.min(0.05, (timestamp - lastAnimTimestamp) / 1000.0);
+        }
+        lastAnimTimestamp = timestamp;
+
+        const samplesToCopy = Math.min(rawWaveform.length, Math.max(128, Math.floor(dt * sampleRate)));
+        const startOffset = rawWaveform.length - samplesToCopy;
+        for (let i = 0; i < samplesToCopy; i++) {
+          rollingAudioBuffer[rollingBufferIndex] = rawWaveform[startOffset + i];
+          rollingBufferIndex = (rollingBufferIndex + 1) % rollingBufferCapacity;
+        }
+
+        // 2. High-Sensitivity Deep Neural Network Inference (Runs every ~160ms on 1.0s continuous buffer)
+        if (timestamp - lastMlInferenceTime > 160) {
+          lastMlInferenceTime = timestamp;
+
+          // Check for audible energy in rolling audio
+          const continuousAudio = new Float32Array(rollingBufferCapacity);
+          let rawEnergy = 0;
+          let rawMax = 0;
+          for (let i = 0; i < rollingBufferCapacity; i++) {
+            const s = rollingAudioBuffer[(rollingBufferIndex + i) % rollingBufferCapacity];
+            continuousAudio[i] = s;
+            const abs = Math.abs(s);
+            if (abs > rawMax) rawMax = abs;
+            rawEnergy += abs * abs;
+          }
+          const rawRms = Math.sqrt(rawEnergy / rollingBufferCapacity);
+
+          if (rawMax >= 0.0025 || rawRms >= 0.001) {
+            const resampled16k = _resampleTo16k(continuousAudio, sampleRate);
+            const mlResult = _predictNeuralNet(resampled16k);
+
+            if (mlResult) {
+              const emergClass = mlResult.emergClass;
+              const emergProb = mlResult.emergProb;
+              const topClass = mlResult.class;
+              const topProb = mlResult.prob;
+
+              let detectedMlTarget = null;
+              let detectedConfidence = 0.95;
+
+              // Priority 1: Model's top prediction is an emergency class (threshold >= 0.18)
+              if (topClass && topClass !== 'background_traffic' && topProb >= 0.18) {
+                detectedMlTarget = topClass;
+                detectedConfidence = topProb;
+              }
+              // Priority 2: Emergency class probability is prominent despite ambient noise
+              else if (emergClass && emergProb >= 0.18) {
+                detectedMlTarget = emergClass;
+                detectedConfidence = emergProb;
+              }
+              // Priority 3: Road traffic played into mic
+              else if (topClass === 'background_traffic' && topProb >= 0.65 && rawMax >= 0.04) {
+                detectedMlTarget = 'road';
+                detectedConfidence = topProb;
+              }
+
+              if (detectedMlTarget) {
+                const flutterClass = MODEL_TO_FLUTTER_CLASS[detectedMlTarget] || detectedMlTarget;
+                const now = Date.now();
+                if (!alertCooldown && (now - lastAlertTime > 1200)) {
+                  alertCooldown = true;
+                  lastAlertTime = now;
+                  console.log(`[Deep AI Classifier Matched]: '${flutterClass}' (${(detectedConfidence * 100).toFixed(1)}%)`);
+                  _dispatchFlutterAlert(
+                    flutterClass,
+                    detectedConfidence,
+                    `Deep Neural Net: ${flutterClass} (${(detectedConfidence * 100).toFixed(0)}%)`
+                  );
+                  setTimeout(() => { alertCooldown = false; }, 1400);
+                }
+              }
+            }
+          }
+        }
+      }
 
       if (analyser && freqData && timeData) {
         analyser.getByteFrequencyData(freqData);
@@ -624,49 +676,34 @@
           }
         }
 
-        // AUXILIARY INSTANT DETECTOR: Fires immediately on sharp emergency sound bursts
+        // AUXILIARY INSTANT DETECTOR: Fires on loud transient energy & acoustic alarm signatures
         const now = Date.now();
         const volRise = volPct - prevVolPct;
         prevVolPct = volPct;
 
-        if (!alertCooldown && (now - lastAlertTime > 1100) && (volPct >= 4 || rms >= 0.005)) {
+        if (!alertCooldown && (now - lastAlertTime > 1200) && (volPct >= 12 || rms >= 0.015)) {
           let detectedSound = null;
-          let confidence = 0.96;
+          let confidence = 0.95;
 
-          // 1. Ambulance Siren (Wailing harmonic pitch 500Hz - 1800Hz)
-          if (peakFreq >= 500 && peakFreq <= 1800 && volPct >= 4) {
-            detectedSound = "ambulance";
-            confidence = 0.98;
-          }
-          // 2. Fire Alarm / Smoke Detector (> 1600Hz piercing high-pitch tone)
-          else if (peakFreq >= 1600 && peakFreq <= 5500 && volPct >= 4) {
+          // 1. Fire Alarm / Smoke Detector (> 2200 Hz continuous high pitch tone)
+          if (peakFreq >= 2200 && peakFreq <= 5500 && volPct >= 12) {
             detectedSound = "firetruck";
-            confidence = 0.98;
-          }
-          // 3. Screaming / Urgent Distress Shout (700Hz - 2800Hz loud burst)
-          else if (peakFreq >= 700 && peakFreq <= 2800 && volPct >= 11) {
-            detectedSound = "screaming";
             confidence = 0.97;
           }
-          // 4. Vehicle Horn (Dual-tone chord 220Hz - 850Hz)
-          else if (peakFreq >= 220 && peakFreq <= 850 && volPct >= 4) {
-            detectedSound = "vehicle horns";
+          // 2. Urgent Screaming Distress Burst (> 25% loud burst, 850Hz - 2600Hz)
+          else if (peakFreq >= 850 && peakFreq <= 2600 && volPct >= 25 && volRise >= 8) {
+            detectedSound = "screaming";
             confidence = 0.96;
           }
-          // 5. Baby Crying (300Hz - 900Hz harmonic infant cadences)
-          else if (peakFreq >= 300 && peakFreq <= 900 && volPct >= 4) {
-            detectedSound = "baby crying";
+          // 3. Vehicle Horn (Dual-tone chord 300Hz - 650Hz loud burst)
+          else if (peakFreq >= 300 && peakFreq <= 650 && volPct >= 20 && volRise >= 6) {
+            detectedSound = "vehicle horns";
             confidence = 0.95;
           }
-          // 6. Dog Bark (Sharp transient attack spike)
-          else if ((volRise >= 3 || rms >= 0.006) && peakFreq >= 180 && peakFreq <= 1100 && volPct >= 4) {
+          // 4. Dog Bark (Sharp transient attack spike)
+          else if ((volRise >= 12 || rms >= 0.03) && peakFreq >= 180 && peakFreq <= 1000) {
             detectedSound = "dog_bark";
             confidence = 0.95;
-          }
-          // 7. Loud Emergency Voice Shout (e.g. "උදව්!", "බේරගන්න!")
-          else if (volPct >= 11 && peakFreq >= 160 && peakFreq <= 950) {
-            detectedSound = "udaw";
-            confidence = 0.94;
           }
 
           if (detectedSound) {
@@ -692,7 +729,7 @@
     const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRec) {
       console.warn("[SpeechRecognition] Web Speech API not supported. Acoustic DSP & ML mode active.");
-      window._latestTranscript = "🎤 AI Deep Neural Net Active (Speech API not supported in this browser)";
+      window._latestTranscript = "🎤 AI Deep Neural Net Active (Listening for Sinhala keywords & emergency sounds)...";
       return;
     }
 
@@ -712,6 +749,7 @@
 
       speechRec.onstart = function () {
         isSpeechRunning = true;
+        speechFailCount = 0;
         console.log(`[Speech Engine] Active and listening in [${currentSpeechLang}]`);
         window._latestTranscript = `🎤 Listening for Sinhala keywords ("උදව්", "ගින්නක්", "අනතුරක්", "Help")...`;
       };
@@ -738,16 +776,24 @@
         if (errType === 'no-speech') return;
 
         console.warn("[Speech Engine Status]:", errType);
+        speechFailCount++;
         isSpeechRunning = false;
 
-        if (errType === 'network') {
-          window._latestTranscript = `🎤 AI Neural Net Active (Chrome Speech cloud connecting...)`;
+        if (errType === 'network' || errType === 'language-not-supported' || speechFailCount > 2) {
+          // If Sinhala cloud speech recognition is unavailable in this environment, try English or fallback to Deep Neural Net
+          if (currentSpeechLang === 'si-LK' && speechFailCount >= 2) {
+            console.log("[Speech Engine] 'si-LK' unavailable, falling back to 'en-US' phonetic mode...");
+            currentSpeechLang = 'en-US';
+            window._currentSpeechLang = 'en-US';
+            if (speechRec) {
+              speechRec.lang = 'en-US';
+            }
+          }
+          window._latestTranscript = `🎤 Deep Neural Net Active (Listening for Sinhala keywords & emergency sounds)...`;
         }
 
-        // Backoff gracefully so it doesn't freeze the audio thread in an aggressive restart loop
-        const backoffMs = (errType === 'network') ? 5000 : 2000;
-
-        if (isListening) {
+        const backoffMs = (errType === 'network') ? 6000 : 3000;
+        if (isListening && speechFailCount < 6) {
           clearTimeout(speechRestartTimeout);
           speechRestartTimeout = setTimeout(() => {
             if (isListening && !isSpeechRunning && speechRec) {
@@ -759,7 +805,7 @@
 
       speechRec.onend = function () {
         isSpeechRunning = false;
-        if (isListening) {
+        if (isListening && speechFailCount < 6) {
           clearTimeout(speechRestartTimeout);
           speechRestartTimeout = setTimeout(() => {
             if (isListening && !isSpeechRunning && speechRec) {
@@ -881,10 +927,10 @@
     ) {
       matched = "ambulance";
     }
-    // 12. FIRETRUCK / FIRE ALARM ("firetruck", "fire alarm", "ගිනි නිවන")
+    // 12. FIRETRUCK / FIRE ALARM ("firetruck", "fire truck", "fire track", "fire alarm", "ගිනි නිවන")
     else if (
       clean.includes("firetruck") || clean.includes("fire truck") ||
-      clean.includes("fire alarm") || clean.includes("ගිනි නිවන")
+      clean.includes("fire track") || clean.includes("fire alarm") || clean.includes("ගිනි නිවන")
     ) {
       matched = "firetruck";
     }
