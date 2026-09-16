@@ -407,41 +407,40 @@
 
       micSource = audioCtx.createMediaStreamSource(micStream);
 
-      // 1. Raw Analyser for continuous Neural Network waveform polling (FFT 2048)
-      rawAnalyser = audioCtx.createAnalyser();
-      rawAnalyser.fftSize = 2048;
-      rawAnalyser.smoothingTimeConstant = 0.0;
-      rawWaveform = new Float32Array(rawAnalyser.fftSize);
-
-      // 2. 140 Hz Highpass Filter: Cuts DC offset and low fan rumble
+      // 1. 120 Hz Highpass Filter: Cuts DC hum and low rumble
       highpassFilter = audioCtx.createBiquadFilter();
       highpassFilter.type = 'highpass';
-      highpassFilter.frequency.setValueAtTime(140, audioCtx.currentTime);
+      highpassFilter.frequency.setValueAtTime(120, audioCtx.currentTime);
       highpassFilter.Q.setValueAtTime(0.707, audioCtx.currentTime);
 
-      // 3. High Gain Pre-Amplifier (5.0x) so normal speech and ambient sounds register lively on visualizer
+      // 2. 4.0x Pre-Amp Gain: Ensures voice & ambient sounds register crisply
       gainNode = audioCtx.createGain();
-      gainNode.gain.setValueAtTime(5.0, audioCtx.currentTime);
+      gainNode.gain.setValueAtTime(4.0, audioCtx.currentTime);
 
-      // 4. Visualizer Analyser
+      // 3. Visualizer Analyser (512 FFT bins)
       analyser = audioCtx.createAnalyser();
       analyser.fftSize = 512;
-      analyser.smoothingTimeConstant = 0.18;
+      analyser.smoothingTimeConstant = 0.15;
 
-      zeroGain = audioCtx.createGain();
-      zeroGain.gain.setValueAtTime(0.0, audioCtx.currentTime);
+      // 4. ScriptProcessorNode (2048 buffer) connected to destination:
+      // FORCES Chrome's audio engine to continuously pump live physical mic PCM frames!
+      scriptNode = audioCtx.createScriptProcessor(2048, 1, 1);
+      scriptNode.onaudioprocess = function (e) {
+        const inputData = e.inputBuffer.getChannelData(0);
+        const outputData = e.outputBuffer.getChannelData(0);
+        for (let i = 0; i < outputData.length; i++) {
+          outputData[i] = 0.0; // Silence speakers to prevent feedback howling
+        }
+        _handleLivePcmAudio(inputData);
+      };
 
-      // DSP Routing:
-      // micSource -> rawAnalyser -> zeroGain -> destination (Clean unclipped audio for neural net)
-      // micSource -> highpassFilter -> gainNode -> analyser -> zeroGain -> destination (Visuals)
-      micSource.connect(rawAnalyser);
-      rawAnalyser.connect(zeroGain);
-
+      // Guaranteed Active DSP Chain:
+      // micSource -> highpassFilter -> gainNode -> analyser -> scriptNode -> destination
       micSource.connect(highpassFilter);
       highpassFilter.connect(gainNode);
       gainNode.connect(analyser);
-      analyser.connect(zeroGain);
-      zeroGain.connect(audioCtx.destination);
+      analyser.connect(scriptNode);
+      scriptNode.connect(audioCtx.destination);
 
       const sampleRate = audioCtx.sampleRate || 44100;
       rollingBufferCapacity = sampleRate; // 1.0 second capacity
@@ -458,7 +457,7 @@
       _startAcousticAnalyzerLoop();
       _startSpeechEngine();
 
-      console.log("[AudioRecognizer] Live Acoustic, Deep ML & Speech Engine RUNNING!");
+      console.log("[AudioRecognizer] Live Hardware Microphone, Deep ML & Speech Engine RUNNING!");
       return true;
     } catch (err) {
       console.warn("[AudioRecognizer] Mic initialization notice:", err);
@@ -504,100 +503,119 @@
   };
 
   // =========================================================================
-  // 4. REAL-TIME AUDIBLE ACOUSTIC ANALYZER LOOP & AUXILIARY DETECTOR
+  // 4. LIVE HARDWARE PCM AUDIO PROCESSOR & DEEP NEURAL NETWORK INFERENCE
+  // =========================================================================
+  let currentLiveRms = 0.0;
+  let currentLivePeak = 0.0;
+
+  function _handleLivePcmAudio(inputData) {
+    if (!isListening) return;
+
+    // 1. Calculate live RMS and Peak amplitude directly from physical mic samples
+    let sumSquares = 0;
+    let peak = 0;
+    for (let i = 0; i < inputData.length; i++) {
+      const s = inputData[i];
+      const abs = Math.abs(s);
+      if (abs > peak) peak = abs;
+      sumSquares += s * s;
+    }
+    currentLivePeak = peak;
+    currentLiveRms = Math.sqrt(sumSquares / inputData.length);
+
+    // 2. Feed rolling audio buffer for Deep Neural Network
+    if (rollingAudioBuffer) {
+      for (let i = 0; i < inputData.length; i++) {
+        rollingAudioBuffer[rollingBufferIndex] = inputData[i];
+        rollingBufferIndex = (rollingBufferIndex + 1) % rollingBufferCapacity;
+      }
+    }
+
+    // 3. Periodic Deep ML Inference every ~150ms
+    const now = Date.now();
+    if (now - lastMlInferenceTime > 150 && rollingAudioBuffer) {
+      lastMlInferenceTime = now;
+
+      const sampleRate = audioCtx ? audioCtx.sampleRate : 44100;
+      const continuousAudio = new Float32Array(rollingBufferCapacity);
+      let bufPeak = 0;
+      let bufRmsSum = 0;
+      for (let i = 0; i < rollingBufferCapacity; i++) {
+        const s = rollingAudioBuffer[(rollingBufferIndex + i) % rollingBufferCapacity];
+        continuousAudio[i] = s;
+        const abs = Math.abs(s);
+        if (abs > bufPeak) bufPeak = abs;
+        bufRmsSum += s * s;
+      }
+      const bufRms = Math.sqrt(bufRmsSum / rollingBufferCapacity);
+
+      // If physical sound is present
+      if (bufPeak >= 0.002 || bufRms >= 0.0008) {
+        const resampled16k = _resampleTo16k(continuousAudio, sampleRate);
+        const mlResult = _predictNeuralNet(resampled16k);
+
+        if (mlResult) {
+          const emergClass = mlResult.emergClass;
+          const emergProb = mlResult.emergProb;
+          const topClass = mlResult.class;
+          const topProb = mlResult.prob;
+
+          let detectedTarget = null;
+          let detectedConf = 0.95;
+
+          // Priority 1: Model top class is an emergency target (threshold >= 0.16)
+          if (topClass && topClass !== 'background_traffic' && topProb >= 0.16) {
+            detectedTarget = topClass;
+            detectedConf = topProb;
+          }
+          // Priority 2: Prominent emergency probability despite ambient noise
+          else if (emergClass && emergProb >= 0.16) {
+            detectedTarget = emergClass;
+            detectedConf = emergProb;
+          }
+          // Priority 3: Road traffic played into mic
+          else if (topClass === 'background_traffic' && topProb >= 0.65 && bufPeak >= 0.025) {
+            detectedTarget = 'road';
+            detectedConf = topProb;
+          }
+
+          if (detectedTarget) {
+            const flutterClass = MODEL_TO_FLUTTER_CLASS[detectedTarget] || detectedTarget;
+            const sinhalaName = MODEL_CLASS_SINHALA_NAMES[flutterClass] || flutterClass;
+            if (!alertCooldown && (now - lastAlertTime > 1200)) {
+              alertCooldown = true;
+              lastAlertTime = now;
+              console.log(`[Deep AI Classifier Matched]: '${flutterClass}' (${(detectedConf * 100).toFixed(1)}%)`);
+
+              // Update Live Voice Transcript box so user sees detected Sinhala/sound immediately!
+              window._latestTranscript = `🚨 Detected: ${sinhalaName} (${flutterClass})`;
+              if (window.onFlutterSpeechTranscript) {
+                try { window.onFlutterSpeechTranscript(window._latestTranscript); } catch (e) {}
+              }
+
+              _dispatchFlutterAlert(
+                flutterClass,
+                detectedConf,
+                `Deep AI Classifier: ${flutterClass} (${(detectedConf * 100).toFixed(0)}%)`
+              );
+              setTimeout(() => { alertCooldown = false; }, 1400);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // =========================================================================
+  // 5. 60 FPS LIVELY 40-BAND SPECTRUM VISUALIZER & AUXILIARY DETECTOR
   // =========================================================================
   function _startAcousticAnalyzerLoop() {
     function analyze(timestamp) {
       if (!isListening) return;
       animTick++;
 
-      // 1. Continuous Waveform Capture into Rolling 1-Second Audio Buffer
-      if (rawAnalyser && rawWaveform && rollingAudioBuffer) {
-        rawAnalyser.getFloatTimeDomainData(rawWaveform);
-        const sampleRate = audioCtx ? audioCtx.sampleRate : 44100;
-
-        let dt = 0.0166;
-        if (lastAnimTimestamp > 0 && timestamp > lastAnimTimestamp) {
-          dt = Math.min(0.05, (timestamp - lastAnimTimestamp) / 1000.0);
-        }
-        lastAnimTimestamp = timestamp;
-
-        const samplesToCopy = Math.min(rawWaveform.length, Math.max(128, Math.floor(dt * sampleRate)));
-        const startOffset = rawWaveform.length - samplesToCopy;
-        for (let i = 0; i < samplesToCopy; i++) {
-          rollingAudioBuffer[rollingBufferIndex] = rawWaveform[startOffset + i];
-          rollingBufferIndex = (rollingBufferIndex + 1) % rollingBufferCapacity;
-        }
-
-        // 2. High-Sensitivity Deep Neural Network Inference (Runs every ~160ms on 1.0s continuous buffer)
-        if (timestamp - lastMlInferenceTime > 160) {
-          lastMlInferenceTime = timestamp;
-
-          // Check for audible energy in rolling audio
-          const continuousAudio = new Float32Array(rollingBufferCapacity);
-          let rawEnergy = 0;
-          let rawMax = 0;
-          for (let i = 0; i < rollingBufferCapacity; i++) {
-            const s = rollingAudioBuffer[(rollingBufferIndex + i) % rollingBufferCapacity];
-            continuousAudio[i] = s;
-            const abs = Math.abs(s);
-            if (abs > rawMax) rawMax = abs;
-            rawEnergy += abs * abs;
-          }
-          const rawRms = Math.sqrt(rawEnergy / rollingBufferCapacity);
-
-          if (rawMax >= 0.0025 || rawRms >= 0.001) {
-            const resampled16k = _resampleTo16k(continuousAudio, sampleRate);
-            const mlResult = _predictNeuralNet(resampled16k);
-
-            if (mlResult) {
-              const emergClass = mlResult.emergClass;
-              const emergProb = mlResult.emergProb;
-              const topClass = mlResult.class;
-              const topProb = mlResult.prob;
-
-              let detectedMlTarget = null;
-              let detectedConfidence = 0.95;
-
-              // Priority 1: Model's top prediction is an emergency class (threshold >= 0.18)
-              if (topClass && topClass !== 'background_traffic' && topProb >= 0.18) {
-                detectedMlTarget = topClass;
-                detectedConfidence = topProb;
-              }
-              // Priority 2: Emergency class probability is prominent despite ambient noise
-              else if (emergClass && emergProb >= 0.18) {
-                detectedMlTarget = emergClass;
-                detectedConfidence = emergProb;
-              }
-              // Priority 3: Road traffic played into mic
-              else if (topClass === 'background_traffic' && topProb >= 0.65 && rawMax >= 0.04) {
-                detectedMlTarget = 'road';
-                detectedConfidence = topProb;
-              }
-
-              if (detectedMlTarget) {
-                const flutterClass = MODEL_TO_FLUTTER_CLASS[detectedMlTarget] || detectedMlTarget;
-                const now = Date.now();
-                if (!alertCooldown && (now - lastAlertTime > 1200)) {
-                  alertCooldown = true;
-                  lastAlertTime = now;
-                  console.log(`[Deep AI Classifier Matched]: '${flutterClass}' (${(detectedConfidence * 100).toFixed(1)}%)`);
-                  _dispatchFlutterAlert(
-                    flutterClass,
-                    detectedConfidence,
-                    `Deep Neural Net: ${flutterClass} (${(detectedConfidence * 100).toFixed(0)}%)`
-                  );
-                  setTimeout(() => { alertCooldown = false; }, 1400);
-                }
-              }
-            }
-          }
-        }
-      }
-
-      if (analyser && freqData && timeData) {
+      if (analyser && freqData) {
         analyser.getByteFrequencyData(freqData);
-        analyser.getByteTimeDomainData(timeData);
 
         const sampleRate = audioCtx ? audioCtx.sampleRate : 44100;
         const binSize = sampleRate / analyser.fftSize;
@@ -608,42 +626,23 @@
 
         let maxAudibleVal = 0;
         let maxAudibleBinIdx = minAudibleBin;
-        let sumAudible = 0;
-        let lowBand = 0;  // 180 Hz - 350 Hz
-        let midBand = 0;  // 350 Hz - 1750 Hz
-        let highBand = 0; // 1750 Hz - 5500 Hz
 
         for (let i = minAudibleBin; i <= maxAudibleBin; i++) {
           const val = freqData[i];
-          sumAudible += val;
           if (val > maxAudibleVal) {
             maxAudibleVal = val;
             maxAudibleBinIdx = i;
           }
-          const freq = i * binSize;
-          if (freq < 350) lowBand += val;
-          else if (freq >= 350 && freq < 1750) midBand += val;
-          else highBand += val;
         }
-
-        // Calculate RMS Volume from Time Domain
-        let rmsSum = 0;
-        for (let i = 0; i < timeData.length; i++) {
-          const sample = (timeData[i] - 128) / 128.0;
-          rmsSum += sample * sample;
-        }
-        const rms = Math.sqrt(rmsSum / timeData.length);
 
         // Peak Frequency strictly locked to dominant audible sound
         const peakFreq = maxAudibleVal > 8 ? Math.round(maxAudibleBinIdx * binSize) : 220;
-        const avgAudibleVol = sumAudible / (maxAudibleBin - minAudibleBin + 1);
-        baselineNoise = baselineNoise * 0.96 + avgAudibleVol * 0.04;
 
-        // Dynamic volume scaling (amplified for deaf user visual clarity)
+        // Dynamic volume combining FFT and real PCM RMS
         const volPct = Math.min(100, Math.round((maxAudibleVal / 255.0) * 100));
-        const volNormalized = Math.min(1.0, Math.max(0.12, (volPct / 100.0) * 1.8 + rms * 1.2));
+        const volNormalized = Math.min(1.0, Math.max(0.12, (volPct / 100.0) * 1.5 + currentLiveRms * 3.0));
 
-        // 40 Frequency Bars with Lively Wave Motion
+        // 40 Frequency Bars with Lively Wave Motion & Real Microphone Reactivity
         const frame40 = [];
         for (let i = 0; i < 40; i++) {
           const startBin = Math.floor(Math.pow(i / 40, 1.25) * (freqData.length - 2));
@@ -653,9 +652,9 @@
             if (freqData[b] > bMax) bMax = freqData[b];
           }
 
-          // Undulating ambient wave so visualizer is visibly responsive and alive at all times
+          // Undulating ambient wave + live sound height
           const ambientWave = (Math.sin((animTick * 0.15) + (i * 0.35)) + 1.0) * 0.08 + 0.08;
-          const liveHeight = (bMax / 255.0) * 2.2;
+          const liveHeight = (bMax / 255.0) * 2.5 + (currentLiveRms * 2.0);
           const finalHeight = Math.max(0.15, Math.min(1.0, liveHeight + ambientWave));
           frame40.push(parseFloat(finalHeight.toFixed(3)));
         }
@@ -676,12 +675,12 @@
           }
         }
 
-        // AUXILIARY INSTANT DETECTOR: Fires on loud transient energy & acoustic alarm signatures
+        // AUXILIARY INSTANT DETECTOR: Fast transient acoustic signatures
         const now = Date.now();
         const volRise = volPct - prevVolPct;
         prevVolPct = volPct;
 
-        if (!alertCooldown && (now - lastAlertTime > 1200) && (volPct >= 12 || rms >= 0.015)) {
+        if (!alertCooldown && (now - lastAlertTime > 1200) && (volPct >= 12 || currentLiveRms >= 0.015)) {
           let detectedSound = null;
           let confidence = 0.95;
 
@@ -701,7 +700,7 @@
             confidence = 0.95;
           }
           // 4. Dog Bark (Sharp transient attack spike)
-          else if ((volRise >= 12 || rms >= 0.03) && peakFreq >= 180 && peakFreq <= 1000) {
+          else if ((volRise >= 12 || currentLiveRms >= 0.03) && peakFreq >= 180 && peakFreq <= 1000) {
             detectedSound = "dog_bark";
             confidence = 0.95;
           }
@@ -709,6 +708,11 @@
           if (detectedSound) {
             alertCooldown = true;
             lastAlertTime = now;
+            const sinhalaName = MODEL_CLASS_SINHALA_NAMES[detectedSound] || detectedSound;
+            window._latestTranscript = `🚨 Detected: ${sinhalaName} (${detectedSound})`;
+            if (window.onFlutterSpeechTranscript) {
+              try { window.onFlutterSpeechTranscript(window._latestTranscript); } catch (e) {}
+            }
             console.log(`[Acoustic AI Detected]: '${detectedSound}' (${peakFreq} Hz, ${volPct}% Vol)`);
             _dispatchFlutterAlert(detectedSound, confidence, `Acoustic Detector: ${peakFreq}Hz (${volPct}% Vol)`);
             setTimeout(() => { alertCooldown = false; }, 1400);
@@ -723,12 +727,11 @@
   }
 
   // =========================================================================
-  // 5. STATE-MACHINE SPEECH RECOGNITION ENGINE (WITH RESILIENT AUTO-RETRY)
+  // 6. STATE-MACHINE SPEECH RECOGNITION ENGINE (WITH RESILIENT AUTO-RETRY)
   // =========================================================================
   function _startSpeechEngine() {
     const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRec) {
-      console.warn("[SpeechRecognition] Web Speech API not supported. Acoustic DSP & ML mode active.");
       window._latestTranscript = "🎤 AI Deep Neural Net Active (Listening for Sinhala keywords & emergency sounds)...";
       return;
     }
@@ -736,7 +739,7 @@
     if (speechRec) {
       try {
         isSpeechRunning = false;
-        speechRec.stop();
+        speechRec.abort();
       } catch (e) {}
       speechRec = null;
     }
@@ -779,21 +782,14 @@
         speechFailCount++;
         isSpeechRunning = false;
 
-        if (errType === 'network' || errType === 'language-not-supported' || speechFailCount > 2) {
-          // If Sinhala cloud speech recognition is unavailable in this environment, try English or fallback to Deep Neural Net
-          if (currentSpeechLang === 'si-LK' && speechFailCount >= 2) {
-            console.log("[Speech Engine] 'si-LK' unavailable, falling back to 'en-US' phonetic mode...");
-            currentSpeechLang = 'en-US';
-            window._currentSpeechLang = 'en-US';
-            if (speechRec) {
-              speechRec.lang = 'en-US';
-            }
-          }
+        // If Speech API is unsupported or failing cloud connection on Windows, gracefully stop retrying and let Deep Neural Net run
+        if (speechFailCount >= 3) {
           window._latestTranscript = `🎤 Deep Neural Net Active (Listening for Sinhala keywords & emergency sounds)...`;
+          return;
         }
 
         const backoffMs = (errType === 'network') ? 6000 : 3000;
-        if (isListening && speechFailCount < 6) {
+        if (isListening && speechFailCount < 3) {
           clearTimeout(speechRestartTimeout);
           speechRestartTimeout = setTimeout(() => {
             if (isListening && !isSpeechRunning && speechRec) {
@@ -805,17 +801,23 @@
 
       speechRec.onend = function () {
         isSpeechRunning = false;
-        if (isListening && speechFailCount < 6) {
+        // Only restart if not failed too many times
+        if (isListening && speechFailCount < 3) {
           clearTimeout(speechRestartTimeout);
           speechRestartTimeout = setTimeout(() => {
             if (isListening && !isSpeechRunning && speechRec) {
               try { speechRec.start(); } catch (e) {}
             }
-          }, 3000);
+          }, 2000);
         }
       };
 
-      speechRec.start();
+      // Delay start slightly so getUserMedia Web Audio pipeline is cleanly streaming
+      setTimeout(() => {
+        if (isListening && speechRec) {
+          try { speechRec.start(); } catch (e) {}
+        }
+      }, 350);
     } catch (err) {
       console.error("[Speech Engine Launch Error]:", err);
       isSpeechRunning = false;
