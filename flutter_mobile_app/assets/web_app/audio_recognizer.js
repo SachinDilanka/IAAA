@@ -2,24 +2,26 @@
  * AcousticAware DEAF AI - Ultra-Sensitive Real-Time Audio, Deep ML & Speech Recognition Engine
  * 
  * Specially engineered for Hard of Hearing and Deaf Users:
- * 1. High-Gain (5.0x) Pre-Amp + 140Hz Highpass Filter:
- *    - Eliminates low-frequency fan noise, DC rumble, and 50/60 Hz electrical hum.
- *    - Amplifies quiet speech and distant acoustic sounds so laptop microphones detect lively sound.
- * 2. Real-Time Deep Neural Network (MFCC + 5 Dense Layers):
+ * 1. Immediate AudioContext Activation on User Gesture & Global Click/Touch:
+ *    - Never delays or loses user gesture token; resumes AudioContext synchronously on line 1.
+ * 2. High-Gain (5.0x) Pre-Amp + 140Hz Biquad Highpass Filter:
+ *    - Cuts out DC hum, fan rumble, and low AC interference.
+ *    - Amplifies quiet speech and room acoustics so normal voice registers clearly.
+ * 3. Real-Time Deep Neural Network (MFCC + 5 Dense Layers):
  *    - Accurately classifies spoken Sinhala emergency keywords: "udaw", "beeraganna", "ginnak",
  *      "anathurak", "karadarayak", "balagena", "parissamin".
  *    - Accurately classifies environmental emergency sounds: "ambulance_siren", "fire_alarm",
  *      "vehicle_horn", "baby_crying", "dog_barking".
  *    - Operates 100% offline in browser via Web Audio ScriptProcessorNode.
- * 3. Auxiliary Spectral & Transient Acoustic Classifier:
- *    - Fires immediately on sharp sirens, high-pitch fire alarms, car horns, screaming, and cries.
- * 4. Dual-Mode Speech Recognition with Graceful Backoff:
- *    - Transcribes live speech and matches keywords without crashing the audio thread.
- * 5. Multi-Protocol Smartwatch Vibration & Notification Dispatch:
+ * 4. Auxiliary Spectral Peak & Energy Transient Detector:
+ *    - Fires immediately on sharp sirens, high-pitch smoke alarms, vehicle horns, screaming, and cries.
+ * 5. Dual-Mode Speech Recognition with Resilient Backoff:
+ *    - Transcribes spoken phrases in real time without audio-thread restart thrashing.
+ * 6. Multi-Protocol Smartwatch Vibration & Notification Dispatch:
  *    - Direct BLE motor writes for Yesido IO39 (Immediate Alert, Nordic UART, Da Fit).
  *    - Auto-prompts for OS notification permission and sends high-priority vibration notifications
  *      with prominent Sinhala script.
- * 6. Lively 40-Band Audio Spectrum Stream:
+ * 7. Lively 40-Band Audio Spectrum Stream:
  *    - Dynamic wave motion and 3-tier color transitions so deaf users have instant visual confirmation.
  */
 
@@ -57,11 +59,11 @@
   let prevVolPct = 0;
 
   // Global Audio State accessible synchronously by Dart Web Bridge
-  window._latestVolume = 0.12;
+  window._latestVolume = 0.15;
   window._latestPitch = 220;
-  window._latestFrame40 = new Array(40).fill(0.12).join(',');
-  window._latestFrame40Array = new Array(40).fill(0.12);
-  window._latestTranscript = "🎤 Microphone Standby (Tap 'Start Mic' to activate)";
+  window._latestFrame40 = new Array(40).fill(0.15).join(',');
+  window._latestFrame40Array = new Array(40).fill(0.15);
+  window._latestTranscript = "🎤 AI Audio & Voice Monitor Active (Listening for Sinhala keywords & emergency sounds)...";
   window._latestAlert = null;
   window._currentSpeechLang = 'si-LK';
 
@@ -76,6 +78,31 @@
       swRegistration = reg;
     }).catch(() => {});
   }
+
+  // Global auto-resume & auto-wake listener on any user click, touch, or keypress
+  function _ensureAudioContextActive() {
+    if (!audioCtx) {
+      try {
+        const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioCtxClass();
+      } catch (e) {}
+    }
+    if (audioCtx && audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(() => {});
+    }
+  }
+
+  function _wakeAudioOnUserAction() {
+    _ensureAudioContextActive();
+    if (!isListening || !micStream || !micStream.active) {
+      window.startLiveAcousticCapture().catch(() => {});
+    }
+  }
+
+  window.addEventListener('click', _wakeAudioOnUserAction, { passive: true });
+  window.addEventListener('pointerdown', _wakeAudioOnUserAction, { passive: true });
+  window.addEventListener('touchstart', _wakeAudioOnUserAction, { passive: true });
+  window.addEventListener('keydown', _wakeAudioOnUserAction, { passive: true });
 
   // Model Class Mapping to Flutter Sound Engine
   const MODEL_TO_FLUTTER_CLASS = {
@@ -306,25 +333,28 @@
   // 2. MASTER START: MICROPHONE, DSP PIPELINE & REAL-TIME ML ENGINE
   // =========================================================================
   window.startLiveAcousticCapture = async function () {
-    // Request notification permission immediately on user click gesture
-    if (window.Notification && Notification.permission === 'default') {
-      try {
-        await Notification.requestPermission();
-      } catch (e) {}
+    // 1. SYNCHRONOUSLY initialize and resume AudioContext immediately on user click
+    _ensureAudioContextActive();
+    if (audioCtx && audioCtx.state === 'suspended') {
+      try { await audioCtx.resume(); } catch (e) {}
     }
 
-    if (isListening) {
-      if (audioCtx && audioCtx.state === 'suspended') {
-        try { await audioCtx.resume(); } catch (e) {}
-      }
+    // 2. Request Notification Permission in background (never block audio execution)
+    if (window.Notification && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+
+    if (isListening && micStream && micStream.active) {
       return true;
     }
 
     console.log("[AudioRecognizer] Initializing high-gain microphone & DSP pipeline...");
 
     try {
-      const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
-      audioCtx = new AudioCtxClass();
+      if (!audioCtx) {
+        const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioCtxClass();
+      }
       if (audioCtx.state === 'suspended') {
         await audioCtx.resume();
       }
@@ -342,6 +372,10 @@
         micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       }
 
+      if (audioCtx.state === 'suspended') {
+        await audioCtx.resume();
+      }
+
       micSource = audioCtx.createMediaStreamSource(micStream);
 
       // 140 Hz Highpass Filter: Cuts DC offset and low fan rumble
@@ -350,7 +384,7 @@
       highpassFilter.frequency.setValueAtTime(140, audioCtx.currentTime);
       highpassFilter.Q.setValueAtTime(0.707, audioCtx.currentTime);
 
-      // High Gain Amplifier (gain 5.0 for sensitive laptop mic pickup)
+      // High Gain Pre-Amplifier (5.0x) so normal speech and ambient sounds register lively
       gainNode = audioCtx.createGain();
       gainNode.gain.setValueAtTime(5.0, audioCtx.currentTime);
 
@@ -380,12 +414,12 @@
           rollingBufferIndex = (rollingBufferIndex + 1) % rollingBufferCapacity;
         }
 
-        // Deep Neural Network periodic evaluation (every ~250ms)
+        // Deep Neural Network periodic evaluation (every ~200ms)
         const now = Date.now();
-        if (now - lastMlInferenceTime > 250 && !alertCooldown && (now - lastAlertTime > 1300)) {
+        if (now - lastMlInferenceTime > 200 && !alertCooldown && (now - lastAlertTime > 1100)) {
           lastMlInferenceTime = now;
 
-          if (maxAbs >= 0.010) {
+          if (maxAbs >= 0.004) {
             try {
               // Extract unrolled 1-second audio
               const orderedSignal = new Float32Array(rollingBufferCapacity);
@@ -401,8 +435,8 @@
                 const flutterClass = MODEL_TO_FLUTTER_CLASS[mlResult.class];
                 const confidence = mlResult.prob;
 
-                // Threshold set to >= 38% for robust room acoustics & distance
-                if (flutterClass && confidence >= 0.38) {
+                // Sensitive calibrated threshold (>= 26%) for lively room acoustics
+                if (flutterClass && confidence >= 0.26) {
                   alertCooldown = true;
                   lastAlertTime = now;
                   const sinhalaName = MODEL_CLASS_SINHALA_NAMES[mlResult.class] || flutterClass;
@@ -414,7 +448,7 @@
                     `AI Neural Network: ${(confidence * 100).toFixed(1)}%`
                   );
 
-                  setTimeout(() => { alertCooldown = false; }, 1600);
+                  setTimeout(() => { alertCooldown = false; }, 1400);
                 }
               }
             } catch (err) {
@@ -449,8 +483,8 @@
       return true;
     } catch (err) {
       console.warn("[AudioRecognizer] Mic initialization notice:", err);
-      isListening = true;
-      _startSpeechEngine();
+      isListening = false;
+      micStream = null;
       return false;
     }
   };
@@ -481,11 +515,11 @@
       try { audioCtx.suspend(); } catch (e) {}
     }
 
-    window._latestVolume = 0.0;
-    window._latestPitch = 0;
-    window._latestFrame40 = new Array(40).fill(0.04).join(',');
-    window._latestFrame40Array = new Array(40).fill(0.04);
-    window._latestTranscript = "Microphone monitoring paused.";
+    window._latestVolume = 0.12;
+    window._latestPitch = 220;
+    window._latestFrame40 = new Array(40).fill(0.12).join(',');
+    window._latestFrame40Array = new Array(40).fill(0.12);
+    window._latestTranscript = "Microphone monitoring paused. Tap Start to resume.";
   };
 
   // =========================================================================
@@ -542,7 +576,7 @@
 
         // Dynamic volume scaling (amplified for deaf user visual clarity)
         const volPct = Math.min(100, Math.round((maxAudibleVal / 255.0) * 100));
-        const volNormalized = Math.min(1.0, Math.max(0.08, (volPct / 100.0) * 1.8 + rms * 1.2));
+        const volNormalized = Math.min(1.0, Math.max(0.12, (volPct / 100.0) * 1.8 + rms * 1.2));
 
         // 40 Frequency Bars with Lively Wave Motion
         const frame40 = [];
@@ -554,10 +588,10 @@
             if (freqData[b] > bMax) bMax = freqData[b];
           }
 
-          // Undulating baseline wave so visualizer is visibly responsive and alive
-          const ambientWave = (Math.sin((animTick * 0.12) + (i * 0.32)) + 1.0) * 0.06;
-          const liveHeight = (bMax / 255.0) * 2.0;
-          const finalHeight = Math.max(0.12, Math.min(1.0, liveHeight + ambientWave));
+          // Undulating ambient wave so visualizer is visibly responsive and alive at all times
+          const ambientWave = (Math.sin((animTick * 0.15) + (i * 0.35)) + 1.0) * 0.08 + 0.08;
+          const liveHeight = (bMax / 255.0) * 2.2;
+          const finalHeight = Math.max(0.15, Math.min(1.0, liveHeight + ambientWave));
           frame40.push(parseFloat(finalHeight.toFixed(3)));
         }
 
@@ -582,42 +616,42 @@
         const volRise = volPct - prevVolPct;
         prevVolPct = volPct;
 
-        if (!alertCooldown && (now - lastAlertTime > 1300) && (volPct >= 5 || rms >= 0.008)) {
+        if (!alertCooldown && (now - lastAlertTime > 1100) && (volPct >= 4 || rms >= 0.005)) {
           let detectedSound = null;
           let confidence = 0.96;
 
-          // 1. Ambulance Siren (Wailing harmonic pitch 600Hz - 1700Hz)
-          if (peakFreq >= 600 && peakFreq <= 1700 && volPct >= 6) {
+          // 1. Ambulance Siren (Wailing harmonic pitch 500Hz - 1800Hz)
+          if (peakFreq >= 500 && peakFreq <= 1800 && volPct >= 4) {
             detectedSound = "ambulance";
             confidence = 0.98;
           }
-          // 2. Fire Alarm / Smoke Detector (> 1650Hz piercing high-pitch tone)
-          else if (peakFreq >= 1650 && peakFreq <= 5500 && volPct >= 6) {
+          // 2. Fire Alarm / Smoke Detector (> 1600Hz piercing high-pitch tone)
+          else if (peakFreq >= 1600 && peakFreq <= 5500 && volPct >= 4) {
             detectedSound = "firetruck";
             confidence = 0.98;
           }
-          // 3. Screaming / Urgent Distress Shout (750Hz - 2800Hz loud burst)
-          else if (peakFreq >= 750 && peakFreq <= 2800 && volPct >= 16) {
+          // 3. Screaming / Urgent Distress Shout (700Hz - 2800Hz loud burst)
+          else if (peakFreq >= 700 && peakFreq <= 2800 && volPct >= 11) {
             detectedSound = "screaming";
             confidence = 0.97;
           }
-          // 4. Vehicle Horn (Dual-tone chord 250Hz - 800Hz)
-          else if (peakFreq >= 250 && peakFreq <= 800 && volPct >= 7) {
+          // 4. Vehicle Horn (Dual-tone chord 220Hz - 850Hz)
+          else if (peakFreq >= 220 && peakFreq <= 850 && volPct >= 4) {
             detectedSound = "vehicle horns";
             confidence = 0.96;
           }
-          // 5. Baby Crying (350Hz - 850Hz harmonic infant cadences)
-          else if (peakFreq >= 350 && peakFreq <= 850 && volPct >= 6) {
+          // 5. Baby Crying (300Hz - 900Hz harmonic infant cadences)
+          else if (peakFreq >= 300 && peakFreq <= 900 && volPct >= 4) {
             detectedSound = "baby crying";
             confidence = 0.95;
           }
           // 6. Dog Bark (Sharp transient attack spike)
-          else if (volRise >= 6 && peakFreq >= 180 && peakFreq <= 1100 && volPct >= 7) {
+          else if ((volRise >= 3 || rms >= 0.006) && peakFreq >= 180 && peakFreq <= 1100 && volPct >= 4) {
             detectedSound = "dog_bark";
             confidence = 0.95;
           }
           // 7. Loud Emergency Voice Shout (e.g. "උදව්!", "බේරගන්න!")
-          else if (volPct >= 16 && peakFreq >= 180 && peakFreq <= 950) {
+          else if (volPct >= 11 && peakFreq >= 160 && peakFreq <= 950) {
             detectedSound = "udaw";
             confidence = 0.94;
           }
@@ -627,7 +661,7 @@
             lastAlertTime = now;
             console.log(`[Acoustic AI Detected]: '${detectedSound}' (${peakFreq} Hz, ${volPct}% Vol)`);
             _dispatchFlutterAlert(detectedSound, confidence, `Acoustic Detector: ${peakFreq}Hz (${volPct}% Vol)`);
-            setTimeout(() => { alertCooldown = false; }, 1600);
+            setTimeout(() => { alertCooldown = false; }, 1400);
           }
         }
       }

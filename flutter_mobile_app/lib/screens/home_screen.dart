@@ -6,8 +6,24 @@ import '../wearable/smartwatch_service.dart';
 import '../models/alert_level.dart';
 import '../models/detection_event.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final classifier = Provider.of<SoundClassifierService>(context, listen: false);
+      if (!classifier.isListening) {
+        classifier.startListening();
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -152,10 +168,18 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 960),
-          child: SingleChildScrollView(
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () {
+          final classifier = Provider.of<SoundClassifierService>(context, listen: false);
+          if (!classifier.isListening) {
+            classifier.startListening();
+          }
+        },
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 960),
+            child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 14.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -463,8 +487,9 @@ class HomeScreen extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   /// Live Microphone & Speech Recognition Card with Language Toggle & Dancing Spectrum Visualizer
   Widget _buildLiveMicrophoneAcousticCard(BuildContext context) {

@@ -33,10 +33,10 @@ class SoundClassifierService extends ChangeNotifier {
   Timer? _activeAlertDismissTimer;
   Timer? _visualizerTicker;
 
-  List<double> _liveSpectrogramFrame = List.generate(40, (i) => 0.08);
-  double _currentRmsVolume = 0.0;
-  int _currentPitchHz = 0;
-  String _liveSpeechTranscript = "Microphone Standby (Tap 'Start Mic' and speak or play sounds)...";
+  List<double> _liveSpectrogramFrame = List.generate(40, (i) => 0.16);
+  double _currentRmsVolume = 0.12;
+  int _currentPitchHz = 220;
+  String _liveSpeechTranscript = "🎤 AI Audio & Voice Monitor Standby (Tap 'Start Mic' or anywhere to activate)...";
   String _speechLanguage = 'si-LK';
   int _tickCount = 0;
   DateTime _lastRealFrameTime = DateTime.fromMillisecondsSinceEpoch(0);
