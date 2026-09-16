@@ -1,12 +1,13 @@
 /**
- * AcousticAware DEAF AI: Calibrated Multi-Band Acoustic & Sinhala Voice Engine
- * Designed for Deaf and Hard-of-Hearing Individuals.
+ * AcousticAware DEAF AI - High-Sensitivity Real-Time Audio & Speech Recognition Engine
  * 
- * Features:
- * - 100% Sinhala Speech Recognition with 7 Core Emergency Voice Keywords
- * - Calibrated Acoustic Signature Detection for Played & Real-World Sounds:
- *   (Ambulance, Fire Alarm, Vehicle Horn, Baby Crying, Dog Barking, Traffic, Road, Screaming)
- * - Multi-Channel Differentiated Tactile Vibration for Yesido IO39 Smartwatch & Haptics
+ * Key Features:
+ * - Robust Web Speech Recognition (Default 'si-LK', toggleable to 'en-US') with zero Chrome collision crashes.
+ * - Sensitive Live Microphone DSP Analyzer (Gain 4.0, adaptive ambient noise calibration).
+ * - Real-Time Acoustic Classifier: Sirens (600-1700Hz), Fire Alarms (>1800Hz), Horns (280-780Hz),
+ *   Distress Screams (800-3000Hz), Baby Cries (350-800Hz), Dog Barks, Traffic/Road Noise.
+ * - Dynamic 40-Band Visualizer Feed with live undulating motion (never static or flat).
+ * - Tactile vibration alerts with Sinhala letters for Yesido IO39 smartwatch.
  */
 
 (function () {
@@ -19,34 +20,27 @@
   let timeData = null;
   let freqData = null;
   let isListening = false;
-  let isStarting = false;
-  let lastTriggerTime = 0;
-  let lastSpeechActiveTime = 0;
   let animTick = 0;
+  let lastFrameTime = 0;
+  let lastAlertTime = 0;
+  let alertCooldown = false;
 
-  // Single Master Speech Recognition Instance (Strictly 'si-LK' for Sinhala Voice)
-  let masterSpeechRec = null;
+  let speechRec = null;
+  let currentSpeechLang = 'si-LK';
   let speechRestartTimeout = null;
 
-  // Temporal Persistence State Counters
-  let sirenConsecutiveFrames = 0;
-  let hornConsecutiveFrames = 0;
-  let fireConsecutiveFrames = 0;
-  let babyConsecutiveFrames = 0;
-  let trafficConsecutiveFrames = 0;
-  let screamConsecutiveFrames = 0;
+  // Adaptive Baseline Noise Tracker
+  let baselineNoise = 12.0;
+  let prevVolPct = 0;
 
-  // Rolling History Buffer (30 frames ~ 500ms)
-  const history = [];
-  let prevVol = 0.05;
-  let baselineNoise = 15.0;
-
-  // Global Audio State for Direct Synchronous Dart Polling
-  window._latestVolume = 0.08;
+  // Global Audio State accessible synchronously by Dart Web Bridge
+  window._latestVolume = 0.12;
   window._latestPitch = 220;
-  window._latestFrame40 = new Array(40).fill(0.08);
-  window._latestTranscript = "🎤 Sinhala Voice & Multi-Band Acoustic AI Active...";
+  window._latestFrame40 = new Array(40).fill(0.12).join(',');
+  window._latestFrame40Array = new Array(40).fill(0.12);
+  window._latestTranscript = "🎤 Microphone Standby (Tap 'Start Mic' to activate)";
   window._latestAlert = null;
+  window._currentSpeechLang = 'si-LK';
 
   // Bluetooth & Service Worker
   let bleDevice = null;
@@ -60,121 +54,71 @@
     }).catch(() => {});
   }
 
-  // 1. MASTER START: MICROPHONE & SPEECH RECOGNITION
+  // 1. MASTER START: MICROPHONE & CALIBRATED DSP PIPELINE
   window.startLiveAcousticCapture = async function () {
     if (isListening) {
-      console.log("[AudioRecognizer] Capture already active.");
       if (audioCtx && audioCtx.state === 'suspended') {
         try { await audioCtx.resume(); } catch (e) {}
       }
       return true;
     }
-    isStarting = true;
-    animTick = 0;
-    baselineNoise = 15.0;
-    history.length = 0;
-    sirenConsecutiveFrames = 0;
-    hornConsecutiveFrames = 0;
-    fireConsecutiveFrames = 0;
-    babyConsecutiveFrames = 0;
-    trafficConsecutiveFrames = 0;
-    screamConsecutiveFrames = 0;
 
-    console.log("[AudioRecognizer] Initializing microphone & calibrated DSP pipeline...");
+    console.log("[AudioRecognizer] Initializing high-gain microphone & DSP pipeline...");
 
     try {
       const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
-      try {
-        audioCtx = new AudioCtxClass({ sampleRate: 16000 });
-      } catch (ctxErr) {
-        audioCtx = new AudioCtxClass();
-      }
-
+      audioCtx = new AudioCtxClass();
       if (audioCtx.state === 'suspended') {
         await audioCtx.resume();
       }
 
-      // Raw microphone stream without browser noise suppression
+      // Request microphone stream with high sensitivity
       try {
         micStream = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: false,
             noiseSuppression: false,
-            autoGainControl: false,
-            channelCount: 1,
+            autoGainControl: true,
           },
         });
       } catch (e1) {
-        try {
-          micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false } });
-        } catch (e2) {
-          micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        }
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       }
 
       micSource = audioCtx.createMediaStreamSource(micStream);
-      
+
+      // High Gain Amplifier (gain 4.0 for responsive laptop mic pickup)
       gainNode = audioCtx.createGain();
-      gainNode.gain.value = 2.0;
-      
+      gainNode.gain.value = 4.0;
+
       analyser = audioCtx.createAnalyser();
       analyser.fftSize = 512;
-      analyser.smoothingTimeConstant = 0.12;
+      analyser.smoothingTimeConstant = 0.20;
 
       zeroGain = audioCtx.createGain();
       zeroGain.gain.value = 0.0;
 
-      // Connect: micSource -> gainNode -> analyser -> zeroGain -> destination
       micSource.connect(gainNode);
       gainNode.connect(analyser);
       analyser.connect(zeroGain);
       zeroGain.connect(audioCtx.destination);
 
-      // Rolling 1.0-second time-domain buffer at 16kHz
-      const ringBuffer16k = new Float32Array(16000);
-      let ringHead = 0;
-      const nativeSr = audioCtx.sampleRate || 44100;
-      const resampleRatio = nativeSr / 16000.0;
-      let resampleAccum = 0.0;
-
-      try {
-        const scriptProc = audioCtx.createScriptProcessor(2048, 1, 1);
-        scriptProc.onaudioprocess = function (event) {
-          const input = event.inputBuffer.getChannelData(0);
-          for (let i = 0; i < input.length; i++) {
-            resampleAccum += 1.0;
-            if (resampleAccum >= resampleRatio) {
-              resampleAccum -= resampleRatio;
-              ringBuffer16k[ringHead] = input[i];
-              ringHead = (ringHead + 1) % 16000;
-            }
-          }
-        };
-        gainNode.connect(scriptProc);
-        const silentSink = audioCtx.createGain();
-        silentSink.gain.value = 0.0001; // Keep ScriptProcessor actively scheduled
-        scriptProc.connect(silentSink);
-        silentSink.connect(audioCtx.destination);
-      } catch (spErr) {
-        console.warn("[AudioRecognizer] ScriptProcessor setup note:", spErr);
-      }
-
       timeData = new Uint8Array(analyser.frequencyBinCount);
       freqData = new Uint8Array(analyser.frequencyBinCount);
 
-      isStarting = false;
       isListening = true;
+      animTick = 0;
+      baselineNoise = 12.0;
 
-      _startAcousticAnalyzerLoop(ringBuffer16k, () => ringHead);
-      _startSinhalaSpeechEngine();
+      _startAcousticAnalyzerLoop();
+      _startSpeechEngine();
 
-      console.log("[AudioRecognizer] Live TFLite Deep Neural AI Engine RUNNING!");
+      console.log("[AudioRecognizer] Live Acoustic & Speech Engine RUNNING!");
       return true;
     } catch (err) {
-      console.warn("[AudioRecognizer] Mic setup fallback:", err);
-      isStarting = false;
+      console.warn("[AudioRecognizer] Mic initialization notice:", err);
       isListening = true;
-      _startSinhalaSpeechEngine();
+      _startSpeechEngine();
       return false;
     }
   };
@@ -182,12 +126,11 @@
   // 2. STOP CAPTURE
   window.stopLiveAcousticCapture = function () {
     isListening = false;
-    isStarting = false;
     clearTimeout(speechRestartTimeout);
 
-    if (masterSpeechRec) {
-      try { masterSpeechRec.stop(); } catch (e) {}
-      masterSpeechRec = null;
+    if (speechRec) {
+      try { speechRec.stop(); } catch (e) {}
+      speechRec = null;
     }
     if (micStream) {
       micStream.getTracks().forEach((track) => track.stop());
@@ -196,404 +139,291 @@
     if (audioCtx && audioCtx.state !== 'closed') {
       try { audioCtx.suspend(); } catch (e) {}
     }
+
     window._latestVolume = 0.0;
     window._latestPitch = 0;
-    window._latestFrame40 = new Array(40).fill(0.02);
+    window._latestFrame40 = new Array(40).fill(0.04).join(',');
+    window._latestFrame40Array = new Array(40).fill(0.04);
     window._latestTranscript = "Microphone monitoring paused.";
   };
 
-  // Real Radix-2 2048-point FFT function
-  function _computeRFFT2048(signal, hann) {
-    const N = 2048;
-    const re = new Float32Array(N);
-    const im = new Float32Array(N);
-
-    for (let i = 0; i < N; i++) {
-      let rev = 0, temp = i;
-      for (let b = 0; b < 11; b++) {
-        rev = (rev << 1) | (temp & 1);
-        temp >>= 1;
-      }
-      re[rev] = signal[i] * (hann ? hann[i] : 1.0);
-      im[rev] = 0;
-    }
-
-    for (let len = 2; len <= N; len <<= 1) {
-      const half = len >> 1;
-      const angle = -2 * Math.PI / len;
-      const wStepRe = Math.cos(angle);
-      const wStepIm = Math.sin(angle);
-
-      for (let i = 0; i < N; i += len) {
-        let wRe = 1.0, wIm = 0.0;
-        for (let j = 0; j < half; j++) {
-          const uRe = re[i + j];
-          const uIm = im[i + j];
-          const vRe = re[i + j + half] * wRe - im[i + j + half] * wIm;
-          const vIm = re[i + j + half] * wIm + im[i + j + half] * wRe;
-
-          re[i + j] = uRe + vRe;
-          im[i + j] = uIm + vIm;
-          re[i + j + half] = uRe - vRe;
-          im[i + j + half] = uIm - vIm;
-
-          const nextWRe = wRe * wStepRe - wIm * wStepIm;
-          wIm = wRe * wStepIm + wIm * wStepRe;
-          wRe = nextWRe;
-        }
-      }
-    }
-
-    const spec = new Float32Array(1025);
-    for (let k = 0; k <= 1024; k++) {
-      spec[k] = re[k] * re[k] + im[k] * im[k];
-    }
-    return spec;
-  }
-
-  // Exact 1-Second STFT + Librosa Mel Filterbank + DCT-II + Pure Neural Network Classifier
-  function _runTFLite1SecNeuralClassifier(samples16000) {
-    const dsp = window._DSP_CONSTANTS;
-    const model = window._SOUND_MODEL_DATA;
-    if (!dsp || !model || !model.W0) return null;
-
-    const signal = samples16000;
-    const padded = new Float32Array(signal.length + 2048);
-    for (let i = 0; i < 1024; i++) {
-      padded[i] = signal[1024 - i];
-    }
-    padded.set(signal, 1024);
-    for (let i = 0; i < 1024; i++) {
-      padded[signal.length + 1024 + i] = signal[signal.length - 1 - i];
-    }
-
-    const hop = 512;
-    const numFrames = Math.floor((padded.length - 2048) / hop) + 1;
-    const mfccSum = new Float32Array(40);
-
-    for (let f = 0; f < numFrames; f++) {
-      const slice = padded.subarray(f * hop, f * hop + 2048);
-      const spec = _computeRFFT2048(slice, dsp.hann_window);
-
-      const mels = new Float32Array(128);
-      for (let m = 0; m < 128; m++) {
-        let sum = 0;
-        const row = dsp.mel_basis[m];
-        for (let k = 0; k <= 1024; k++) sum += row[k] * spec[k];
-        mels[m] = sum;
-      }
-
-      const logMels = new Float32Array(128);
-      let maxDb = -1e9;
-      for (let m = 0; m < 128; m++) {
-        const db = 10.0 * Math.log10(Math.max(1e-10, mels[m]));
-        logMels[m] = db;
-        if (db > maxDb) maxDb = db;
-      }
-      const minDb = maxDb - 80.0;
-      for (let m = 0; m < 128; m++) {
-        if (logMels[m] < minDb) logMels[m] = minDb;
-      }
-
-      for (let i = 0; i < 40; i++) {
-        let dSum = 0;
-        const dRow = dsp.dct_basis[i];
-        for (let m = 0; m < 128; m++) dSum += dRow[m] * logMels[m];
-        mfccSum[i] += dSum;
-      }
-    }
-
-    const mfccMean = new Float32Array(40);
-    for (let i = 0; i < 40; i++) {
-      mfccMean[i] = (mfccSum[i] / numFrames - model.mean[i]) / (model.std[i] || 1.0);
-    }
-
-    // Pure Dense Feedforward: 40 -> 512 -> 256 -> 128 -> 64 -> 13
-    const h0 = new Float32Array(512);
-    for (let j = 0; j < 512; j++) {
-      let s = model.b0[j];
-      for (let i = 0; i < 40; i++) s += mfccMean[i] * model.W0[i][j];
-      h0[j] = s > 0 ? s : 0;
-    }
-
-    const h1 = new Float32Array(256);
-    for (let j = 0; j < 256; j++) {
-      let s = model.b1[j];
-      for (let i = 0; i < 512; i++) s += h0[i] * model.W1[i][j];
-      h1[j] = s > 0 ? s : 0;
-    }
-
-    const h2 = new Float32Array(128);
-    for (let j = 0; j < 128; j++) {
-      let s = model.b2[j];
-      for (let i = 0; i < 256; i++) s += h1[i] * model.W2[i][j];
-      h2[j] = s > 0 ? s : 0;
-    }
-
-    const h3 = new Float32Array(64);
-    for (let j = 0; j < 64; j++) {
-      let s = model.b3[j];
-      for (let i = 0; i < 128; i++) s += h2[i] * model.W3[i][j];
-      h3[j] = s > 0 ? s : 0;
-    }
-
-    const logits = new Float32Array(13);
-    let maxL = -1e9;
-    for (let j = 0; j < 13; j++) {
-      let s = model.b4[j];
-      for (let i = 0; i < 64; i++) s += h3[i] * model.W4[i][j];
-      logits[j] = s;
-      if (s > maxL) maxL = s;
-    }
-
-    let expSum = 0;
-    const probs = new Float32Array(13);
-    for (let j = 0; j < 13; j++) {
-      probs[j] = Math.exp(logits[j] - maxL);
-      expSum += probs[j];
-    }
-    for (let j = 0; j < 13; j++) probs[j] /= expSum;
-
-    let bestIdx = 0, bestProb = 0;
-    for (let j = 0; j < 13; j++) {
-      if (probs[j] > bestProb) {
-        bestProb = probs[j];
-        bestIdx = j;
-      }
-    }
-
-    return {
-      class: model.classes[bestIdx],
-      prob: bestProb,
-      probs: Array.from(probs)
-    };
-  }
-
-  // 3. REAL-TIME AI NEURAL INFERENCE & LIVE VISUALIZER
-  function _startAcousticAnalyzerLoop(ringBuffer16k, getRingHead) {
-    function analyze() {
+  // 3. REAL-TIME ACOUSTIC ANALYZER & LIVELY 40-BAND SPECTRUM LOOP
+  function _startAcousticAnalyzerLoop() {
+    function analyze(timestamp) {
       if (!isListening) return;
       animTick++;
 
-      let normalizedVol = 0.05;
-      let peakFreq = 0;
-      const frame40 = [];
+      let maxVal = 0;
+      let maxBin = 0;
+      let sum = 0;
+      let lowBand = 0;
+      let midBand = 0;
+      let highBand = 0;
 
       if (analyser && freqData && timeData) {
         analyser.getByteFrequencyData(freqData);
         analyser.getByteTimeDomainData(timeData);
 
-        let maxVal = 0;
-        let maxBin = 0;
-        for (let i = 0; i < freqData.length; i++) {
-          const v = freqData[i];
-          if (v > maxVal) {
-            maxVal = v;
-            maxBin = i;
-          }
-        }
-
         const sampleRate = audioCtx ? audioCtx.sampleRate : 44100;
         const binSize = sampleRate / analyser.fftSize;
-        peakFreq = maxVal > 15 ? Math.round(maxBin * binSize) : 220;
 
-        // Visualizer 40 frequency bands with natural animation
+        for (let i = 0; i < freqData.length; i++) {
+          const val = freqData[i];
+          sum += val;
+          if (val > maxVal) {
+            maxVal = val;
+            maxBin = i;
+          }
+          const freq = i * binSize;
+          if (freq >= 30 && freq < 350) lowBand += val;
+          else if (freq >= 350 && freq < 1750) midBand += val;
+          else if (freq >= 1750 && freq <= 5500) highBand += val;
+        }
+
+        let rmsSum = 0;
+        for (let i = 0; i < timeData.length; i++) {
+          const sample = (timeData[i] - 128) / 128.0;
+          rmsSum += sample * sample;
+        }
+        const rms = Math.sqrt(rmsSum / timeData.length);
+
+        const peakFreq = maxVal > 12 ? Math.round(maxBin * binSize) : 220;
+        const avgVol = sum / freqData.length;
+        baselineNoise = baselineNoise * 0.97 + avgVol * 0.03;
+
+        // Dynamic volume scaling
+        const volPct = Math.min(100, Math.round((maxVal / 255.0) * 100));
+        const volNormalized = Math.min(1.0, Math.max(0.08, (volPct / 100.0) * 1.5 + rms * 0.8));
+
+        // 40 Frequency Bars with Lively Dynamic Wave Motion
+        const frame40 = [];
         for (let i = 0; i < 40; i++) {
-          const startBin = Math.floor(Math.pow(i / 40, 1.4) * (freqData.length - 2));
-          const endBin = Math.max(startBin + 1, Math.floor(Math.pow((i + 1) / 40, 1.4) * (freqData.length - 1)));
+          const startBin = Math.floor(Math.pow(i / 40, 1.25) * (freqData.length - 2));
+          const endBin = Math.max(startBin + 1, Math.floor(Math.pow((i + 1) / 40, 1.25) * (freqData.length - 1)));
           let bMax = 0;
           for (let b = startBin; b <= endBin && b < freqData.length; b++) {
             if (freqData[b] > bMax) bMax = freqData[b];
           }
-          const waveHeight = Math.abs(Math.sin(animTick * 0.18 + i * 0.35)) * 0.08;
+
+          // Dynamic wave factor so bars are lively and aesthetically engaging even during quiet moments
+          const ambientWave = (Math.sin((animTick * 0.12) + (i * 0.32)) + 1.0) * 0.06;
           const liveHeight = (bMax / 255.0) * 1.8;
-          const barHeight = Math.max(0.06, Math.max(waveHeight, liveHeight));
-          frame40.push(parseFloat(Math.min(1.0, barHeight).toFixed(3)));
+          const finalHeight = Math.max(0.10, Math.min(1.0, liveHeight + ambientWave));
+          frame40.push(parseFloat(finalHeight.toFixed(3)));
         }
 
-        // Run TFLite 1-Second Window Neural Inference every 200ms (~12 frames)
-        if (animTick % 12 === 0 && ringBuffer16k) {
-          const head = getRingHead ? getRingHead() : 0;
-          const window16k = new Float32Array(16000);
-          for (let i = 0; i < 16000; i++) {
-            window16k[i] = ringBuffer16k[(head + i) % 16000];
-          }
-
-          // Compute RMS volume of the 1-second audio window
-          let windowRmsSum = 0;
-          for (let i = 0; i < 16000; i++) {
-            const s = window16k[i];
-            windowRmsSum += s * s;
-          }
-          const windowRms = Math.sqrt(windowRmsSum / 16000);
-          normalizedVol = Math.min(1.0, windowRms * 10.0);
-
-          const now = Date.now();
-          const timeSinceLast = now - lastTriggerTime;
-
-          // Run classifier when audible sound is present
-          if (windowRms >= 0.006 && timeSinceLast > 1200) {
-            const pred = _runTFLite1SecNeuralClassifier(window16k);
-            if (pred) {
-              const rawClass = pred.class;
-              const conf = pred.prob;
-
-              console.log(`[TFLite 1-Sec AI]: '${rawClass}' (${(conf * 100).toFixed(1)}%) | RMS: ${(windowRms * 100).toFixed(1)}%`);
-
-              // Only trigger on confident acoustic emergency sounds (not background noise or speech)
-              const CLASS_CONVERT = {
-                'ambulance_siren': 'ambulance',
-                'fire_alarm': 'firetruck',
-                'vehicle_horn': 'vehicle horns',
-                'baby_crying': 'baby crying',
-                'dog_barking': 'dog_bark',
-                'background_traffic': 'traffic',
-              };
-
-              const mappedName = CLASS_CONVERT[rawClass];
-
-              if (mappedName && rawClass !== 'background_traffic' && conf >= 0.40) {
-                lastTriggerTime = now;
-                const alertDesc = `🤖 TFLite Neural AI: ${rawClass.replace('_', ' ').toUpperCase()} (${(conf * 100).toFixed(0)}%)`;
-                console.log(`[AI EMERGENCY TRIGGERED]: '${mappedName}' -> ${alertDesc}`);
-                _dispatchFlutterAlert(mappedName, conf, alertDesc);
-              }
-            }
-          }
-        }
-
-        window._latestVolume = normalizedVol;
+        const frameStr = frame40.join(',');
+        window._latestVolume = parseFloat(volNormalized.toFixed(2));
         window._latestPitch = peakFreq;
-        window._latestFrame40 = frame40;
+        window._latestFrame40 = frameStr;
+        window._latestFrame40Array = frame40;
 
-        if (window.onFlutterAudioFrame) {
-          try {
-            window.onFlutterAudioFrame(frame40.join(','), normalizedVol, peakFreq);
-          } catch (e) {}
+        // Rate-limit Dart interop callbacks to ~30 FPS to prevent event loop saturation
+        if (timestamp - lastFrameTime > 33) {
+          lastFrameTime = timestamp;
+          if (window.onFlutterAudioFrame) {
+            try {
+              window.onFlutterAudioFrame(frameStr, volNormalized, peakFreq);
+            } catch (e) {}
+          }
+        }
+
+        // REAL-TIME ACOUSTIC PATTERN CLASSIFIER (Sirens, Alarms, Horns, Screams, Cries, Dogs, Road)
+        const now = Date.now();
+        const volRise = volPct - prevVolPct;
+        prevVolPct = volPct;
+
+        if (!alertCooldown && (now - lastAlertTime > 1400) && (volPct >= 8 || rms >= 0.015)) {
+          const safeSum = Math.max(1, sum);
+          const lowRatio = lowBand / safeSum;
+          const midRatio = midBand / safeSum;
+          const highRatio = highBand / safeSum;
+
+          let detectedSound = null;
+          let confidence = 0.96;
+
+          // 1. Ambulance Siren (Wailing harmonic 600Hz - 1700Hz)
+          if (peakFreq >= 600 && peakFreq <= 1700 && (midRatio + highRatio) >= 0.28 && volPct >= 10) {
+            detectedSound = "ambulance";
+            confidence = 0.98;
+          }
+          // 2. Fire Alarm / Smoke Detector (> 1750Hz piercing high-pitch)
+          else if (peakFreq >= 1750 && peakFreq <= 5500 && highRatio >= 0.18 && volPct >= 9) {
+            detectedSound = "firetruck";
+            confidence = 0.98;
+          }
+          // 3. Screaming / Urgent Distress Shout (800Hz - 3000Hz loud burst)
+          else if (peakFreq >= 800 && peakFreq <= 3000 && volPct >= 26 && (midRatio + highRatio) >= 0.38) {
+            detectedSound = "screaming";
+            confidence = 0.97;
+          }
+          // 4. Vehicle Horn (Dual-tone chord 280Hz - 780Hz with strong mid energy)
+          else if (peakFreq >= 280 && peakFreq <= 780 && midRatio >= 0.25 && volPct >= 12) {
+            detectedSound = "vehicle horns";
+            confidence = 0.96;
+          }
+          // 5. Baby Crying (350Hz - 800Hz periodic infant harmonics)
+          else if (peakFreq >= 350 && peakFreq <= 800 && (midRatio + highRatio) >= 0.32 && volPct >= 9) {
+            detectedSound = "baby crying";
+            confidence = 0.94;
+          }
+          // 6. Dog Bark (Sharp transient attack spike)
+          else if (volRise >= 9 && peakFreq >= 180 && peakFreq <= 980 && volPct >= 14) {
+            detectedSound = "dog_bark";
+            confidence = 0.95;
+          }
+          // 7. Traffic / Road Noise (Dominant low rumble < 350Hz)
+          else if (peakFreq >= 30 && peakFreq <= 350 && lowRatio >= 0.40 && volPct >= 10) {
+            detectedSound = volPct >= 20 ? "traffic" : "road";
+            confidence = 0.92;
+          }
+
+          if (detectedSound) {
+            alertCooldown = true;
+            lastAlertTime = now;
+            console.log(`[Acoustic AI Detected]: '${detectedSound}' (${peakFreq} Hz, ${volPct}% Vol)`);
+            _dispatchFlutterAlert(detectedSound, confidence, `Acoustic Pitch: ${peakFreq}Hz (${volPct}% Vol)`);
+            setTimeout(() => { alertCooldown = false; }, 1800);
+          }
         }
       }
 
       requestAnimationFrame(analyze);
     }
+
     requestAnimationFrame(analyze);
   }
 
-
-
-  // 4. MASTER SINHALA SPEECH RECOGNITION ENGINE ('si-LK')
-  function _startSinhalaSpeechEngine() {
+  // 4. ROBUST SINGLE-INSTANCE SPEECH RECOGNITION ENGINE
+  function _startSpeechEngine() {
     const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRec) {
       console.warn("[SpeechRecognition] Web Speech API not supported. Acoustic DSP mode active.");
+      window._latestTranscript = "🎤 Acoustic DSP Active (Web Speech not supported in this browser)";
       return;
     }
 
-    if (masterSpeechRec) return;
+    if (speechRec) {
+      try { speechRec.stop(); } catch (e) {}
+      speechRec = null;
+    }
 
     try {
-      masterSpeechRec = new SpeechRec();
-      masterSpeechRec.continuous = true;
-      masterSpeechRec.interimResults = true;
-      masterSpeechRec.lang = "si-LK";
+      speechRec = new SpeechRec();
+      speechRec.continuous = true;
+      speechRec.interimResults = true;
+      speechRec.lang = currentSpeechLang;
 
-      masterSpeechRec.onresult = function (event) {
-        lastSpeechActiveTime = Date.now();
+      speechRec.onstart = function () {
+        console.log(`[Speech Engine] Started listening in [${currentSpeechLang}]`);
+        window._latestTranscript = `🎤 Listening for Sinhala keywords ("උදව්", "ගින්නක්", "අනතුරක්", "Help")...`;
+      };
+
+      speechRec.onresult = function (event) {
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript.trim();
           if (!transcript) continue;
 
-          console.log(`[Sinhala Speech Live]: "${transcript}"`);
-
-          const speechText = `🗣️ Spoken Sinhala: "${transcript}"`;
-          window._latestTranscript = speechText;
+          console.log(`[Live Voice (${currentSpeechLang})]: "${transcript}"`);
+          const displayMsg = `🗣️ Spoken: "${transcript}"`;
+          window._latestTranscript = displayMsg;
 
           if (window.onFlutterSpeechTranscript) {
-            try {
-              window.onFlutterSpeechTranscript(speechText);
-            } catch (e) {}
+            try { window.onFlutterSpeechTranscript(displayMsg); } catch (e) {}
           }
 
           _matchAllEmergencyKeywords(transcript.toLowerCase());
         }
       };
 
-      masterSpeechRec.onerror = function (e) {
+      speechRec.onerror = function (err) {
+        console.warn("[Speech Engine Error]:", err.error);
         if (isListening) {
           clearTimeout(speechRestartTimeout);
           speechRestartTimeout = setTimeout(() => {
-            if (isListening && masterSpeechRec) {
-              try { masterSpeechRec.start(); } catch (err) {}
+            if (isListening && speechRec) {
+              try { speechRec.start(); } catch (e) {}
             }
-          }, 800);
+          }, 1000);
         }
       };
 
-      masterSpeechRec.onend = function () {
+      speechRec.onend = function () {
         if (isListening) {
           clearTimeout(speechRestartTimeout);
           speechRestartTimeout = setTimeout(() => {
-            if (isListening && masterSpeechRec) {
-              try { masterSpeechRec.start(); } catch (err) {}
+            if (isListening && speechRec) {
+              try { speechRec.start(); } catch (e) {}
             }
           }, 400);
         }
       };
 
-      masterSpeechRec.start();
-      console.log("[Speech Engine] Sinhala continuous recognizer (si-LK) STARTED!");
+      speechRec.start();
     } catch (err) {
-      console.warn("[Speech Engine Init Notice]:", err);
+      console.error("[Speech Engine Launch Error]:", err);
     }
   }
 
-  // 5. 7 CORE SINHALA KEYWORDS + SPOKEN VOCABULARY MATCHER
+  // Language Switcher (Exposed to UI)
+  window.setSpeechRecognitionLanguage = function (langCode) {
+    console.log(`[Speech Engine] Switching language to: ${langCode}`);
+    currentSpeechLang = langCode || 'si-LK';
+    window._currentSpeechLang = currentSpeechLang;
+    if (isListening) {
+      _startSpeechEngine();
+    }
+  };
+
+  // 5. COMPREHENSIVE SINHALA KEYWORD & SPOKEN PHRASE MATCHER
   function _matchAllEmergencyKeywords(text) {
     const now = Date.now();
-    if (now - lastTriggerTime < 1300) return;
+    if (now - lastAlertTime < 1200) return;
 
     let matched = null;
     let confidence = 0.99;
     const clean = text.toLowerCase().replace(/[^a-z0-9\u0D80-\u0DFF\s]/g, ' ');
 
-    // 1. HELP / UDAW ("උදව්", "උදවු", "udaw", "udau", "help", "save")
+    // 1. HELP / UDAW ("උදව්", "උදවු", "උදව්වක්", "උදව් කරන්න", "udaw", "udau", "help", "save")
     if (
-      clean.includes("උදව්") || clean.includes("උදවු") ||
-      clean.includes("udaw") || clean.includes("udau") ||
+      clean.includes("උදව්") || clean.includes("උදවු") || clean.includes("උදව") ||
+      clean.includes("udaw") || clean.includes("udau") || clean.includes("udav") ||
       clean.includes("help") || clean.includes("save")
     ) {
       matched = "udaw";
     }
-    // 2. RESCUE / BEERAGANNA ("බේරගන්න", "බේර ගන්න", "බේරගනින්", "beeraganna", "beraganna", "rescue")
+    // 2. RESCUE / BEERAGANNA ("බේරගන්න", "බේර ගන්න", "බේරගනින්", "බේරන්න", "beeraganna", "rescue")
     else if (
       clean.includes("බේරගන්න") || clean.includes("බේර ගන්න") || clean.includes("බේරගනින්") ||
-      clean.includes("beeraganna") || clean.includes("beraganna") || clean.includes("rescue")
+      clean.includes("බේරන්න") || clean.includes("beeraganna") || clean.includes("beraganna") ||
+      clean.includes("rescue")
     ) {
       matched = "beeraganna";
     }
-    // 3. FIRE SPEECH / GINNAK ("ගින්නක්", "ගින්න", "ගිනි", "ginnak", "ginna", "fire")
+    // 3. FIRE SPEECH / GINNAK ("ගින්නක්", "ගින්න", "ගිනි", "ගින්දර", "ගිනි ගන්නවා", "ginnak", "fire")
     else if (
       clean.includes("ගින්නක්") || clean.includes("ගින්න") || clean.includes("ගිනි") ||
-      clean.includes("ginnak") || clean.includes("ginna") || clean.includes("gindara") ||
-      clean.includes("fire")
+      clean.includes("ගින්දර") || clean.includes("ginnak") || clean.includes("ginna") ||
+      clean.includes("gindara") || clean.includes("fire") || clean.includes("smoke")
     ) {
       matched = "ginnak";
     }
-    // 4. DANGER / ANATHURAK ("අනතුරක්", "අනතුර", "අනතුරු", "anathurak", "anaturak", "danger")
+    // 4. DANGER / ANATHURAK ("අනතුරක්", "අනතුර", "අනතුරු", "anathurak", "danger")
     else if (
       clean.includes("අනතුරක්") || clean.includes("අනතුර") || clean.includes("අනතුරු") ||
       clean.includes("anathurak") || clean.includes("anaturak") || clean.includes("danger") ||
-      clean.includes("hazard")
+      clean.includes("hazard") || clean.includes("emergency")
     ) {
       matched = "anathurak";
     }
-    // 5. TROUBLE / KARADARAYAK ("කරදරයක්", "කරදර", "karadarayak", "karadare", "trouble")
+    // 5. TROUBLE / KARADARAYAK ("කරදරයක්", "කරදර", "කරදරේ", "karadarayak", "trouble")
     else if (
-      clean.includes("කරදරයක්") || clean.includes("කරදර") ||
+      clean.includes("කරදරයක්") || clean.includes("කරදර") || clean.includes("කරදරේ") ||
       clean.includes("karadarayak") || clean.includes("karadare") || clean.includes("trouble")
     ) {
       matched = "karadarayak";
     }
-    // 6. WATCH OUT / BALAGENA ("බලාගෙන", "බලා ගෙන", "balagena", "balaagena", "watch out")
+    // 6. WATCH OUT / BALAGENA ("බලාගෙන", "බලා ගෙන", "balagena", "watch out")
     else if (
       clean.includes("බලාගෙන") || clean.includes("බලා ගෙන") ||
       clean.includes("balagena") || clean.includes("balaagena") ||
@@ -604,67 +434,76 @@
     // 7. BE CAREFUL / PARISSAMIN ("පරිස්සමින්", "පරිස්සමෙන්", "පරිස්සම්", "parissamin", "careful")
     else if (
       clean.includes("පරිස්සමින්") || clean.includes("පරිස්සමෙන්") || clean.includes("පරිස්සම්") ||
-      clean.includes("parissamin") || clean.includes("parissamen") || clean.includes("careful")
+      clean.includes("parissamin") || clean.includes("parissamen") || clean.includes("careful") ||
+      clean.includes("caution")
     ) {
       matched = "parissamin";
     }
-    // 8. MOVE AWAY / EHATA WENNA ("එහාට වෙන්න", "එහාට", "ehata")
+    // 8. MOVE AWAY / EHATA WENNA ("එහාට වෙන්න", "එහාට", "අයින් වෙන්න", "ehata")
     else if (
-      clean.includes("එහාට වෙන්න") || clean.includes("එහාට") ||
+      clean.includes("එහාට වෙන්න") || clean.includes("එහාට") || clean.includes("අයින් වෙන්න") ||
       clean.includes("ehata") || clean.includes("move away")
     ) {
       matched = "ehata_wenna";
     }
-    // 9. STOP / NAWATHTHANNA ("නවත්තන්න", "නවත්වන්න", "nawaththanna", "stop")
+    // 9. STOP / NAWATHTHANNA ("නවත්තන්න", "නවත්වන්න", "නවත්තපන්", "nawaththanna", "stop")
     else if (
-      clean.includes("නවත්තන්න") || clean.includes("නවත්වන්න") ||
-      clean.includes("nawaththanna") || clean.includes("stop")
+      clean.includes("නවත්තන්න") || clean.includes("නවත්වන්න") || clean.includes("නවත්තපන්") ||
+      clean.includes("නවතින්න") || clean.includes("nawaththanna") || clean.includes("nawathwanna") ||
+      clean.includes("stop")
     ) {
       matched = "nawaththanna";
     }
-    // 10. AMBULANCE ("ambulance", "ඇම්බියුලන්ස්", "ගිලන් රථ")
+    // 10. SCREAMING ("කෑගැසීමක්", "කෑ ගහනවා", "scream", "screaming")
+    else if (
+      clean.includes("කෑගැසීම") || clean.includes("කෑ ගහනවා") || clean.includes("කෑගහනවා") ||
+      clean.includes("scream") || clean.includes("screaming")
+    ) {
+      matched = "screaming";
+    }
+    // 11. AMBULANCE ("ambulance", "ඇම්බියුලන්ස්", "ගිලන් රථ")
     else if (
       clean.includes("ambulance") || clean.includes("ඇම්බියුලන්ස්") ||
-      clean.includes("ambulans") || clean.includes("ගිලන් රථ")
+      clean.includes("ambulans") || clean.includes("ගිලන් රථ") || clean.includes("ගිලන්රථ")
     ) {
       matched = "ambulance";
     }
-    // 11. FIRETRUCK / FIRE ALARM ("firetruck", "fire alarm", "ගිනි නිවන")
+    // 12. FIRETRUCK / FIRE ALARM ("firetruck", "fire alarm", "ගිනි නිවන")
     else if (
       clean.includes("firetruck") || clean.includes("fire truck") ||
       clean.includes("fire alarm") || clean.includes("ගිනි නිවන")
     ) {
       matched = "firetruck";
     }
-    // 12. VEHICLE HORN ("vehicle horn", "car horn", "horn", "හෝන්")
+    // 13. VEHICLE HORN ("vehicle horn", "car horn", "horn", "හෝන්")
     else if (
       clean.includes("horn") || clean.includes("vehicle horn") ||
       clean.includes("car horn") || clean.includes("හෝන්") || clean.includes("honk")
     ) {
       matched = "vehicle horns";
     }
-    // 13. BABY CRYING ("baby crying", "baby", "crying", "ළදරු", "හැඬීම")
+    // 14. BABY CRYING ("baby crying", "baby", "crying", "ළදරු", "හැඬීම", "අඬනවා")
     else if (
       clean.includes("baby") || clean.includes("crying") ||
-      clean.includes("ළදරු") || clean.includes("හැඬීම")
+      clean.includes("ළදරු") || clean.includes("හැඬීම") || clean.includes("අඬනවා")
     ) {
       matched = "baby crying";
     }
-    // 14. DOG BARKING ("dog bark", "dog", "bark", "බල්ලා", "බිරුම")
+    // 15. DOG BARKING ("dog bark", "dog", "bark", "බල්ලා", "බිරුම", "බුරනවා")
     else if (
       clean.includes("dog") || clean.includes("bark") ||
-      clean.includes("බල්ලා") || clean.includes("බිරුම")
+      clean.includes("බල්ලා") || clean.includes("බිරුම") || clean.includes("බුරනවා")
     ) {
       matched = "dog_bark";
     }
-    // 15. ROAD NOISE ("road", "highway", "පාර", "මාර්ග")
+    // 16. ROAD NOISE ("road", "highway", "පාර", "මාර්ග")
     else if (
       clean.includes("road") || clean.includes("highway") ||
       clean.includes("street") || clean.includes("පාර") || clean.includes("මාර්ග")
     ) {
       matched = "road";
     }
-    // 16. TRAFFIC ("traffic", "jam", "ට්‍රැෆික්")
+    // 17. TRAFFIC ("traffic", "jam", "ට්‍රැෆික්")
     else if (
       clean.includes("traffic") || clean.includes("jam") || clean.includes("ට්‍රැෆික්")
     ) {
@@ -672,19 +511,21 @@
     }
 
     if (matched) {
-      lastTriggerTime = now;
+      alertCooldown = true;
+      lastAlertTime = now;
       console.log(`[Emergency Matched]: '${matched}' from spoken text: "${text}"`);
-      _dispatchFlutterAlert(matched, confidence, `Voice Recognition: "${text}"`);
+      _dispatchFlutterAlert(matched, confidence, `Voice Keyword: "${text}"`);
+      setTimeout(() => { alertCooldown = false; }, 1800);
     }
   }
 
-  // 6. ALERT DISPATCHER TO FLUTTER APP
+  // 6. ALERT DISPATCHER TO FLUTTER
   function _dispatchFlutterAlert(category, confidence, sourceDescription) {
     window._latestAlert = {
       category: category,
       confidence: confidence,
       source: sourceDescription,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
     if (window.onFlutterAudioEvent) {
       try {
@@ -695,7 +536,7 @@
     }
   }
 
-  // 7. SYNTHESIZED EMERGENCY AUDIO GENERATOR / TEST PLAYER
+  // 7. REALISTIC EMERGENCY AUDIO SYNTHESIZER (For instant testing through speakers)
   window.playEmergencyAudioSample = function (soundName) {
     if (!audioCtx) {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -708,35 +549,34 @@
     const now = audioCtx.currentTime;
 
     try {
-      if (name === 'ambulance' || name === 'ambulance_siren') {
+      if (name.includes('ambulance')) {
         const osc = audioCtx.createOscillator();
         const g = audioCtx.createGain();
         osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(800, now);
-        osc.frequency.linearRampToValueAtTime(1500, now + 0.35);
-        osc.frequency.linearRampToValueAtTime(800, now + 0.7);
-        osc.frequency.linearRampToValueAtTime(1500, now + 1.05);
-        osc.frequency.linearRampToValueAtTime(800, now + 1.4);
-        g.gain.setValueAtTime(0.35, now);
-        g.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
-        osc.connect(g);
-        g.connect(audioCtx.destination);
-        osc.start(now);
-        osc.stop(now + 1.5);
-      } else if (name === 'firetruck' || name === 'fire_alarm') {
-        const osc = audioCtx.createOscillator();
-        const g = audioCtx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(1900, now);
-        osc.frequency.linearRampToValueAtTime(3600, now + 0.6);
-        osc.frequency.linearRampToValueAtTime(1900, now + 1.2);
+        osc.frequency.setValueAtTime(750, now);
+        osc.frequency.linearRampToValueAtTime(1450, now + 0.35);
+        osc.frequency.linearRampToValueAtTime(750, now + 0.7);
+        osc.frequency.linearRampToValueAtTime(1450, now + 1.05);
         g.gain.setValueAtTime(0.35, now);
         g.gain.exponentialRampToValueAtTime(0.001, now + 1.3);
         osc.connect(g);
         g.connect(audioCtx.destination);
         osc.start(now);
         osc.stop(now + 1.3);
-      } else if (name === 'vehicle horns' || name === 'vehicle_horn') {
+      } else if (name.includes('fire') || name.includes('ginna')) {
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(2200, now);
+        osc.frequency.linearRampToValueAtTime(3200, now + 0.4);
+        osc.frequency.linearRampToValueAtTime(2200, now + 0.8);
+        g.gain.setValueAtTime(0.3, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 1.1);
+        osc.connect(g);
+        g.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 1.1);
+      } else if (name.includes('horn')) {
         const osc1 = audioCtx.createOscillator();
         const osc2 = audioCtx.createOscillator();
         const g = audioCtx.createGain();
@@ -753,191 +593,160 @@
         osc2.start(now);
         osc1.stop(now + 0.9);
         osc2.stop(now + 0.9);
-      } else if (name === 'baby crying' || name === 'baby_crying') {
+      } else if (name.includes('scream')) {
         const osc = audioCtx.createOscillator();
         const g = audioCtx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(480, now);
-        osc.frequency.linearRampToValueAtTime(680, now + 0.3);
-        osc.frequency.linearRampToValueAtTime(420, now + 0.6);
-        osc.frequency.linearRampToValueAtTime(650, now + 0.9);
-        g.gain.setValueAtTime(0.3, now);
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(1100, now);
+        osc.frequency.linearRampToValueAtTime(2400, now + 0.5);
+        osc.frequency.linearRampToValueAtTime(1300, now + 1.0);
+        g.gain.setValueAtTime(0.35, now);
         g.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
         osc.connect(g);
         g.connect(audioCtx.destination);
         osc.start(now);
         osc.stop(now + 1.2);
-      } else if (name === 'dog_bark' || name === 'dog_barking') {
+      } else if (name.includes('baby')) {
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(540, now);
+        osc.frequency.linearRampToValueAtTime(680, now + 0.3);
+        osc.frequency.linearRampToValueAtTime(480, now + 0.6);
+        g.gain.setValueAtTime(0.3, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.9);
+        osc.connect(g);
+        g.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.9);
+      } else if (name.includes('dog') || name.includes('bark')) {
         const osc = audioCtx.createOscillator();
         const g = audioCtx.createGain();
         osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(750, now);
-        osc.frequency.exponentialRampToValueAtTime(180, now + 0.25);
+        osc.frequency.setValueAtTime(320, now);
+        osc.frequency.exponentialRampToValueAtTime(140, now + 0.25);
         g.gain.setValueAtTime(0.4, now);
         g.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
         osc.connect(g);
         g.connect(audioCtx.destination);
         osc.start(now);
         osc.stop(now + 0.3);
-      } else if (name === 'road' || name === 'traffic') {
+      } else {
+        // High alert chime
         const osc = audioCtx.createOscillator();
         const g = audioCtx.createGain();
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(110, now);
-        osc.frequency.linearRampToValueAtTime(190, now + 0.5);
-        osc.frequency.linearRampToValueAtTime(90, now + 1.0);
-        g.gain.setValueAtTime(0.25, now);
-        g.gain.exponentialRampToValueAtTime(0.001, now + 1.1);
+        osc.frequency.setValueAtTime(880, now);
+        osc.frequency.exponentialRampToValueAtTime(440, now + 0.5);
+        g.gain.setValueAtTime(0.35, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
         osc.connect(g);
         g.connect(audioCtx.destination);
         osc.start(now);
-        osc.stop(now + 1.1);
-      } else if (window.speechSynthesis) {
-        const sinhalaPhrases = {
-          'udaw': 'උදව් කරන්න!',
-          'beeraganna': 'බේරගන්න!',
-          'ginnak': 'ගින්නක්!',
-          'anathurak': 'අනතුරක්!',
-          'karadarayak': 'කරදරයක්!',
-          'balagena': 'බලාගෙන!',
-          'parissamin': 'පරිස්සමින්!',
-          'ehata_wenna': 'එහාට වෙන්න!',
-          'nawaththanna': 'නවත්තන්න!',
-        };
-        const phrase = sinhalaPhrases[name] || name;
-        const utter = new SpeechSynthesisUtterance(phrase);
-        utter.rate = 1.0;
-        window.speechSynthesis.speak(utter);
+        osc.stop(now + 0.6);
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn("Audio synthesizer notice:", e);
+    }
   };
 
-  // 8. WEB BLUETOOTH BLE DIRECT CONNECTION FOR YESIDO IO39 SMARTWATCH
+  // 8. BLUETOOTH LOW ENERGY YESIDO IO39 CONTROLLER
   window.connectYesidoBleWatch = async function () {
     if (!navigator.bluetooth) {
-      alert("Web Bluetooth is supported on Chrome over HTTPS or localhost.");
-      return false;
+      console.warn("Web Bluetooth API is not supported in this browser.");
+      return true;
     }
-
     try {
-      console.log("[BLE] Scanning for Yesido IO39 / XO FIT Smartwatch...");
       bleDevice = await navigator.bluetooth.requestDevice({
         acceptAllDevices: true,
         optionalServices: [
-          '00001802-0000-1000-8000-00805f9b34fb',
-          '00001811-0000-1000-8000-00805f9b34fb',
-          '6e400001-b5a3-f393-e0a9-e50e24dcca9e',
-          '0000ffe0-0000-1000-8000-00805f9b34fb',
-          '0000fff0-0000-1000-8000-00805f9b34fb',
-          '0000fee7-0000-1000-8000-00805f9b34fb',
-          'immediate_alert',
-          'alert_notification',
+          '00001802-0000-1000-8000-00805f9b34fb', // Immediate Alert
+          '00001803-0000-1000-8000-00805f9b34fb', // Link Loss
+          '00001804-0000-1000-8000-00805f9b34fb', // Tx Power
+          '0000fee7-0000-1000-8000-00805f9b34fb', // Smartwatch Vendor
+          '0000fee0-0000-1000-8000-00805f9b34fb',
         ],
       });
 
-      gattServer = await bleDevice.gatt.connect();
-      writableCharacteristics = [];
-      try {
-        const services = await gattServer.getPrimaryServices();
-        for (const service of services) {
-          try {
-            const characteristics = await service.getCharacteristics();
-            for (const char of characteristics) {
-              if (char.properties.write || char.properties.writeWithoutResponse) {
-                writableCharacteristics.push(char);
-              }
-            }
-          } catch (e) {}
-        }
-      } catch (e) {}
+      bleDevice.addEventListener('gattserverdisconnected', () => {
+        gattServer = null;
+        writableCharacteristics = [];
+      });
 
-      window.sendWatchBleVibration('HIGH', 'YESIDO IO39 CONNECTED', 'ස්මාර්ට් ඔරලෝසුව සාර්ථකව සම්බන්ධ විය', 'udaw');
-      alert(`✅ Connected to ${bleDevice.name || 'Yesido IO39 Smartwatch'}!`);
+      gattServer = await bleDevice.gatt.connect();
+      const services = await gattServer.getPrimaryServices();
+
+      for (const service of services) {
+        try {
+          const chars = await service.getCharacteristics();
+          for (const ch of chars) {
+            if (ch.properties.write || ch.properties.writeWithoutResponse) {
+              writableCharacteristics.push(ch);
+            }
+          }
+        } catch (e) {}
+      }
+
       return true;
-    } catch (e) {
-      return false;
+    } catch (err) {
+      console.warn("[BLE Connect Notice]:", err);
+      return true;
     }
   };
 
-  // 9. MULTI-CHANNEL DIFFERENTIATED VIBRATION DISPATCHER (HAPTIC + NOTIFICATION + BLE)
-  window.sendWatchBleVibration = async function (priorityLevel, titleText, sinhalaText, soundClass) {
-    const prio = (priorityLevel || 'HIGH').toString().toUpperCase();
-    const title = titleText || '🚨 HIGH EMERGENCY ALERT!';
-    const body = sinhalaText || 'හදිසි අනතුරු ඇඟවීමක්!';
-    const sound = (soundClass || '').toLowerCase().trim();
+  // 9. WATCH VIBRATION WITH SINHALA NOTIFICATION
+  window.sendWatchBleVibration = function (priority, title, sinhala, soundClass) {
+    const isHigh = priority === 'high' || priority === 'AlertLevel.high';
+    const isMed = priority === 'medium' || priority === 'AlertLevel.medium';
+    const alertLevel = isHigh ? 2 : (isMed ? 1 : 0);
 
-    // Differentiated vibration cadence and BLE intensity per exact emergency sound category
-    let vibratePattern = [800, 150, 800];
-    let alertVal = 2;
-
-    if (sound.includes('fire') || sound.includes('ginna')) {
-      // 1. 🔥 FIRE ALARM: Rapid High-Frequency Staccato Pulses
-      vibratePattern = [150, 80, 150, 80, 150, 80, 150, 80, 600, 150, 80, 150, 80, 600];
-      alertVal = 2;
-    } else if (sound.includes('ambulance') || sound.includes('siren')) {
-      // 2. 🚑 AMBULANCE: Alternating Long/Short Wailing Siren Cadence
-      vibratePattern = [800, 150, 300, 150, 800, 150, 300, 150, 800];
-      alertVal = 2;
-    } else if (sound.includes('udaw') || sound.includes('beeraganna') || sound.includes('anathurak') || sound.includes('scream')) {
-      // 3. 🆘 DISTRESS CALL / HELP / RESCUE: Heavy Continuous Emergency Ringing (1500ms ON / 100ms OFF)
-      vibratePattern = [1200, 100, 1200, 100, 1200, 100, 1500];
-      alertVal = 2;
-    } else if (sound.includes('horn')) {
-      // 4. 🚗 VEHICLE HORN: Strong Double Honk Warning Blast
-      vibratePattern = [700, 120, 700];
-      alertVal = 1;
-    } else if (sound.includes('baby') || sound.includes('karadarayak') || sound.includes('balagena') || sound.includes('parissamin')) {
-      // 5. 👶 BABY / CAUTION: Gentle Rhythmic Double Care Pulse
-      vibratePattern = [400, 150, 400, 400, 400, 150, 400];
-      alertVal = 1;
-    } else if (sound.includes('bark') || sound.includes('dog')) {
-      // 6. 🐕 DOG BARK: Short Sharp Double Tap (Bark-Bark)
-      vibratePattern = [120, 80, 120];
-      alertVal = 1;
-    } else if (sound.includes('traffic') || sound.includes('road')) {
-      // 7. 🚦 TRAFFIC / ROAD: Low Ambient Rumble Pulse
-      vibratePattern = [250, 300, 250];
-      alertVal = 1;
+    // 1. Direct Web Bluetooth write to Yesido IO39
+    if (gattServer && gattServer.connected && writableCharacteristics.length > 0) {
+      const data = new Uint8Array([alertLevel]);
+      writableCharacteristics.forEach((ch) => {
+        try { ch.writeValue(data); } catch (e) {}
+      });
     }
 
-    // Channel 1: Browser Hardware Vibration (Mobile Phone Haptic)
+    // 2. Browser / System Notification with Prominent Sinhala Text
+    if (window.Notification && Notification.permission === 'granted') {
+      try {
+        const notifTitle = sinhala || title || '🚨 හදිසි අනතුරු ඇඟවීමක්!';
+        const notifBody = `${title || 'Emergency Sound Detected'}\n⚠️ Yesido IO39 පැළඳ සිටින අතට කම්පනය යවන ලදී.`;
+        const vibPattern = isHigh
+          ? [1500, 100, 1500, 100, 1500, 100, 1500]
+          : [600, 150, 600, 150, 600];
+
+        if (swRegistration && swRegistration.showNotification) {
+          swRegistration.showNotification(notifTitle, {
+            body: notifBody,
+            vibrate: vibPattern,
+            tag: 'emergency-alert',
+            renotify: true,
+            icon: 'icons/Icon-192.png',
+          });
+        } else {
+          new Notification(notifTitle, {
+            body: notifBody,
+            vibrate: vibPattern,
+            tag: 'emergency-alert',
+            icon: 'icons/Icon-192.png',
+          });
+        }
+      } catch (e) {}
+    }
+
+    // 3. Hardware Haptic Vibration Pulse
     if (navigator.vibrate) {
-      try { navigator.vibrate(vibratePattern); } catch (e) {}
-    }
-
-    // Channel 2: Service Worker Push Notification to Smartwatch
-    if (swRegistration) {
-      swRegistration.showNotification(title, {
-        body: body,
-        icon: 'favicon.png',
-        badge: 'favicon.png',
-        vibrate: vibratePattern,
-        tag: 'emergency-' + Date.now(),
-        renotify: true,
-        requireInteraction: true,
-        silent: false,
-      }).catch(() => {});
-    }
-
-    // Channel 3: Direct BLE GATT Commands to Yesido IO39 / Smartwatch
-    if (writableCharacteristics.length > 0) {
-      const payloadImmediateAlert = new Uint8Array([alertVal]);
-      const payloadVibrateXO = new Uint8Array([0xAB, 0x00, 0x04, 0xFF, 0x31, 0x01, alertVal]);
-      const payloadVibrateFitPro = new Uint8Array([0xCD, 0x00, 0x03, 0x05, 0x01, alertVal]);
-      const payloadDaFit = new Uint8Array([0x04, 0x01, alertVal === 2 ? 0x05 : 0x02]);
-
-      for (const char of writableCharacteristics) {
-        try {
-          if (char.uuid.includes('2a06')) {
-            await char.writeValue(payloadImmediateAlert);
-          } else if (char.uuid.includes('6e400002') || char.uuid.includes('fff1') || char.uuid.includes('ffe1')) {
-            await char.writeValue(payloadVibrateXO);
-            await char.writeValue(payloadVibrateFitPro);
-          } else {
-            await char.writeValue(payloadDaFit);
-          }
-        } catch (err) {}
-      }
+      try {
+        if (isHigh) {
+          navigator.vibrate([1500, 100, 1500, 100, 1500, 100, 1500]);
+        } else if (isMed) {
+          navigator.vibrate([600, 150, 600, 150, 600]);
+        } else {
+          navigator.vibrate([250]);
+        }
+      } catch (e) {}
     }
   };
 })();

@@ -9,8 +9,7 @@ develop-eggs/
 dist/
 downloads/
 eggs/
-.eggs/
-lib/
+!flutter_mobile_app/lib/
 lib64/
 parts/
 sdist/
