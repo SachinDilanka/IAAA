@@ -117,11 +117,11 @@ class SmartwatchService extends ChangeNotifier {
       await _bleController.sendVibrationCommand(event.priority.name, soundClass: event.rawClass);
     }
 
-    // 3. Web BLE Bridge with English-first Latin letters and Sinhala for Yesido Watch
+    // 3. Web BLE Bridge with Singlish and Emojis for Yesido Watch
     _bridge.sendWatchVibration(
       event.priority.name,
-      title: '🚨 [${event.priority.name.toUpperCase()}] ${event.titleEnglish} (${event.titleSinhala})',
-      sinhala: '${event.titleEnglish.toUpperCase()}: ${event.titleSinhala} - ${event.avatarGuidanceSinhala}',
+      title: NotificationService.getWatchSinglishTitle(event.rawClass, event.priority),
+      sinhala: NotificationService.getWatchSinglishBody(event.rawClass),
       soundClass: event.rawClass,
     );
 

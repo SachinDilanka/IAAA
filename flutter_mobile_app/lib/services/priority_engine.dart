@@ -22,8 +22,8 @@ class PriorityEngine {
     final lastTime = _lastAlertTimes[rawClass];
     if (!bypassCooldown && lastTime != null) {
       final elapsed = now.difference(lastTime).inMilliseconds;
-      // 8-second per-class cooldown — prevents spammy re-detection
-      if (elapsed < 8000) {
+      // 3-second per-class cooldown — allows responsive real-world re-detection
+      if (elapsed < 3000) {
         return null;
       }
     }

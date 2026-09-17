@@ -34,7 +34,6 @@ class SoundClassifierService extends ChangeNotifier {
   String _liveSpeechTranscript = "🎤 AI Audio & Voice Monitor Standby (Tap 'Start Mic' or anywhere to activate)...";
   String _speechLanguage = 'si-LK';
   String _sensitivity = 'high';
-  int _lastAlertTimestamp = 0;
 
   bool get isListening => _isListening;
   bool get autoDetectWhileListening => _autoDetectWhileListening;
@@ -46,7 +45,7 @@ class SoundClassifierService extends ChangeNotifier {
   String get liveSpeechTranscript => _liveSpeechTranscript;
   String get speechLanguage => _speechLanguage;
   String get sensitivity => _sensitivity;
-  String _monitorMode = 'dual';
+  String _monitorMode = 'voice';
   String get monitorMode => _monitorMode;
 
   void setMonitorMode(String mode) {
@@ -79,8 +78,7 @@ class SoundClassifierService extends ChangeNotifier {
   void startListening() {
     if (_isListening) return;
     _isListening = true;
-    _lastAlertTimestamp = 0;
-    _liveSpeechTranscript = "🎤 AI Audio & Voice Monitor Active: Listening for 14 sounds & Sinhala keywords...";
+    _liveSpeechTranscript = "🎤 Live Mic Active: Listening for Sinhala Voice & Sounds...";
     notifyListeners();
 
     // 1. High-frequency (30 FPS) synchronous JS state polling loop
@@ -116,14 +114,7 @@ class SoundClassifierService extends ChangeNotifier {
           changed = true;
         }
 
-        final String? alertCat = state['alertCategory'] as String?;
-        final int alertTs = (state['alertTimestamp'] as int?) ?? 0;
-        if (alertCat != null && alertCat.isNotEmpty && alertTs > _lastAlertTimestamp) {
-          _lastAlertTimestamp = alertTs;
-          final double alertConf = (state['alertConfidence'] as double?) ?? 0.95;
-          final String alertSrc = (state['alertSource'] as String?) ?? 'Live Audio Detection';
-          simulateDetection(alertCat, confidence: alertConf, source: alertSrc, isLive: true);
-        }
+
 
         if (changed) {
           notifyListeners();
@@ -180,7 +171,7 @@ class SoundClassifierService extends ChangeNotifier {
     final event = _priorityEngine.processPrediction(
       rawClass: rawClass,
       confidence: confidence,
-      minThreshold: isLive ? 0.60 : 0.30, // Live needs high confidence; test buttons accept lower
+      minThreshold: 0.25, // Validated sound threshold for real-world acoustics
       bypassCooldown: !isLive, // Only bypass cooldown for manual test button presses
     );
 

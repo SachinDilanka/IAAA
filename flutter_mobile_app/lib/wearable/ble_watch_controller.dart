@@ -107,8 +107,9 @@ class BleWatchController {
     if (kIsWeb) return;
     if (_alertCharacteristics.isEmpty) return;
 
-    final isHigh = (priority.toUpperCase() == 'HIGH');
-    final sound = (soundClass ?? '').toLowerCase().trim();
+    final p = priority.toUpperCase();
+    final isHigh = (p == 'HIGH');
+    final isMedium = (p == 'MEDIUM');
     final alertLevelVal = isHigh ? 2 : 1;
 
     // Immediate Alert Payload: [0x02 = High Alert, 0x01 = Mild Alert]
@@ -117,8 +118,8 @@ class BleWatchController {
     final payloadXO = [0xAB, 0x00, 0x04, 0xFF, 0x31, 0x01, alertLevelVal];
     // FitPro / JL Motor Command: [0xCD, 0x00, 0x03, 0x05, 0x01, alertLevelVal]
     final payloadFitPro = [0xCD, 0x00, 0x03, 0x05, 0x01, alertLevelVal];
-    // Da Fit Vibrate Command: [0x04, 0x01, count]
-    final vibrateCount = isHigh ? (sound.contains('fire') ? 0x0A : 0x08) : (sound.contains('baby') ? 0x04 : 0x03);
+    // Da Fit Vibrate Command: High = 10 pulses (0x0A), Medium = 4 pulses (0x04), Low = 1 pulse (0x01)
+    final vibrateCount = isHigh ? 0x0A : (isMedium ? 0x04 : 0x01);
     final payloadDaFit = [0x04, 0x01, vibrateCount];
 
     Future<void> sendPulse() async {
@@ -137,16 +138,19 @@ class BleWatchController {
       }
     }
 
-    // 1st heavy pulse
-    await sendPulse();
-
-    // 2nd pulse after 500ms
-    Future.delayed(const Duration(milliseconds: 500), () => sendPulse());
-
-    // 3rd pulse after 1100ms for continuous strong motor buzz on wrist
     if (isHigh) {
-      Future.delayed(const Duration(milliseconds: 1100), () => sendPulse());
-      Future.delayed(const Duration(milliseconds: 1700), () => sendPulse());
+      // High: Long sustained vibration on wrist (4 pulses spaced out)
+      await sendPulse();
+      Future.delayed(const Duration(milliseconds: 350), () => sendPulse());
+      Future.delayed(const Duration(milliseconds: 800), () => sendPulse());
+      Future.delayed(const Duration(milliseconds: 1300), () => sendPulse());
+    } else if (isMedium) {
+      // Medium: "Bit-bit" rhythmic double pulse on wrist
+      await sendPulse();
+      Future.delayed(const Duration(milliseconds: 320), () => sendPulse());
+    } else {
+      // Low: Short single tap on wrist
+      await sendPulse();
     }
   }
 }

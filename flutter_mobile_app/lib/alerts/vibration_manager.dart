@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
+import 'package:vibration/vibration.dart';
 import '../models/alert_level.dart';
 
 class VibrationManager {
@@ -22,124 +23,57 @@ class VibrationManager {
     final sound = (rawClass ?? '').toLowerCase().trim();
 
     try {
-      if (sound.contains('fire') || sound.contains('ginna')) {
-        _activePatternDescription = "🔥 FIRE ALARM: Rapid High-Frequency Staccato Pulse";
-        await _executeFireAlarmSequence();
-      } else if (sound.contains('ambulance') || sound.contains('siren')) {
-        _activePatternDescription = "🚑 AMBULANCE: Alternating Two-Tone Wailing Rhythm";
-        await _executeAmbulanceSequence();
-      } else if (sound.contains('udaw') || sound.contains('beeraganna') || sound.contains('anathurak') || sound.contains('scream')) {
-        _activePatternDescription = "🆘 DISTRESS CALL: Continuous Emergency SOS Pulses";
-        await _executeHighPrioritySequence();
-      } else if (sound.contains('horn')) {
-        _activePatternDescription = "🚗 VEHICLE HORN: Strong Double Blast Warning";
-        await _executeVehicleHornSequence();
-      } else if (sound.contains('baby') || sound.contains('karadarayak') || sound.contains('balagena') || sound.contains('parissamin')) {
-        _activePatternDescription = "👶 BABY / CAUTION: Gentle Rhythmic Double Pulse";
-        await _executeMediumPrioritySequence();
-      } else if (sound.contains('bark') || sound.contains('dog')) {
-        _activePatternDescription = "🐕 DOG BARK: Sharp Double-Tap Pulse";
-        await _executeDogBarkSequence();
-      } else if (sound.contains('traffic') || sound.contains('road')) {
-        _activePatternDescription = "🚦 TRAFFIC / ROAD: Low Ambient Rumble Tap";
-        await _executeLowPrioritySequence();
+      final bool hasVibrator = await Vibration.hasVibrator() == true;
+
+      if (priority == AlertLevel.high ||
+          sound.contains('fire') ||
+          sound.contains('ginna') ||
+          sound.contains('ambulance') ||
+          sound.contains('siren') ||
+          sound.contains('udaw') ||
+          sound.contains('beeraganna') ||
+          sound.contains('anathurak') ||
+          sound.contains('nawaththanna') ||
+          sound.contains('horn') ||
+          sound.contains('scream')) {
+        // High priority: Long strong vibration
+        _activePatternDescription = "🚨 HIGH EMERGENCY: Long Sustained Vibration";
+        if (hasVibrator) {
+          await Vibration.vibrate(pattern: [0, 1200, 250, 1200]);
+        }
+      } else if (priority == AlertLevel.medium ||
+          sound.contains('baby') ||
+          sound.contains('karadarayak') ||
+          sound.contains('balagena') ||
+          sound.contains('parissamin')) {
+        // Medium priority: "bit-bit" rhythmic double vibration
+        _activePatternDescription = "⚠️ MEDIUM CAUTION: Rhythmic Bit-Bit Double Pulse";
+        if (hasVibrator) {
+          await Vibration.vibrate(pattern: [0, 320, 140, 320]);
+        }
       } else {
-        switch (priority) {
-          case AlertLevel.high:
-            _activePatternDescription = "🔴 HIGH URGENCY: Triple Heavy Staccato Pulse";
-            await _executeHighPrioritySequence();
-            break;
-          case AlertLevel.medium:
-            _activePatternDescription = "🟡 MEDIUM URGENCY: Double Caution Pulse";
-            await _executeMediumPrioritySequence();
-            break;
-          case AlertLevel.low:
-            _activePatternDescription = "🟢 LOW URGENCY: Single Gentle Pulse";
-            await _executeLowPrioritySequence();
-            break;
-          case AlertLevel.none:
-            _activePatternDescription = "Normal - Idle";
-            _isVibrating = false;
-            break;
+        // Low priority: Short single vibration
+        _activePatternDescription = "ℹ️ LOW NOTICE: Short Quick Tap";
+        if (hasVibrator) {
+          await Vibration.vibrate(duration: 220);
         }
       }
+
+      // Always execute HapticFeedback in parallel for additional hardware haptics
+      await HapticFeedback.vibrate();
     } catch (e) {
-      // Graceful fallback for devices without vibration hardware
+      try {
+        await HapticFeedback.vibrate();
+      } catch (_) {}
     } finally {
       _isVibrating = false;
     }
   }
 
-  /// Fire Alarm Sequence: Rapid Staccato Bursts
-  Future<void> _executeFireAlarmSequence() async {
-    for (int i = 0; i < 5; i++) {
-      await HapticFeedback.heavyImpact();
-      await Future.delayed(const Duration(milliseconds: 70));
-    }
-    await Future.delayed(const Duration(milliseconds: 200));
-    for (int i = 0; i < 5; i++) {
-      await HapticFeedback.heavyImpact();
-      await Future.delayed(const Duration(milliseconds: 70));
-    }
-  }
-
-  /// Ambulance Sequence: Long-Short Alternating Siren Cadence
-  Future<void> _executeAmbulanceSequence() async {
-    await HapticFeedback.vibrate();
-    await Future.delayed(const Duration(milliseconds: 350));
-    await HapticFeedback.mediumImpact();
-    await Future.delayed(const Duration(milliseconds: 150));
-    await HapticFeedback.vibrate();
-    await Future.delayed(const Duration(milliseconds: 350));
-    await HapticFeedback.mediumImpact();
-  }
-
-  /// Vehicle Horn Sequence: Strong Double Honk Blast
-  Future<void> _executeVehicleHornSequence() async {
-    await HapticFeedback.heavyImpact();
-    await HapticFeedback.vibrate();
-    await Future.delayed(const Duration(milliseconds: 280));
-    await HapticFeedback.heavyImpact();
-    await HapticFeedback.vibrate();
-  }
-
-  /// Dog Bark Sequence: Quick Crisp Double Tap
-  Future<void> _executeDogBarkSequence() async {
-    await HapticFeedback.mediumImpact();
-    await Future.delayed(const Duration(milliseconds: 100));
-    await HapticFeedback.mediumImpact();
-  }
-
-  /// High Priority Emergency SOS Sequence
-  Future<void> _executeHighPrioritySequence() async {
-    for (int i = 0; i < 3; i++) {
-      await HapticFeedback.heavyImpact();
-      await HapticFeedback.vibrate();
-      await Future.delayed(const Duration(milliseconds: 140));
-    }
-    await Future.delayed(const Duration(milliseconds: 200));
-    await HapticFeedback.heavyImpact();
-    await Future.delayed(const Duration(milliseconds: 120));
-    await HapticFeedback.heavyImpact();
-  }
-
-  /// Medium Priority Sequence: 2 Moderate Pulses
-  Future<void> _executeMediumPrioritySequence() async {
-    await HapticFeedback.mediumImpact();
-    await Future.delayed(const Duration(milliseconds: 180));
-    await HapticFeedback.mediumImpact();
-    await Future.delayed(const Duration(milliseconds: 180));
-    await HapticFeedback.selectionClick();
-  }
-
-  /// Low Priority Sequence: Single Discrete Tap
-  Future<void> _executeLowPrioritySequence() async {
-    await HapticFeedback.lightImpact();
-    await Future.delayed(const Duration(milliseconds: 120));
-    await HapticFeedback.selectionClick();
-  }
-
   void cancel() {
+    try {
+      Vibration.cancel();
+    } catch (_) {}
     _activeVibrationTimer?.cancel();
     _activeVibrationTimer = null;
     _isVibrating = false;

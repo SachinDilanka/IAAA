@@ -602,7 +602,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
               // Speech Recognition Language Switcher Bar
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 decoration: BoxDecoration(
                   color: const Color(0xFF0F172A),
                   borderRadius: BorderRadius.circular(10),
@@ -610,60 +610,70 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.language_rounded, color: Color(0xFF94A3B8), size: 16),
+                    const Icon(Icons.language_rounded, color: Color(0xFF94A3B8), size: 14),
+                    const SizedBox(width: 5),
+                    const Text(
+                      "Voice:",
+                      style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.w600),
+                    ),
                     const SizedBox(width: 8),
-                    const Text(
-                      "Voice Language:",
-                      style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.w600),
-                    ),
-                    const Spacer(),
                     // Sinhala Option
-                    InkWell(
-                      onTap: () => classifier.setSpeechLanguage('si-LK'),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: currentLang == 'si-LK'
-                              ? const Color(0xFF2563EB).withValues(alpha: 0.3)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: currentLang == 'si-LK' ? const Color(0xFF3B82F6) : Colors.transparent,
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => classifier.setSpeechLanguage('si-LK'),
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: currentLang == 'si-LK'
+                                ? const Color(0xFF2563EB).withValues(alpha: 0.35)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: currentLang == 'si-LK' ? const Color(0xFF3B82F6) : Colors.transparent,
+                            ),
                           ),
-                        ),
-                        child: Text(
-                          "සිංහල (si-LK)",
-                          style: TextStyle(
-                            color: currentLang == 'si-LK' ? const Color(0xFF60A5FA) : const Color(0xFF64748B),
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
+                          child: Text(
+                            "සිංහල (si-LK)",
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: currentLang == 'si-LK' ? const Color(0xFF60A5FA) : const Color(0xFF64748B),
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ),
                     ),
                     const SizedBox(width: 6),
-                    // English / Phonetic Option
-                    InkWell(
-                      onTap: () => classifier.setSpeechLanguage('en-US'),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: currentLang == 'en-US'
-                              ? const Color(0xFF2563EB).withValues(alpha: 0.3)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: currentLang == 'en-US' ? const Color(0xFF3B82F6) : Colors.transparent,
+                    // English / Singlish Option
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => classifier.setSpeechLanguage('en-US'),
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: currentLang == 'en-US'
+                                ? const Color(0xFF2563EB).withValues(alpha: 0.35)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: currentLang == 'en-US' ? const Color(0xFF3B82F6) : Colors.transparent,
+                            ),
                           ),
-                        ),
-                        child: Text(
-                          "English / Phonetic",
-                          style: TextStyle(
-                            color: currentLang == 'en-US' ? const Color(0xFF60A5FA) : const Color(0xFF64748B),
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
+                          child: Text(
+                            "English / Phonetic",
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: currentLang == 'en-US' ? const Color(0xFF60A5FA) : const Color(0xFF64748B),
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ),
@@ -671,34 +681,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 8),
-
-              // Monitor Mode Switcher Bar
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0F172A),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFF334155)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.sensors_rounded, color: Color(0xFF94A3B8), size: 15),
-                    const SizedBox(width: 6),
-                    const Text(
-                      "Mode:",
-                      style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.w600),
-                    ),
-                    const Spacer(),
-                    _buildModeChip(classifier, 'dual', '⚡ Dual Auto'),
-                    const SizedBox(width: 4),
-                    _buildModeChip(classifier, 'voice', '🗣️ Sinhala Voice'),
-                    const SizedBox(width: 4),
-                    _buildModeChip(classifier, 'acoustic', '🔊 Sounds AI'),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
 
               // Dynamic 40-Band Audio Visualizer (Tall, undulating bars with gradient colors)
               Container(
@@ -827,7 +810,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(width: 8),
                         const Text(
-                          "LIVE VOICE TRANSCRIPT:",
+                          "LIVE ACOUSTIC & VOICE MONITOR:",
                           style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10, fontWeight: FontWeight.bold),
                         ),
                       ],
@@ -1185,29 +1168,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildModeChip(SoundClassifierService classifier, String mode, String label) {
-    final isSelected = classifier.monitorMode == mode;
-    return InkWell(
-      onTap: () => classifier.setMonitorMode(mode),
-      borderRadius: BorderRadius.circular(7),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF2563EB).withValues(alpha: 0.3) : Colors.transparent,
-          borderRadius: BorderRadius.circular(7),
-          border: Border.all(
-            color: isSelected ? const Color(0xFF3B82F6) : Colors.transparent,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? const Color(0xFF60A5FA) : const Color(0xFF64748B),
-            fontSize: 11,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
-      ),
-    );
-  }
 }
+
+

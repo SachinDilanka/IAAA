@@ -19,6 +19,7 @@ dependencies:
   flutter_blue_plus: ^1.31.0
   speech_to_text: ^7.4.0
   audio_streamer: ^5.0.0
+  vibration: ^3.2.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
