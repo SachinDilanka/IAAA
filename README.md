@@ -6,19 +6,19 @@
 
 ## 🏛️ System Architecture & Repository Modules
 
-The workspace is organized into five modular, production-ready components:
+The workspace is organized into four clean, modular, production-ready components:
 
 ```
 sound-alert-system/
-├── flutter_mobile_app/      # Cross-platform Flutter mobile application
+├── flutter_mobile_app/      # Cross-platform Flutter mobile & web application
 ├── live-python-detector/    # Python real-time microphone classifier with terminal HUD
 ├── model-training/          # Audio dataset synthesis & deep learning training pipeline
-├── esp32-firmware/          # TTGO T-Wristband ESP32 BLE vibration & TFT firmware
-└── web-simulator/           # Web simulation environment with 3D Avatar & Watch emulator
+└── esp32-firmware/          # TTGO T-Wristband ESP32 BLE vibration & TFT firmware
 ```
 
-### 1. 📱 `flutter_mobile_app/` (Flutter Mobile App)
+### 1. 📱 `flutter_mobile_app/` (Flutter Mobile & Web App)
 - **Real-Time Classification Engine**: Sliding audio window inference with offline confidence filtering.
+- **Side Overlay Alert System**: Responsive floating side toast with urgency glow, countdown progress bar, and swipe-to-dismiss gesture.
 - **Interactive AI Avatar**: Visual state machine with dual Sinhala and English action guidance banners.
 - **Smartwatch Notification Gateway**: Transmits mirrored emergency alerts to the **Yesido IO39** smartwatch via system notification channels and companion apps (e.g., XO FIT).
 - **Haptic Vibration Engine**: Multi-tiered vibration patterns (High, Medium, Low urgency).
@@ -39,12 +39,6 @@ sound-alert-system/
 - BLE GATT Server receiver (`SERVICE_UUID: 4fafc201-1fb5-459e-8fcc-c5c9c331914b`).
 - 100% PWM vibration motor drive (duty cycle 255/255) executing continuous incoming call ringing cadence (1500ms ON / 50ms OFF).
 - ST7735 TFT color display rendering warning banners.
-
-### 5. 🌐 `web-simulator/` (Interactive Web & Avatar Simulator)
-- Web Audio API microphone stream analyzer with canvas waveform visualizer.
-- Uncropped 3D Real Human AI Avatar with dynamic alert state transitions.
-- Interactive Yesido IO39 watch simulator with vibration wave animations.
-- Python HTTPS / HTTP servers (`server.py`, `make_https_server.py`, `start_mobile_servers.py`) with self-signed SSL certificate generation for mobile testing.
 
 ---
 
@@ -79,30 +73,29 @@ sound-alert-system/
 
 ---
 
+### Running the Flutter Mobile App
+
+#### Option A: On Android Phone (USB / Wireless Debugging)
+```bash
+cd flutter_mobile_app
+flutter run
+```
+
+#### Option B: In Chrome Browser (Quick Testing)
+```bash
+cd flutter_mobile_app
+flutter run -d chrome
+```
+
+---
+
 ### Running the Python Live Classifier
 ```bash
 cd live-python-detector
 python live_audio_classifier.py
 ```
 
-### Running the Web Simulator
-```bash
-cd web-simulator
-python server.py
-# Open http://localhost:8090 in your browser
-```
-For HTTPS testing (required for mobile microphone access on iOS/Android browsers):
-```bash
-cd web-simulator
-python make_https_server.py
-```
-
-### Running the Flutter Mobile App
-```bash
-cd flutter_mobile_app
-flutter pub get
-flutter run
-```
+---
 
 ### Training the Machine Learning Models
 ```bash
@@ -111,3 +104,4 @@ pip install -r requirements.txt
 python prepare_dataset.py
 python train_multibranch_model.py
 ```
+

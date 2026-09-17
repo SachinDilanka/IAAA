@@ -18,4 +18,6 @@ abstract class AudioCaptureInterface {
   void setSpeechLanguage(String langCode);
 
   void setSensitivity(String level);
+
+  void setMonitorMode(String mode);
 }

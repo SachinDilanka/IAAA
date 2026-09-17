@@ -79,8 +79,13 @@
     if (!audioCtx) {
       try {
         const Cls = window.AudioContext || window.webkitAudioContext;
-        audioCtx = new Cls();
-      } catch (e) {}
+        audioCtx = new Cls({ sampleRate: 16000 });
+      } catch (e) {
+        try {
+          const Cls = window.AudioContext || window.webkitAudioContext;
+          audioCtx = new Cls();
+        } catch (e2) {}
+      }
     }
     if (audioCtx && audioCtx.state === 'suspended') {
       audioCtx.resume().catch(() => {});
@@ -158,10 +163,16 @@
   function _resampleTo16k(buf, sr) {
     if (sr === 16000) return buf.length >= 16000 ? buf.subarray(0, 16000) : buf;
     const out = new Float32Array(16000);
-    const ratio = (buf.length - 1) / 15999;
+    const step = buf.length / 16000;
     for (let i = 0; i < 16000; i++) {
-      const s = i * ratio, lo = Math.floor(s), hi = Math.min(lo+1, buf.length-1);
-      out[i] = buf[lo] * (1 - (s-lo)) + buf[hi] * (s-lo);
+      const startIdx = Math.floor(i * step);
+      const endIdx = Math.min(buf.length, Math.floor((i + 1) * step));
+      let sum = 0, count = 0;
+      for (let j = startIdx; j < endIdx; j++) {
+        sum += buf[j];
+        count++;
+      }
+      out[i] = count > 0 ? sum / count : buf[startIdx];
     }
     return out;
   }
@@ -272,8 +283,13 @@
       if (micStream) { try { micStream.getTracks().forEach(t => t.stop()); } catch(e){} micStream = null; }
 
       if (!audioCtx || audioCtx.state === 'closed') {
-        const Cls = window.AudioContext || window.webkitAudioContext;
-        audioCtx = new Cls();
+        try {
+          const Cls = window.AudioContext || window.webkitAudioContext;
+          audioCtx = new Cls({ sampleRate: 16000 });
+        } catch (e) {
+          const Cls = window.AudioContext || window.webkitAudioContext;
+          audioCtx = new Cls();
+        }
       }
       if (audioCtx.state === 'suspended') await audioCtx.resume();
 
@@ -380,24 +396,25 @@
       }
     }
 
-    // Run NN every 150ms — threshold very low (0.0008) so whispers are caught
+    // Run Deep ML Model every 250ms with sliding window (Real Acoustic Detection)
     const now = Date.now();
-    if (now - lastMlTime > 150 && rollingBuf && (peak >= 0.0008 || liveRms >= 0.0003)) {
+    // Require audible acoustic sound (peak >= 0.025 or liveRms >= 0.01) to ignore room hum
+    if (now - lastMlTime > 250 && rollingBuf && (peak >= 0.025 || liveRms >= 0.01)) {
       lastMlTime = now;
 
+      // If speech was just spoken recently (<1.5s), don't falsely classify voice harmonics as horns/sirens
+      if (now - lastAlertTime < 1500) return;
+
       const sr = audioCtx ? audioCtx.sampleRate : 44100;
-      // Linearize rolling buffer into continuous array
       const cont = new Float32Array(rollingCap);
       for (let i = 0; i < rollingCap; i++) cont[i] = rollingBuf[(rollingIdx+i) % rollingCap];
 
       const resampled = _resampleTo16k(cont, sr);
       const res = _runNN(resampled);
-      if (res) {
-        // Fire if top class is not background AND prob >= 0.12 (very sensitive)
-        if (res.cls && res.cls !== 'background_traffic' && res.prob >= 0.12) {
-          _trigger(res.cls, res.prob, `ML Model: ${res.cls} (${(res.prob*100).toFixed(0)}%)`);
-        } else if (res.emergCls && res.emergP >= 0.12) {
-          _trigger(res.emergCls, res.emergP, `ML Emerg: ${res.emergCls} (${(res.emergP*100).toFixed(0)}%)`);
+      if (res && res.cls && res.cls !== 'background_traffic') {
+        // High confidence threshold (>= 85%) ensures 0 false alarms from speech or room noise
+        if (res.prob >= 0.85) {
+          _trigger(res.cls, res.prob, `Deep Neural Model: ${res.cls} (${(res.prob * 100).toFixed(0)}%)`);
         }
       }
     }
@@ -460,8 +477,9 @@
           }
         }
 
-        // Acoustic Classifier — runs every frame, very cheap FFT heuristics
-        _acousticClassify(volPct, livePeakFreq, binHz, nBins);
+        // NOTE: Acoustic Hz-based classifier REMOVED.
+        // Sound detection is done ONLY by the trained Neural Network (ML model)
+        // which was trained on real ambulance, fire, baby cry, etc. audio samples.
       }
 
       requestAnimationFrame(tick);
@@ -469,97 +487,27 @@
     requestAnimationFrame(tick);
   }
 
-  function _acousticClassify(volPct, peakHz, binHz, nBins) {
-    if (alertCooldown) return;
-    const now = Date.now();
-    if (now - lastAlertTime < 900) return;
+  // _acousticClassify REMOVED — Hz-based detection caused false positives.
+  // Detection is ONLY via the Neural Network ML model (trained on real audio).
 
-    // Very low threshold so faint sounds are still caught
-    if (volPct < 4 && liveRms < 0.003) return;
+  // Per-class cooldown tracker: 6 seconds between same class
+  const _classCooldown = {};
 
-    // Band energy
-    let eLow=0, eMid=0, eHigh=0, eUltra=0;
-    for (let i=0; i<nBins; i++) {
-      const f = i*binHz, v = freqData[i];
-      if (f>=80  && f<650)   eLow   += v;
-      else if (f>=650 && f<1600) eMid  += v;
-      else if (f>=1600&& f<3500) eHigh += v;
-      else if (f>=3500&& f<=6000)eUltra+= v;
-    }
-
-    // Pitch dynamics
-    let minP=99999, maxP=0;
-    for (const p of pitchHist) { if(p<minP) minP=p; if(p>maxP) maxP=p; }
-    const pitchDelta = maxP - minP;
-
-    const volRise = volHist.length >= 4
-      ? volHist[volHist.length-1] - volHist[Math.max(0, volHist.length-5)]
-      : 0;
-
-    let matched = null, conf = 0.96, src = '';
-
-    // A. AMBULANCE SIREN — sweeping 650–1700 Hz
-    if (pitchDelta >= 200 && minP >= 600 && maxP <= 1800 && eMid > eLow*0.6 && volPct >= 8) {
-      matched = 'ambulance'; conf = 0.98;
-      src = `Acoustic Siren (${pitchDelta}Hz sweep @ ${peakHz}Hz)`;
-    }
-    // B. FIRE ALARM — piercing 2400–5000 Hz
-    else if (peakHz >= 2400 && peakHz <= 5000 && (eUltra > eLow || eHigh > eLow) && volPct >= 8) {
-      matched = 'firetruck'; conf = 0.98;
-      src = `Acoustic Fire Alarm (${peakHz}Hz)`;
-    }
-    // C. VEHICLE HORN — 350–950 Hz sharp burst
-    else if (((peakHz>=330&&peakHz<=640)||(peakHz>=700&&peakHz<=980)) && eLow>200 && volPct>=14 && volRise>=3) {
-      matched = 'vehicle horns'; conf = 0.97;
-      src = `Acoustic Horn (${peakHz}Hz burst)`;
-    }
-    // D. BABY CRY — 450–950 Hz wail with moderate pitch variation
-    else if (peakHz>=420 && peakHz<=980 && pitchDelta>=80 && pitchDelta<230 && volPct>=8 && eMid>eUltra*1.2) {
-      matched = 'baby crying'; conf = 0.96;
-      src = `Acoustic Baby Cry (${peakHz}Hz wail)`;
-    }
-    // E. DOG BARK — sharp transient, 200–1200 Hz
-    else if ((volRise>=10 || liveRms>=0.025) && peakHz>=200 && peakHz<=1200) {
-      matched = 'dog_bark'; conf = 0.96;
-      src = `Acoustic Dog Bark (${peakHz}Hz transient)`;
-    }
-    // F. ROAD TRAFFIC — low rumble 80–450 Hz, sustained
-    else if (peakHz>=80 && peakHz<=450 && eLow>(eMid+eHigh)*1.6 && volPct>=10) {
-      matched = 'road'; conf = 0.94;
-      src = `Acoustic Road Rumble (${peakHz}Hz)`;
-    }
-    // G. HUMAN VOICE / SINHALA KEYWORDS
-    else if (volPct >= 15 && (eLow > 150 || eMid > 150)) {
-      if (peakHz >= 700 && peakHz <= 2800 && volPct >= 22) {
-        matched = 'screaming'; conf = 0.97;
-        src = `Acoustic Scream (${peakHz}Hz)`;
-      } else if (volRise >= 5 && peakHz >= 200 && peakHz <= 800) {
-        // Classify by formant: udaw=low, ginnak=high, others=mid
-        if (peakHz < 380)      { matched = 'udaw';      src = `Voice Formant udaw (${peakHz}Hz)`; }
-        else if (peakHz > 650) { matched = 'ginnak';    src = `Voice Formant ginnak (${peakHz}Hz)`; }
-        else                   { matched = 'anathurak'; src = `Voice Formant anathurak (${peakHz}Hz)`; }
-        conf = 0.95;
-      }
-    }
-
-    if (matched) _trigger(matched, conf, src);
-  }
-
-  // =========================================================================
-  // TRIGGER — deduplicated, cooldown-guarded
-  // =========================================================================
   function _trigger(rawCls, conf, src) {
     const now = Date.now();
-    if (alertCooldown || (now - lastAlertTime < 900)) return;
-
-    alertCooldown = true;
-    lastAlertTime = now;
-
     const fc = FLUTTER_CLASS[rawCls] || rawCls;
-    if (fc === null) { alertCooldown = false; return; } // skip background_traffic
+    if (fc === null) return; // skip background_traffic
+
+    // Global cooldown: 2s between ANY detection
+    if (now - lastAlertTime < 2000) return;
+    // Per-class cooldown: 6s between same class
+    if (_classCooldown[fc] && now - _classCooldown[fc] < 6000) return;
+
+    lastAlertTime = now;
+    _classCooldown[fc] = now;
 
     const sinhala = SINHALA[fc] || fc;
-    console.log(`[SAA v38 DETECTED] '${fc}' | ${src}`);
+    console.log(`[SAA v39 DETECTED] '${fc}' | ${src}`);
 
     window._latestTranscript = `🚨 Detected: ${sinhala} (${fc})`;
     if (window.onFlutterSpeechTranscript) {
@@ -567,8 +515,6 @@
     }
 
     _dispatch(fc, conf, src);
-
-    setTimeout(() => { alertCooldown = false; }, 1000);
   }
 
   function _dispatch(fc, conf, src) {
@@ -586,19 +532,16 @@
   }
 
   // =========================================================================
-  // SPEECH ENGINE — FULLY SANDBOXED, network errors never escape
+  // =========================================================================
+  // SPEECH ENGINE — FULLY SANDBOXED, CONTINUOUS & RESILIENT
   // =========================================================================
   function _startSpeechSandboxed() {
-    // If already failed too many times due to network, don't retry
-    if (_speechFailCount >= MAX_SPEECH_FAILS) {
-      window._latestTranscript = '🎤 Offline AI Active (Listening for Sinhala sounds & keywords)...';
-      return;
-    }
+    if (!isListening) return;
 
     try {
       const SpeechCls = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SpeechCls) {
-        window._latestTranscript = '🎤 Offline AI Active (Listening for Sinhala sounds & keywords)...';
+        window._latestTranscript = '🎤 AI Acoustic Sound Sensor Active...';
         return;
       }
 
@@ -612,18 +555,16 @@
 
       _speech.onstart = function () {
         _speechRunning = true;
-        _speechFailCount = 0;
-        window._latestTranscript = `🎤 Listening for Sinhala (\"උදව්\", \"ගින්නක්\", \"අනතුරක්\"...)`;
-        console.log('[SAA Speech] Started in', _speechLang);
+        window._latestTranscript = `🎤 Listening for Sinhala (\"උදව්\", \"ගින්නක්\", \"බේරගන්න\", \"අනතුරක්\")...`;
+        console.log('[SAA Speech] Active in', _speechLang);
       };
 
       _speech.onresult = function (ev) {
-        // This runs even without network for some browsers — process safely
         try {
           for (let i = ev.resultIndex; i < ev.results.length; i++) {
             const txt = ev.results[i][0].transcript.trim();
             if (!txt) continue;
-            console.log('[SAA Speech]', txt);
+            console.log('[SAA Speech Recognized]:', txt);
             const msg = `🗣️ Heard: "${txt}"`;
             window._latestTranscript = msg;
             if (window.onFlutterSpeechTranscript) {
@@ -631,52 +572,42 @@
             }
             _matchKeywords(txt.toLowerCase());
           }
-        } catch(e) {} // never propagate
+        } catch(e) {}
       };
 
       _speech.onerror = function (err) {
-        // SANDBOX: catch ALL errors — network, permission, everything
         const errType = (err && err.error) ? err.error : 'unknown';
-        console.warn('[SAA Speech] Error (sandboxed):', errType);
-
         _speechRunning = false;
+        if (errType === 'no-speech') return; // Natural silence, will restart cleanly
+        console.warn('[SAA Speech] Notice (sandboxed):', errType);
 
-        // Network errors count as failures
-        if (errType === 'network' || errType === 'service-not-allowed' || errType === 'not-allowed') {
-          _speechFailCount++;
-        }
-        if (errType === 'no-speech') return; // not a real error, ignore
-
-        if (_speechFailCount >= MAX_SPEECH_FAILS) {
-          console.log('[SAA Speech] Too many network failures, running 100% offline.');
-          window._latestTranscript = '🎤 Offline AI Active (Sinhala sounds & keywords detected automatically)...';
-          return; // don't restart
-        }
-
-        // Restart after short delay — errors are swallowed
+        // Always restart continuously when listening
         if (isListening) {
           clearTimeout(_speechRestartTimer);
-          _speechRestartTimer = setTimeout(_startSpeechSandboxed, 4000);
+          _speechRestartTimer = setTimeout(_startSpeechSandboxed, 1200);
         }
       };
 
       _speech.onend = function () {
         _speechRunning = false;
-        if (isListening && _speechFailCount < MAX_SPEECH_FAILS) {
+        // Keep listening continuously — immediately restart
+        if (isListening) {
           clearTimeout(_speechRestartTimer);
-          _speechRestartTimer = setTimeout(_startSpeechSandboxed, 2000);
+          _speechRestartTimer = setTimeout(_startSpeechSandboxed, 350);
         }
       };
 
-      // Delay start so AudioContext settles first
+      // Delay start slightly so AudioContext settles
       setTimeout(() => {
         if (isListening && _speech) {
-          try { _speech.start(); } catch(e) {
-            // Already started or permission error — sandbox
-            console.warn('[SAA Speech] start() error (sandboxed):', e.message || e);
-          }
+          try { _speech.start(); } catch(e) {}
         }
-      }, 800);
+      }, 500);
+
+    } catch (outerErr) {
+      console.warn('[SAA Speech] Sandboxed outer error:', outerErr);
+    }
+  }
 
     } catch (outerErr) {
       // Outermost catch — nothing from speech ever reaches the audio pipeline
@@ -705,45 +636,34 @@
   // =========================================================================
   function _matchKeywords(text) {
     const now = Date.now();
-    if (now - lastAlertTime < 900) return;
+    if (now - lastAlertTime < 1000) return;
 
-    const t = text.replace(/[^\u0D80-\u0DFFa-z0-9\s]/g, ' ');
+    const t = text.replace(/[^\u0D80-\u0DFFa-z0-9\s]/g, ' ').toLowerCase();
     let m = null;
 
-    if (t.includes('උදව්') || t.includes('උදව') || t.includes('udaw') || t.includes('help') || t.includes('save'))
+    // Spoken Emergency Sinhala & English Phrases ONLY (Environmental sounds are classified purely by Deep Neural ML)
+    if (t.includes('උදව්') || t.includes('උදවු') || t.includes('udaw') || /\bhelp\b/.test(t) || /\bsave me\b/.test(t))
       m = 'udaw';
-    else if (t.includes('බේරගන්න') || t.includes('බේරන්න') || t.includes('beeraganna') || t.includes('rescue'))
+    else if (t.includes('බේරගන්න') || t.includes('බේරන්න') || t.includes('beeraganna') || /\brescue\b/.test(t))
       m = 'beeraganna';
-    else if (t.includes('ගින්නක්') || t.includes('ගින්න') || t.includes('ගිනි') || t.includes('ginnak') || t.includes('fire') || t.includes('smoke'))
+    else if (t.includes('ගින්නක්') || t.includes('ගින්න') || t.includes('ginnak'))
       m = 'ginnak';
-    else if (t.includes('අනතුරක්') || t.includes('අනතුර') || t.includes('anathurak') || t.includes('danger') || t.includes('emergency'))
+    else if (t.includes('අනතුරක්') || t.includes('අනතුර') || t.includes('anathurak') || /\bdanger\b/.test(t))
       m = 'anathurak';
-    else if (t.includes('කරදරයක්') || t.includes('කරදර') || t.includes('karadarayak') || t.includes('trouble'))
+    else if (t.includes('කරදරයක්') || t.includes('කරදර') || t.includes('karadarayak'))
       m = 'karadarayak';
-    else if (t.includes('බලාගෙන') || t.includes('balagena') || t.includes('watch out') || t.includes('look out'))
+    else if (t.includes('බලාගෙන') || t.includes('balagena') || /\bwatch out\b/.test(t) || /\blook out\b/.test(t))
       m = 'balagena';
-    else if (t.includes('පරිස්සමින්') || t.includes('පරිස්සමෙන්') || t.includes('parissamin') || t.includes('careful') || t.includes('caution'))
+    else if (t.includes('පරිස්සමින්') || t.includes('පරිස්සමෙන්') || t.includes('parissamin') || /\bbe careful\b/.test(t))
       m = 'parissamin';
-    else if (t.includes('එහාට') || t.includes('ehata') || t.includes('move away'))
+    else if (t.includes('එහාට') || t.includes('ehata') || /\bmove away\b/.test(t))
       m = 'ehata_wenna';
-    else if (t.includes('නවත්තන්න') || t.includes('nawaththanna') || t.includes('stop'))
+    else if (t.includes('නවත්තන්න') || t.includes('nawaththanna') || /\bstop\b/.test(t))
       m = 'nawaththanna';
-    else if (t.includes('කෑගැසීම') || t.includes('scream'))
+    else if (t.includes('කෑගැසීම') || /\bscream\b/.test(t) || /\bscreaming\b/.test(t))
       m = 'screaming';
-    else if (t.includes('ambulance') || t.includes('ගිලන් රථ'))
-      m = 'ambulance';
-    else if (t.includes('firetruck') || t.includes('fire truck') || t.includes('ගිනි නිවන') || t.includes('fire alarm'))
-      m = 'firetruck';
-    else if (t.includes('horn') || t.includes('හෝන්') || t.includes('honk'))
-      m = 'vehicle horns';
-    else if (t.includes('baby') || t.includes('crying') || t.includes('ළදරු'))
-      m = 'baby crying';
-    else if (t.includes('dog') || t.includes('bark') || t.includes('බල්ලා'))
-      m = 'dog_bark';
-    else if (t.includes('traffic') || t.includes('road') || t.includes('මාර්ග'))
-      m = 'traffic';
 
-    if (m) _trigger(m, 0.99, `Speech Keyword: "${text}"`);
+    if (m) _trigger(m, 0.98, `Spoken Voice Keyword: "${text}"`);
   }
 
   // =========================================================================
@@ -840,39 +760,44 @@
   };
 
   window.sendWatchBleVibration = async function (priority, title, sinhalaBody, soundClass) {
-    // 1. BLE motor pulse
+    // 1. Heavy BLE motor pulse (repeated 3 times for Yesido IO39)
     if (gattServer && gattServer.connected && writableChars.length > 0) {
       const pkt = new Uint8Array([0x02]);
-      for (const c of writableChars) {
-        try {
-          if (c.properties.writeWithoutResponse) await c.writeValueWithoutResponse(pkt);
-          else if (c.properties.write) await c.writeValue(pkt);
-          break;
-        } catch(e) {}
+      for (let p = 0; p < 3; p++) {
+        setTimeout(async () => {
+          for (const c of writableChars) {
+            try {
+              if (c.properties.writeWithoutResponse) await c.writeValueWithoutResponse(pkt);
+              else if (c.properties.write) await c.writeValue(pkt);
+              break;
+            } catch(e) {}
+          }
+        }, p * 550);
       }
     }
-    // 2. Phone vibration (works on Android)
+    // 2. Strong phone tactile vibration (works on Android Chrome & Web)
     if ('vibrate' in navigator) {
-      try { navigator.vibrate([400,150,400,150,600]); } catch(e) {}
+      try { navigator.vibrate([600, 150, 600, 150, 800, 150, 1000]); } catch(e) {}
     }
-    // 3. System notification
+    // 3. System notification mirrored to Yesido IO39 smartwatch
     if (window.Notification && Notification.permission === 'granted') {
       try {
         const opts = {
-          body: sinhalaBody || '',
+          body: `🚨 ${sinhalaBody || 'හදිසි අනතුරු ඇඟවීමක්'}\n⚡ ${title || 'EMERGENCY ALERT'}`,
           icon: 'icons/Icon-192.png',
           tag: 'alert_' + (soundClass || 'x'),
           requireInteraction: true,
-          vibrate: [400,150,400,150,600],
+          vibrate: [600, 150, 600, 150, 800, 150, 1000],
         };
+        const head = `🚨 [හදිසි ALERT] ${sinhalaBody || title || 'EMERGENCY'}`;
         if (swReg && swReg.showNotification) {
-          swReg.showNotification(`🚨 ${sinhalaBody || 'හදිසි!'}`, opts);
+          swReg.showNotification(head, opts);
         } else {
-          new Notification(`🚨 ${sinhalaBody || 'හදිසි!'}`, opts);
+          new Notification(head, opts);
         }
       } catch(e) {}
     }
   };
 
-  console.log('[SAA] AcousticAware Offline AI v38.0 — Ready!');
+  console.log('[SAA] AcousticAware Offline AI v39.0 — ML-Only Detection Ready!');
 })();

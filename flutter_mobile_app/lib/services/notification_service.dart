@@ -52,27 +52,27 @@ class NotificationService {
     try {
       await initialize();
 
-      String channelId = 'sound_alert_high_v3';
+      String channelId = 'sound_alert_high_v6';
       String channelName = '🚨 High Urgency Emergency Alerts';
       Importance importance = Importance.max;
       Priority priority = Priority.max;
 
       Int64List? vibrationPattern;
       if (event.priority == AlertLevel.high) {
-        channelId = 'sound_alert_high_v3';
+        channelId = 'sound_alert_high_v6';
         channelName = '🚨 High Urgency Emergency Alerts';
         importance = Importance.max;
         priority = Priority.max;
-        // Strong incoming-call style vibration pattern: 1500ms ON / 100ms OFF
-        vibrationPattern = Int64List.fromList([0, 1500, 100, 1500, 100, 1500, 100, 1500]);
+        // Heavy, continuous incoming-call style vibration pattern for Yesido IO39 watch
+        vibrationPattern = Int64List.fromList([0, 1500, 150, 1500, 150, 1500, 150, 1500, 150, 2000]);
       } else if (event.priority == AlertLevel.medium) {
-        channelId = 'sound_alert_medium_v3';
+        channelId = 'sound_alert_medium_v6';
         channelName = '⚠️ Medium Urgency Alerts';
         importance = Importance.high;
         priority = Priority.high;
-        vibrationPattern = Int64List.fromList([0, 800, 150, 800, 150, 800]);
+        vibrationPattern = Int64List.fromList([0, 800, 150, 800, 150, 800, 150, 800]);
       } else {
-        channelId = 'sound_alert_low_v3';
+        channelId = 'sound_alert_low_v6';
         channelName = '🟢 Low Urgency Alerts';
         importance = Importance.defaultImportance;
         priority = Priority.defaultPriority;
@@ -91,19 +91,24 @@ class NotificationService {
         enableVibration: true,
         vibrationPattern: vibrationPattern,
         fullScreenIntent: true,
+        playSound: true,
+        audioAttributesUsage: AudioAttributesUsage.alarm,
         category: AndroidNotificationCategory.alarm,
-        ticker: '🚨 EMERGENCY ALERT DETECTED!',
+        ticker: '🚨 [EMERGENCY] ${event.titleSinhala} (${event.titleEnglish})',
         visibility: NotificationVisibility.public,
       );
 
       final NotificationDetails platformChannelSpecifics =
           NotificationDetails(android: androidPlatformChannelSpecifics);
 
-      // Prominent Sinhala Letters in the Title and Body for Yesido IO39 watch display
+      // YESIDO IO39 / SMARTWATCH COMPATIBLE FORMAT:
+      // Basic smartwatches lack Sinhala Unicode fonts in their ROM.
+      // Putting clear Latin/English text first guarantees the watch displays the alert clearly.
+      final String priorityLabel = event.priority.name.toUpperCase();
       final String notificationTitle =
-          '🚨 [${event.priority.name}] ${event.titleSinhala} (${event.titleEnglish})';
+          '🚨 [$priorityLabel] ${event.titleEnglish} (${event.titleSinhala})';
       final String notificationBody =
-          '${event.titleSinhala}\n⚡ ${event.avatarGuidanceSinhala}\n(${event.avatarGuidanceEnglish})';
+          '🚨 ${event.titleEnglish.toUpperCase()}\nSinhala: ${event.titleSinhala}\n⚡ ${event.avatarGuidanceEnglish}\n${event.avatarGuidanceSinhala}';
 
       await _flutterLocalNotificationsPlugin.show(
         event.timestamp.millisecondsSinceEpoch ~/ 1000,

@@ -121,36 +121,32 @@ class BleWatchController {
     final vibrateCount = isHigh ? (sound.contains('fire') ? 0x0A : 0x08) : (sound.contains('baby') ? 0x04 : 0x03);
     final payloadDaFit = [0x04, 0x01, vibrateCount];
 
-    for (var c in _alertCharacteristics) {
-      try {
-        final uuid = c.uuid.toString().toLowerCase();
-        if (uuid.contains('2a06')) {
-          await c.write(payloadImmediate, withoutResponse: c.properties.writeWithoutResponse);
-        } else if (uuid.contains('6e400002') || uuid.contains('fff1') || uuid.contains('ffe1')) {
-          await c.write(payloadXO, withoutResponse: true);
-          await c.write(payloadFitPro, withoutResponse: true);
-        } else {
-          await c.write(payloadDaFit, withoutResponse: true);
-        }
-      } catch (e) {}
+    Future<void> sendPulse() async {
+      for (var c in _alertCharacteristics) {
+        try {
+          final uuid = c.uuid.toString().toLowerCase();
+          if (uuid.contains('2a06')) {
+            await c.write(payloadImmediate, withoutResponse: c.properties.writeWithoutResponse);
+          } else if (uuid.contains('6e400002') || uuid.contains('fff1') || uuid.contains('ffe1')) {
+            await c.write(payloadXO, withoutResponse: true);
+            await c.write(payloadFitPro, withoutResponse: true);
+          } else {
+            await c.write(payloadDaFit, withoutResponse: true);
+          }
+        } catch (e) {}
+      }
     }
 
-    // For High Urgency, send a second pulse after 600ms to maintain continuous vibration
+    // 1st heavy pulse
+    await sendPulse();
+
+    // 2nd pulse after 500ms
+    Future.delayed(const Duration(milliseconds: 500), () => sendPulse());
+
+    // 3rd pulse after 1100ms for continuous strong motor buzz on wrist
     if (isHigh) {
-      Future.delayed(const Duration(milliseconds: 650), () async {
-        for (var c in _alertCharacteristics) {
-          try {
-            final uuid = c.uuid.toString().toLowerCase();
-            if (uuid.contains('2a06')) {
-              await c.write(payloadImmediate, withoutResponse: c.properties.writeWithoutResponse);
-            } else if (uuid.contains('6e400002') || uuid.contains('fff1') || uuid.contains('ffe1')) {
-              await c.write(payloadXO, withoutResponse: true);
-            } else {
-              await c.write(payloadDaFit, withoutResponse: true);
-            }
-          } catch (e) {}
-        }
-      });
+      Future.delayed(const Duration(milliseconds: 1100), () => sendPulse());
+      Future.delayed(const Duration(milliseconds: 1700), () => sendPulse());
     }
   }
 }

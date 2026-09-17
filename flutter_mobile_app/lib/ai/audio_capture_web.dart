@@ -1,6 +1,7 @@
 // ignore_for_file: avoid_web_libraries_in_flutter, undefined_function, uri_does_not_exist
 import 'dart:js' as js;
 import 'dart:js_util' as js_util;
+import 'package:flutter/foundation.dart';
 import 'audio_capture_interface.dart';
 
 AudioCaptureInterface getAudioCaptureBridge() => AudioCaptureWeb();
@@ -175,4 +176,10 @@ class AudioCaptureWeb implements AudioCaptureInterface {
       return {};
     }
   }
+
+  @override
+  void setMonitorMode(String mode) {
+    debugPrint('[AudioCaptureWeb] Monitor mode updated to: $mode');
+  }
 }
+

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../ai/sound_classifier_service.dart';
 import '../wearable/smartwatch_service.dart';
 import '../models/alert_level.dart';
@@ -42,25 +43,30 @@ class _HomeScreenState extends State<HomeScreen> {
               child: const Icon(Icons.hearing_rounded, color: Color(0xFF3B82F6), size: 20),
             ),
             const SizedBox(width: 10),
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'AcousticAware DEAF AI',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: Color(0xFFF8FAFC),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'AcousticAware DEAF AI',
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Color(0xFFF8FAFC),
+                    ),
                   ),
-                ),
-                Text(
-                  'Offline Sound & Sinhala Voice Detection',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Color(0xFF94A3B8),
+                  Text(
+                    'Offline Sound & Sinhala Voice Detection',
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Color(0xFF94A3B8),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ),
@@ -183,17 +189,30 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 1. LIVE MICROPHONE ACOUSTIC & SPEECH RECOGNITION MONITOR
+                // 1. ACTIVE EMERGENCY ALERT CARD (High visibility with large Sinhala lettering)
+                Consumer2<SoundClassifierService, SmartwatchService>(
+                  builder: (context, classifier, watch, child) {
+                    final activeAlert = classifier.activeAlert;
+                    if (activeAlert == null) return const SizedBox.shrink();
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 16.0),
+                      child: _buildInAppActiveAlertCard(context, activeAlert, classifier, watch),
+                    );
+                  },
+                ),
+
+                // 2. LIVE MICROPHONE ACOUSTIC & SPEECH RECOGNITION MONITOR
                 _buildLiveMicrophoneAcousticCard(context),
                 const SizedBox(height: 16),
 
-                // 2. SMARTWATCH VIBRATION PATTERNS
+                // 3. SMARTWATCH VIBRATION PATTERNS
                 _buildVibrationPatternCard(context),
                 const SizedBox(height: 20),
 
-                // 3. LAST DETECTED SOUND
+                // 4. LAST DETECTED EVENT LOG
                 const Text(
-                  'LAST DETECTED SOUND',
+                  'LAST DETECTED EVENT',
                   style: TextStyle(
                     color: Color(0xFF94A3B8),
                     fontSize: 11,
@@ -230,97 +249,79 @@ class _HomeScreenState extends State<HomeScreen> {
                     }
 
                     return Container(
+                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF141E2D),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: event.priority.color.withValues(alpha: 0.55), width: 1.8),
-                        boxShadow: [
-                          BoxShadow(color: event.priority.color.withValues(alpha: 0.15), blurRadius: 14, spreadRadius: 1),
-                        ],
+                        color: const Color(0xFF1E293B),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: event.priority.color, width: 2),
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Row(
-                          children: [
-                            // Emoji icon with glow
-                            Container(
-                              width: 56,
-                              height: 56,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: event.priority.color.withValues(alpha: 0.12),
-                                border: Border.all(color: event.priority.color.withValues(alpha: 0.35)),
-                                boxShadow: [
-                                  BoxShadow(color: event.priority.color.withValues(alpha: 0.3), blurRadius: 14, spreadRadius: 1),
-                                ],
-                              ),
-                              child: Center(child: Text(_soundEmoji(event.rawClass), style: const TextStyle(fontSize: 26))),
-                            ),
-                            const SizedBox(width: 13),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
                                 children: [
-                                  Text(
-                                    event.titleSinhala,
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 18,
-                                      shadows: [Shadow(color: event.priority.color.withValues(alpha: 0.5), blurRadius: 8)],
-                                      fontFamilyFallback: const ['Noto Sans Sinhala', 'Arial', 'sans-serif'],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
+                                  Icon(event.priority.icon, color: event.priority.color, size: 22),
+                                  const SizedBox(width: 8),
                                   Text(
                                     event.titleEnglish,
-                                    style: TextStyle(color: event.priority.color, fontWeight: FontWeight.bold, fontSize: 12),
-                                  ),
-                                  const SizedBox(height: 5),
-                                  Row(
-                                    children: [
-                                      Icon(Icons.access_time_rounded, color: const Color(0xFF64748B), size: 11),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        '${event.timestamp.hour.toString().padLeft(2,'0')}:${event.timestamp.minute.toString().padLeft(2,'0')}:${event.timestamp.second.toString().padLeft(2,'0')}',
-                                        style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Icon(
-                                        watch.isDeviceConnected ? Icons.watch_rounded : Icons.vibration_rounded,
-                                        size: 11,
-                                        color: const Color(0xFF10B981),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        watch.isDeviceConnected ? 'Watch Notified' : 'Haptic Sent',
-                                        style: const TextStyle(color: Color(0xFF10B981), fontSize: 11),
-                                      ),
-                                    ],
+                                    style: const TextStyle(
+                                      color: Color(0xFFF8FAFC),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
                                   ),
                                 ],
                               ),
-                            ),
-                            // Confidence badge
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: event.priority.color.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: event.priority.color.withValues(alpha: 0.45)),
-                              ),
-                              child: Column(
-                                children: [
-                                  Text(
-                                    '${(event.confidence * 100).toStringAsFixed(0)}%',
-                                    style: TextStyle(color: event.priority.color, fontWeight: FontWeight.w900, fontSize: 15),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: event.priority.color.withValues(alpha: 0.18),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  '${event.priority.name} (${event.priority.sinhalaLabel})',
+                                  style: TextStyle(
+                                    color: event.priority.color,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 11,
                                   ),
-                                  Text('conf', style: TextStyle(color: event.priority.color.withValues(alpha: 0.7), fontSize: 9)),
-                                ],
+                                ),
                               ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            event.titleSinhala,
+                            style: const TextStyle(
+                              color: Color(0xFFF1F5F9),
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Time: ${DateFormat('hh:mm:ss a').format(event.timestamp)} • ${(event.confidence * 100).toStringAsFixed(0)}% Conf',
+                                style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                              ),
+                              Text(
+                                watch.isDeviceConnected
+                                    ? '⌚ Yesido IO39 Dispatched'
+                                    : '📱 Phone Haptic Active',
+                                style: TextStyle(
+                                  color: watch.isDeviceConnected ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     );
                   },
@@ -402,13 +403,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       color: AlertLevel.medium.color,
                       onTap: () => Provider.of<SoundClassifierService>(context, listen: false)
                           .simulateDetection('parissamin', confidence: 0.97),
-                    ),
-                    _buildTestChip(
-                      context,
-                      label: '🏃 ehata_wenna ("එහාට වෙන්න")',
-                      color: AlertLevel.medium.color,
-                      onTap: () => Provider.of<SoundClassifierService>(context, listen: false)
-                          .simulateDetection('ehata_wenna', confidence: 0.97),
                     ),
                   ],
                 ),
@@ -530,45 +524,54 @@ class _HomeScreenState extends State<HomeScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: isListening
-                              ? const Color(0xFF2563EB).withValues(alpha: 0.2)
-                              : const Color(0xFF334155).withValues(alpha: 0.3),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          isListening ? Icons.mic_rounded : Icons.mic_off_rounded,
-                          color: isListening ? const Color(0xFF3B82F6) : const Color(0xFF94A3B8),
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            isListening ? "LIVE MICROPHONE ACTIVE" : "MICROPHONE STANDBY",
-                            style: TextStyle(
-                              color: isListening ? const Color(0xFF60A5FA) : const Color(0xFF94A3B8),
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                              letterSpacing: 0.5,
-                            ),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: isListening
+                                ? const Color(0xFF2563EB).withValues(alpha: 0.2)
+                                : const Color(0xFF334155).withValues(alpha: 0.3),
+                            shape: BoxShape.circle,
                           ),
-                          Text(
-                            isListening
-                                ? "Real-time acoustic AI & keyword listener"
-                                : "Tap Start to activate live microphone monitor",
-                            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                          child: Icon(
+                            isListening ? Icons.mic_rounded : Icons.mic_off_rounded,
+                            color: isListening ? const Color(0xFF3B82F6) : const Color(0xFF94A3B8),
+                            size: 20,
                           ),
-                        ],
-                      ),
-                    ],
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                isListening ? "LIVE MICROPHONE ACTIVE" : "MICROPHONE STANDBY",
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: isListening ? const Color(0xFF60A5FA) : const Color(0xFF94A3B8),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              Text(
+                                isListening
+                                    ? "Acoustic AI & voice monitor"
+                                    : "Tap Start to activate live monitor",
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
+                  const SizedBox(width: 8),
                   ElevatedButton.icon(
                     onPressed: () {
                       if (isListening) {
@@ -583,12 +586,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     label: Text(
                       isListening ? "Stop Mic" : "Start Mic",
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: isListening ? const Color(0xFFDC2626) : const Color(0xFF2563EB),
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       elevation: 0,
                     ),
@@ -668,11 +671,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
 
-              // Microphone Sensitivity Selector (Normal / High / Ultra)
+              // Monitor Mode Switcher Bar
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                 decoration: BoxDecoration(
                   color: const Color(0xFF0F172A),
                   borderRadius: BorderRadius.circular(10),
@@ -680,90 +683,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.tune_rounded, color: Color(0xFF94A3B8), size: 16),
-                    const SizedBox(width: 8),
+                    const Icon(Icons.sensors_rounded, color: Color(0xFF94A3B8), size: 15),
+                    const SizedBox(width: 6),
                     const Text(
-                      "Mic Sensitivity:",
+                      "Mode:",
                       style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.w600),
                     ),
                     const Spacer(),
-                    // Ultra Option
-                    InkWell(
-                      onTap: () => classifier.setSensitivity('ultra'),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: classifier.sensitivity == 'ultra'
-                              ? const Color(0xFFDC2626).withValues(alpha: 0.25)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: classifier.sensitivity == 'ultra' ? const Color(0xFFEF4444) : Colors.transparent,
-                          ),
-                        ),
-                        child: Text(
-                          "Ultra (Whisper)",
-                          style: TextStyle(
-                            color: classifier.sensitivity == 'ultra' ? const Color(0xFFEF4444) : const Color(0xFF64748B),
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
+                    _buildModeChip(classifier, 'dual', '⚡ Dual Auto'),
                     const SizedBox(width: 4),
-                    // High Option
-                    InkWell(
-                      onTap: () => classifier.setSensitivity('high'),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: classifier.sensitivity == 'high'
-                              ? const Color(0xFF059669).withValues(alpha: 0.25)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: classifier.sensitivity == 'high' ? const Color(0xFF10B981) : Colors.transparent,
-                          ),
-                        ),
-                        child: Text(
-                          "High (Normal)",
-                          style: TextStyle(
-                            color: classifier.sensitivity == 'high' ? const Color(0xFF10B981) : const Color(0xFF64748B),
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
+                    _buildModeChip(classifier, 'voice', '🗣️ Sinhala Voice'),
                     const SizedBox(width: 4),
-                    // Balanced Option
-                    InkWell(
-                      onTap: () => classifier.setSensitivity('balanced'),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: classifier.sensitivity == 'balanced'
-                              ? const Color(0xFF2563EB).withValues(alpha: 0.25)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: classifier.sensitivity == 'balanced' ? const Color(0xFF3B82F6) : Colors.transparent,
-                          ),
-                        ),
-                        child: Text(
-                          "Balanced",
-                          style: TextStyle(
-                            color: classifier.sensitivity == 'balanced' ? const Color(0xFF60A5FA) : const Color(0xFF64748B),
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
+                    _buildModeChip(classifier, 'acoustic', '🔊 Sounds AI'),
                   ],
                 ),
               ),
@@ -937,21 +868,27 @@ class _HomeScreenState extends State<HomeScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.vibration_rounded, color: Color(0xFF3B82F6), size: 18),
-                      SizedBox(width: 8),
-                      Text(
-                        "YESIDO IO39 TACTILE VIBRATION PATTERNS",
-                        style: TextStyle(
-                          color: Color(0xFFCBD5E1),
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.8,
+                  const Expanded(
+                    child: Row(
+                      children: [
+                        Icon(Icons.vibration_rounded, color: Color(0xFF3B82F6), size: 18),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            "YESIDO IO39 TACTILE VIBRATION PATTERNS",
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Color(0xFFCBD5E1),
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
+                  const SizedBox(width: 8),
                   InkWell(
                     onTap: () => watch.testWatchVibration(priority: AlertLevel.high),
                     child: Container(
@@ -1004,11 +941,16 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              priority,
-              style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12),
+            Expanded(
+              child: Text(
+                priority,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12),
+              ),
             ),
+            const SizedBox(width: 8),
             Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   pattern,
@@ -1024,221 +966,169 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ── Sound category → emoji mapping ─────────────────────────────────────────
-  String _soundEmoji(String rawClass) {
-    const map = {
-      'ambulance': '🚑', 'ambulance_siren': '🚑',
-      'firetruck': '🔥', 'fire_alarm': '🔥', 'ginnak': '🔥',
-      'vehicle horns': '📯', 'vehicle_horn': '📯',
-      'baby crying': '👶', 'baby_crying': '👶',
-      'dog_bark': '🐕', 'dog_barking': '🐕',
-      'road': '🛣️', 'traffic': '🚦',
-      'screaming': '😱',
-      'udaw': '🆘', 'beeraganna': '🆘',
-      'anathurak': '⚠️', 'karadarayak': '⚠️',
-      'balagena': '👁️', 'parissamin': '🛡️',
-      'ehata_wenna': '🏃', 'nawaththanna': '🛑',
-    };
-    return map[rawClass] ?? '🔔';
-  }
-
-
-
-              child: Column(
-                children: [
-                  // Emoji + Glow Halo
-                  Container(
-                    width: 100,
-                    height: 100,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: color.withValues(alpha: 0.12),
-                      boxShadow: [
-                        BoxShadow(color: color.withValues(alpha: 0.5), blurRadius: 30, spreadRadius: 5),
-                        BoxShadow(color: color.withValues(alpha: 0.2), blurRadius: 60, spreadRadius: 15),
-                      ],
-                      border: Border.all(color: color.withValues(alpha: 0.4), width: 2),
-                    ),
-                    child: Center(
-                      child: Text(emoji, style: const TextStyle(fontSize: 48)),
-                    ),
+  Widget _buildInAppActiveAlertCard(
+    BuildContext context,
+    DetectionEvent event,
+    SoundClassifierService classifier,
+    SmartwatchService watch,
+  ) {
+    final color = event.priority.color;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color, width: 2.5),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.25),
+            blurRadius: 16,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '🚨 ${event.priority.name} EMERGENCY ALERT (${event.priority.sinhalaLabel})',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11,
+                    letterSpacing: 0.5,
                   ),
-                  const SizedBox(height: 16),
-
-                  // Sinhala title — BIG & BOLD
-                  Text(
-                    event.titleSinhala,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 30,
-                      height: 1.2,
-                      shadows: [Shadow(color: color.withValues(alpha: 0.7), blurRadius: 12)],
-                      fontFamilyFallback: const ['Noto Sans Sinhala', 'Arial', 'sans-serif'],
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-
-                  // English title
-                  Text(
-                    event.titleEnglish,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: color,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                      letterSpacing: 0.4,
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-
-                  // Confidence bar
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'AI Confidence',
-                            style: TextStyle(color: color.withValues(alpha: 0.8), fontSize: 11, fontWeight: FontWeight.bold),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: color.withValues(alpha: 0.18),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: color.withValues(alpha: 0.5)),
-                            ),
-                            child: Text(
-                              '${conf.toStringAsFixed(0)}%',
-                              style: TextStyle(
-                                color: color,
-                                fontWeight: FontWeight.w900,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: Stack(
-                          children: [
-                            // Background track
-                            Container(height: 10, color: const Color(0xFF1E293B)),
-                            // Glowing fill
-                            FractionallySizedBox(
-                              widthFactor: (event.confidence).clamp(0.0, 1.0),
-                              child: Container(
-                                height: 10,
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      color.withValues(alpha: 0.6),
-                                      color,
-                                    ],
-                                  ),
-                                  boxShadow: [BoxShadow(color: color.withValues(alpha: 0.6), blurRadius: 8)],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Guidance card
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: color.withValues(alpha: 0.25)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          event.avatarGuidanceSinhala,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.9),
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
-                            fontFamilyFallback: const ['Noto Sans Sinhala', 'Arial', 'sans-serif'],
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          event.avatarGuidanceEnglish,
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 11),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Watch / haptic status strip
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0D1B2A),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: watch.isDeviceConnected
-                            ? const Color(0xFF10B981).withValues(alpha: 0.5)
-                            : color.withValues(alpha: 0.35),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          watch.isDeviceConnected ? Icons.watch_rounded : Icons.vibration_rounded,
-                          color: watch.isDeviceConnected ? const Color(0xFF10B981) : color,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          width: 7,
-                          height: 7,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: watch.isDeviceConnected ? const Color(0xFF10B981) : color,
-                          ),
-                        ),
-                        const SizedBox(width: 7),
-                        Expanded(
-                          child: Text(
-                            watch.isDeviceConnected
-                                ? 'Smartwatch Sync: Vibration & Notification dispatched to Yesido IO39'
-                                : 'Phone Haptic: Strong emergency vibration active',
-                            style: TextStyle(
-                              color: watch.isDeviceConnected
-                                  ? const Color(0xFF10B981)
-                                  : color.withValues(alpha: 0.9),
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        // Time
-                        Text(
-                          '${event.timestamp.hour.toString().padLeft(2,'0')}:${event.timestamp.minute.toString().padLeft(2,'0')}:${event.timestamp.second.toString().padLeft(2,'0')}',
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 10),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                ),
               ),
+              IconButton(
+                icon: const Icon(Icons.close, color: Color(0xFF94A3B8), size: 20),
+                onPressed: () => classifier.dismissActiveAlert(),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.18),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(event.priority.icon, color: color, size: 34),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Large, prominent Sinhala lettering
+                    Text(
+                      event.titleSinhala,
+                      style: const TextStyle(
+                        color: Color(0xFFF8FAFC),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 22,
+                        fontFamilyFallback: ['Noto Sans Sinhala', 'Arial', 'sans-serif'],
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      event.titleEnglish,
+                      style: TextStyle(
+                        color: color,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '${(event.confidence * 100).toStringAsFixed(0)}%',
+                  style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Guidance Message for Deaf Individuals
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A),
+              borderRadius: BorderRadius.circular(8),
             ),
-          ],
-        ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  event.avatarGuidanceSinhala,
+                  style: const TextStyle(
+                    color: Color(0xFFF1F5F9),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    fontFamilyFallback: ['Noto Sans Sinhala', 'Arial', 'sans-serif'],
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  event.avatarGuidanceEnglish,
+                  style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // Smartwatch & Vibration Feedback Route
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: color.withValues(alpha: 0.4)),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  watch.isDeviceConnected ? Icons.watch_rounded : Icons.vibration_rounded,
+                  color: color,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    watch.isDeviceConnected
+                        ? '⌚ Yesido IO39: Strong Vibration & "${event.titleSinhala}" Dispatched'
+                        : '📱 Phone Hardware Haptics: Strong Emergency Vibration Active',
+                    style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1289,6 +1179,32 @@ class _HomeScreenState extends State<HomeScreen> {
             fontWeight: FontWeight.bold,
             fontSize: 13,
             fontFamilyFallback: const ['Noto Sans Sinhala', 'Arial', 'sans-serif'],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModeChip(SoundClassifierService classifier, String mode, String label) {
+    final isSelected = classifier.monitorMode == mode;
+    return InkWell(
+      onTap: () => classifier.setMonitorMode(mode),
+      borderRadius: BorderRadius.circular(7),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF2563EB).withValues(alpha: 0.3) : Colors.transparent,
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF3B82F6) : Colors.transparent,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? const Color(0xFF60A5FA) : const Color(0xFF64748B),
+            fontSize: 11,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
           ),
         ),
       ),

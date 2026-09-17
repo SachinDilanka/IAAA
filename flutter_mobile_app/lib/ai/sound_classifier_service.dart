@@ -1,11 +1,9 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import '../models/detection_event.dart';
 import '../services/priority_engine.dart';
 import '../alerts/vibration_manager.dart';
 import '../wearable/smartwatch_service.dart';
-import '../avatar/avatar_controller.dart';
 import '../storage/history_database.dart';
 import 'audio_capture_interface.dart';
 import 'audio_capture_bridge.dart';
@@ -22,9 +20,6 @@ class SoundClassifierService extends ChangeNotifier {
   final VibrationManager _vibrationManager = VibrationManager();
   final SmartwatchService _smartwatchService = SmartwatchService();
   final HistoryDatabase _historyDatabase = HistoryDatabase();
-  final math.Random _random = math.Random();
-
-  AvatarController? _avatarController;
 
   bool _isListening = false;
   bool _autoDetectWhileListening = false;
@@ -39,8 +34,6 @@ class SoundClassifierService extends ChangeNotifier {
   String _liveSpeechTranscript = "🎤 AI Audio & Voice Monitor Standby (Tap 'Start Mic' or anywhere to activate)...";
   String _speechLanguage = 'si-LK';
   String _sensitivity = 'high';
-  int _tickCount = 0;
-  DateTime _lastRealFrameTime = DateTime.fromMillisecondsSinceEpoch(0);
   int _lastAlertTimestamp = 0;
 
   bool get isListening => _isListening;
@@ -53,6 +46,14 @@ class SoundClassifierService extends ChangeNotifier {
   String get liveSpeechTranscript => _liveSpeechTranscript;
   String get speechLanguage => _speechLanguage;
   String get sensitivity => _sensitivity;
+  String _monitorMode = 'dual';
+  String get monitorMode => _monitorMode;
+
+  void setMonitorMode(String mode) {
+    _monitorMode = mode;
+    _bridge.setMonitorMode(mode);
+    notifyListeners();
+  }
 
   void setSensitivity(String level) {
     _sensitivity = level;
@@ -71,10 +72,6 @@ class SoundClassifierService extends ChangeNotifier {
     notifyListeners();
   }
 
-  void attachAvatarController(AvatarController controller) {
-    _avatarController = controller;
-  }
-
   void playSoundSample(String soundName) {
     _bridge.playSample(soundName);
   }
@@ -83,7 +80,6 @@ class SoundClassifierService extends ChangeNotifier {
     if (_isListening) return;
     _isListening = true;
     _lastAlertTimestamp = 0;
-    _avatarController?.setListeningState();
     _liveSpeechTranscript = "🎤 AI Audio & Voice Monitor Active: Listening for 14 sounds & Sinhala keywords...";
     notifyListeners();
 
@@ -139,7 +135,6 @@ class SoundClassifierService extends ChangeNotifier {
     _bridge.startCapture(
       onAudioFrame: (frame, volume, peakFreq) {
         if (!_isListening) return;
-        _lastRealFrameTime = DateTime.now();
         _liveSpectrogramFrame = frame;
         _currentRmsVolume = volume;
         _currentPitchHz = peakFreq;
@@ -166,18 +161,12 @@ class SoundClassifierService extends ChangeNotifier {
     _currentRmsVolume = 0.0;
     _currentPitchHz = 0;
     _liveSpeechTranscript = "Microphone monitoring paused.";
-    _avatarController?.resetToIdle();
     notifyListeners();
   }
 
   void dismissActiveAlert() {
     _activeAlertDismissTimer?.cancel();
     _activeAlert = null;
-    if (_isListening) {
-      _avatarController?.setListeningState();
-    } else {
-      _avatarController?.resetToIdle();
-    }
     notifyListeners();
   }
 
@@ -191,8 +180,8 @@ class SoundClassifierService extends ChangeNotifier {
     final event = _priorityEngine.processPrediction(
       rawClass: rawClass,
       confidence: confidence,
-      minThreshold: 0.18,
-      bypassCooldown: true, // Always trigger immediately when spoken or clicked!
+      minThreshold: isLive ? 0.60 : 0.30, // Live needs high confidence; test buttons accept lower
+      bypassCooldown: !isLive, // Only bypass cooldown for manual test button presses
     );
 
     if (event == null) return;
@@ -206,9 +195,6 @@ class SoundClassifierService extends ChangeNotifier {
     if (!isLive) {
       _bridge.playSample(rawClass);
     }
-
-    // Update 3D Human Avatar state and expressive warning gesture
-    _avatarController?.handleDetectedEvent(event);
 
     // Phone Tactile Vibration (Differentiated per sound class)
     await _vibrationManager.triggerHapticPattern(event.priority, rawClass: rawClass);
@@ -230,11 +216,6 @@ class SoundClassifierService extends ChangeNotifier {
     _activeAlertDismissTimer = Timer(const Duration(milliseconds: 7000), () {
       if (_activeAlert?.id == event.id) {
         _activeAlert = null;
-        if (_isListening) {
-          _avatarController?.setListeningState();
-        } else {
-          _avatarController?.resetToIdle();
-        }
         notifyListeners();
       }
     });
