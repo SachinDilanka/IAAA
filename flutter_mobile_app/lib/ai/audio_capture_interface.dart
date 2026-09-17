@@ -16,4 +16,6 @@ abstract class AudioCaptureInterface {
   Map<String, dynamic> pollLatestState();
 
   void setSpeechLanguage(String langCode);
+
+  void setSensitivity(String level);
 }

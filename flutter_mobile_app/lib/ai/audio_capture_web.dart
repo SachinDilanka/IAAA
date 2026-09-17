@@ -84,6 +84,13 @@ class AudioCaptureWeb implements AudioCaptureInterface {
   }
 
   @override
+  void setSensitivity(String level) {
+    try {
+      js.context.callMethod('setAcousticSensitivity', [level]);
+    } catch (e) {}
+  }
+
+  @override
   Future<bool> connectBleWatch() async {
     try {
       final res = js.context.callMethod('connectYesidoBleWatch');

@@ -168,6 +168,37 @@ class AudioCaptureNative implements AudioCaptureInterface {
     _latestFrame = frame;
 
     _onAudioFrame?.call(frame, _latestVolume, _latestPitch);
+
+    // Fallback Native Acoustic Classifier when speech service doesn't produce transcript
+    final now = DateTime.now();
+    if (now.difference(_lastTriggerTime).inMilliseconds > 1400) {
+      if (normalizedVol >= 0.55) {
+        // High energy burst: vocal distress or smoke alarm
+        if (_latestPitch >= 2200) {
+          _triggerAcousticAlert('firetruck', 0.96, 'Phone Acoustic Sensor (Smoke/Fire Alarm)');
+        } else if (_latestPitch >= 750) {
+          _triggerAcousticAlert('screaming', 0.95, 'Phone Acoustic Sensor (Vocal Distress)');
+        } else if (_latestPitch >= 350 && _latestPitch <= 650) {
+          _triggerAcousticAlert('vehicle horns', 0.95, 'Phone Acoustic Sensor (Vehicle Horn)');
+        } else {
+          _triggerAcousticAlert('udaw', 0.94, 'Phone Acoustic Sensor (Help / Distress Call)');
+        }
+      }
+    }
+  }
+
+  void _triggerAcousticAlert(String category, double confidence, String source) {
+    final now = DateTime.now();
+    _lastTriggerTime = now;
+    _latestAlert = {
+      'category': category,
+      'confidence': confidence,
+      'source': source,
+      'timestamp': now.millisecondsSinceEpoch,
+    };
+    _latestTranscript = '🚨 Acoustic Alert: $category';
+    _onSpeechTranscript?.call(_latestTranscript);
+    _onAudioEvent?.call(category, confidence, source);
   }
 
   void _startAmbientWaveTicker() {
@@ -413,5 +444,10 @@ class AudioCaptureNative implements AudioCaptureInterface {
   @override
   void setSpeechLanguage(String langCode) {
     debugPrint('[AudioCaptureNative] Language switch requested: $langCode');
+  }
+
+  @override
+  void setSensitivity(String level) {
+    debugPrint('[AudioCaptureNative] Sensitivity updated to: $level');
   }
 }

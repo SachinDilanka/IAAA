@@ -38,6 +38,7 @@ class SoundClassifierService extends ChangeNotifier {
   int _currentPitchHz = 220;
   String _liveSpeechTranscript = "🎤 AI Audio & Voice Monitor Standby (Tap 'Start Mic' or anywhere to activate)...";
   String _speechLanguage = 'si-LK';
+  String _sensitivity = 'high';
   int _tickCount = 0;
   DateTime _lastRealFrameTime = DateTime.fromMillisecondsSinceEpoch(0);
   int _lastAlertTimestamp = 0;
@@ -51,6 +52,13 @@ class SoundClassifierService extends ChangeNotifier {
   int get currentPitchHz => _currentPitchHz;
   String get liveSpeechTranscript => _liveSpeechTranscript;
   String get speechLanguage => _speechLanguage;
+  String get sensitivity => _sensitivity;
+
+  void setSensitivity(String level) {
+    _sensitivity = level;
+    _bridge.setSensitivity(level);
+    notifyListeners();
+  }
 
   void setSpeechLanguage(String lang) {
     _speechLanguage = lang;
