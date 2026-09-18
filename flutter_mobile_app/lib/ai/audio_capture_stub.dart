@@ -34,7 +34,6 @@ class AudioCaptureNative implements AudioCaptureInterface {
   String _matchedLocaleId = 'si-LK';
 
   DateTime _lastTriggerTime = DateTime.fromMillisecondsSinceEpoch(0);
-  DateTime _lastSpeechTime = DateTime.fromMillisecondsSinceEpoch(0);
   final Map<String, DateTime> _classCooldown = {};
   int _lastMlTime = 0;
 
@@ -144,8 +143,9 @@ class AudioCaptureNative implements AudioCaptureInterface {
     _totalPcmReceived = 0;
 
     // 1. Request Android Runtime Permissions
+    PermissionStatus mic = PermissionStatus.denied;
     try {
-      final mic = await Permission.microphone.request();
+      mic = await Permission.microphone.request();
       await [
         Permission.notification,
         Permission.bluetoothConnect,
@@ -159,8 +159,13 @@ class AudioCaptureNative implements AudioCaptureInterface {
       debugPrint('[AudioCaptureNative] Permission error: $e');
     }
 
-    // 2. Load Offline Deep Neural Network Model in background
-    _loadNeuralNetwork();
+    if (!mic.isGranted) {
+      return;
+    }
+
+    // Load the model before opening the stream so the first one-second window
+    // cannot be discarded while the asset files are still loading.
+    await _loadNeuralNetwork();
 
     // 3. Start continuous visualizer animation ticker
     _startAmbientWaveTicker();
@@ -168,11 +173,13 @@ class AudioCaptureNative implements AudioCaptureInterface {
     _latestTranscript = "🎤 Live Mic Active: Listening for Sinhala Voice & Environmental Sounds...";
     _onSpeechTranscript?.call(_latestTranscript);
 
-    // 4. Start Google Speech Recognition
-    _initAndStartSpeechRecognition();
-
-    // 5. Start AudioStreamer directly at 16,000 Hz
+    // Open the raw PCM stream before speech recognition. Android devices often
+    // reject a second recorder when the recognition service owns the mic first.
     _startAudioStreamer();
+
+    // Speech recognition is supplemental; acoustic detection must keep running
+    // even when the platform recognition service is unavailable or busy.
+    _initAndStartSpeechRecognition();
   }
 
   Future<void> _loadNeuralNetwork() async {
@@ -276,7 +283,6 @@ class AudioCaptureNative implements AudioCaptureInterface {
         onResult: (result) {
           final words = result.recognizedWords.trim();
           if (words.isNotEmpty) {
-            _lastSpeechTime = DateTime.now();
             final displayText = '🗣️ Heard: "$words"';
             _latestTranscript = displayText;
             _onSpeechTranscript?.call(displayText);
@@ -454,11 +460,6 @@ class AudioCaptureNative implements AudioCaptureInterface {
       // Require audible sound (RMS >= 0.010 or peak >= 0.025) to ignore ambient background silence
       if (maxAmp >= 0.025 || rms >= 0.010) {
         _lastMlTime = nowMs;
-
-        // If speech recognition recently transcribed words, respect speech lockout
-        if (DateTime.now().difference(_lastSpeechTime).inMilliseconds < 1500) {
-          return;
-        }
 
         // Extract 1-second continuous rolling buffer
         final List<double> window1s = List<double>.filled(windowLen, 0.0);
@@ -658,6 +659,8 @@ class AudioCaptureNative implements AudioCaptureInterface {
         clean.contains('අනතුරු') ||
         clean.contains('anathurak') ||
         clean.contains('anaturak') ||
+        clean.contains('anuturak') ||
+        clean.contains('anutura') ||
         clean.contains('anature') ||
         clean.contains('danger') ||
         clean.contains('hazard') ||
@@ -671,6 +674,7 @@ class AudioCaptureNative implements AudioCaptureInterface {
         clean.contains('කරදර') ||
         clean.contains('කරදරේ') ||
         clean.contains('karadarayak') ||
+        clean.contains('karadari') ||
         clean.contains('karadare') ||
         clean.contains('trouble')) {
       matched = 'karadarayak';
@@ -700,6 +704,9 @@ class AudioCaptureNative implements AudioCaptureInterface {
         clean.contains('එහාට') ||
         clean.contains('අයින් වෙන්න') ||
         clean.contains('ehata') ||
+        clean.contains('akihata') ||
+        clean.contains('akihata venna') ||
+        clean.contains('akihata wenna') ||
         clean.contains('move away')) {
       matched = 'ehata_wenna';
     }
