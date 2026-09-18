@@ -34,6 +34,7 @@ class AudioCaptureNative implements AudioCaptureInterface {
   String _matchedLocaleId = 'si-LK';
 
   DateTime _lastTriggerTime = DateTime.fromMillisecondsSinceEpoch(0);
+  DateTime _lastSpeechTime = DateTime.fromMillisecondsSinceEpoch(0);
   final Map<String, DateTime> _classCooldown = {};
   int _lastMlTime = 0;
 
@@ -103,6 +104,14 @@ class AudioCaptureNative implements AudioCaptureInterface {
     'balagena': 0.55,
     'parissamin': 0.55,
     'screaming': 0.55,
+  };
+
+  static const Set<String> environmentalClasses = {
+    'ambulance_siren',
+    'fire_alarm',
+    'vehicle_horn',
+    'baby_crying',
+    'dog_barking',
   };
 
   static const Map<String, String> sinhalaTitles = {
@@ -283,6 +292,7 @@ class AudioCaptureNative implements AudioCaptureInterface {
         onResult: (result) {
           final words = result.recognizedWords.trim();
           if (words.isNotEmpty) {
+            _lastSpeechTime = DateTime.now();
             final displayText = '🗣️ Heard: "$words"';
             _latestTranscript = displayText;
             _onSpeechTranscript?.call(displayText);
@@ -461,6 +471,13 @@ class AudioCaptureNative implements AudioCaptureInterface {
       if (maxAmp >= 0.025 || rms >= 0.010) {
         _lastMlTime = nowMs;
 
+        // The model contains keyword labels, but MFCC classification cannot
+        // reliably distinguish a spoken word from an environmental sound.
+        // Speech recognition owns keyword alerts; give it priority here.
+        if (DateTime.now().difference(_lastSpeechTime).inMilliseconds < 2000) {
+          return;
+        }
+
         // Extract 1-second continuous rolling buffer
         final List<double> window1s = List<double>.filled(windowLen, 0.0);
         for (int i = 0; i < windowLen; i++) {
@@ -488,7 +505,7 @@ class AudioCaptureNative implements AudioCaptureInterface {
           final topClass = prediction.label;
           final topProb = prediction.probability;
 
-          if (topClass != 'background_traffic') {
+          if (environmentalClasses.contains(topClass)) {
             final double reqThreshold = classThresholds[topClass] ?? 0.65;
             if (topProb >= reqThreshold) {
               _triggerMlAlert(topClass, topProb);
