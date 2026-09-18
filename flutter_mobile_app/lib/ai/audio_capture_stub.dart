@@ -291,7 +291,8 @@ class AudioCaptureNative implements AudioCaptureInterface {
         listenFor: const Duration(seconds: 30),
       );
 
-        if (DateTime.now().difference(_lastSpeechTime).inMilliseconds < 4000) {
+      await _speechToText.listen(
+        onResult: (result) {
           final words = result.recognizedWords.trim();
           if (words.isNotEmpty) {
             _lastSpeechTime = DateTime.now();
@@ -478,7 +479,7 @@ class AudioCaptureNative implements AudioCaptureInterface {
         // The model contains keyword labels, but MFCC classification cannot
         // reliably distinguish a spoken word from an environmental sound.
         // Speech recognition owns keyword alerts; give it priority here.
-        if (DateTime.now().difference(_lastSpeechTime).inMilliseconds < 2000) {
+        if (DateTime.now().difference(_lastSpeechTime).inMilliseconds < 4000) {
           return;
         }
 
@@ -644,6 +645,9 @@ class AudioCaptureNative implements AudioCaptureInterface {
         clean.contains('උදවු') ||
         clean.contains('උදව') ||
         clean.contains('udaw') ||
+        clean.contains('udhaw') ||
+        clean.contains('udhav') ||
+        clean.contains('udawu') ||
         clean.contains('udau') ||
         clean.contains('udav') ||
         clean.contains('udaau') ||
@@ -663,6 +667,7 @@ class AudioCaptureNative implements AudioCaptureInterface {
         clean.contains('බේරන්න') ||
         clean.contains('බේරපන්') ||
         clean.contains('beeraganna') ||
+        clean.contains('beraganna') ||
         clean.contains('beraganna') ||
         clean.contains('beeranna') ||
         clean.contains('beranna') ||
@@ -692,6 +697,8 @@ class AudioCaptureNative implements AudioCaptureInterface {
         clean.contains('අනතුර') ||
         clean.contains('අනතුරු') ||
         clean.contains('anathurak') ||
+        clean.contains('anathura') ||
+        clean.contains('anadura') ||
         clean.contains('anaturak') ||
         clean.contains('anuturak') ||
         clean.contains('anutura') ||
@@ -708,6 +715,8 @@ class AudioCaptureNative implements AudioCaptureInterface {
         clean.contains('කරදර') ||
         clean.contains('කරදරේ') ||
         clean.contains('karadarayak') ||
+        clean.contains('karadaraya') ||
+        clean.contains('kadadaria') ||
         clean.contains('karadari') ||
         clean.contains('karadare') ||
         clean.contains('trouble')) {
@@ -728,6 +737,8 @@ class AudioCaptureNative implements AudioCaptureInterface {
         clean.contains('පරිස්සමෙන්') ||
         clean.contains('පරිස්සම්') ||
         clean.contains('parissamin') ||
+        clean.contains('parisamin') ||
+        clean.contains('pare sami') ||
         clean.contains('parissamen') ||
         clean.contains('careful') ||
         clean.contains('caution')) {
@@ -738,6 +749,9 @@ class AudioCaptureNative implements AudioCaptureInterface {
         clean.contains('එහාට') ||
         clean.contains('අයින් වෙන්න') ||
         clean.contains('ehata') ||
+        clean.contains('ehata wena') ||
+        clean.contains('ehata venna') ||
+        clean.contains('ehatavena') ||
         clean.contains('akihata') ||
         clean.contains('akihata venna') ||
         clean.contains('akihata wenna') ||
@@ -781,20 +795,6 @@ class AudioCaptureNative implements AudioCaptureInterface {
       _onAudioEvent?.call(matched, 0.98, 'Voice Speech Recognition: "$text"');
     }
   }
-  clean.contains('udhaw') ||
-  clean.contains('udhav') ||
-  clean.contains('udawu') ||
-  clean.contains('anathura') ||
-  clean.contains('anadura') ||
-  clean.contains('karadaraya') ||
-  clean.contains('kadadaria') ||
-  clean.contains('ehata wena') ||
-  clean.contains('ehata venna') ||
-  clean.contains('ehatavena') ||
-  clean.contains('beraganna') ||
-  clean.contains('beeraganna') ||
-  clean.contains('parisamin') ||
-  clean.contains('pare sami') ||
 
   @override
   void stopCapture() {
