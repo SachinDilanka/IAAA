@@ -496,44 +496,7 @@ class _HomeScreenState extends State<HomeScreen> {
   );
 }
 
-  Widget _buildMonitorModeButton(
-    SoundClassifierService classifier, {
-    required String label,
-    required IconData icon,
-    required bool selected,
-    required String mode,
-  }) {
-    return InkWell(
-      onTap: () => classifier.setMonitorMode(mode),
-      borderRadius: BorderRadius.circular(7),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFF2563EB).withValues(alpha: 0.35) : Colors.transparent,
-          borderRadius: BorderRadius.circular(7),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 15, color: selected ? const Color(0xFF60A5FA) : const Color(0xFF64748B)),
-            const SizedBox(width: 5),
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: selected ? const Color(0xFFDBEAFE) : const Color(0xFF94A3B8),
-                  fontSize: 11,
-                  fontWeight: selected ? FontWeight.bold : FontWeight.w500,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+
 
   /// Live Microphone & Speech Recognition Card with Language Toggle & Dancing Spectrum Visualizer
   Widget _buildLiveMicrophoneAcousticCard(BuildContext context) {
@@ -723,33 +686,31 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 10),
 
-              // Android must use one microphone owner at a time.
+              // Single Unified Sensor Banner
               Container(
-                padding: const EdgeInsets.all(4),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 decoration: BoxDecoration(
                   color: const Color(0xFF0F172A),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFF334155)),
+                  border: Border.all(color: const Color(0xFF2563EB).withValues(alpha: 0.4)),
                 ),
-                child: Row(
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
+                    Icon(Icons.graphic_eq_rounded, color: Color(0xFF3B82F6), size: 16),
+                    SizedBox(width: 6),
+                    Icon(Icons.record_voice_over_rounded, color: Color(0xFF60A5FA), size: 16),
+                    SizedBox(width: 8),
                     Expanded(
-                      child: _buildMonitorModeButton(
-                        classifier,
-                        label: 'Voice keywords',
-                        icon: Icons.record_voice_over_rounded,
-                        selected: monitorMode == 'voice',
-                        mode: 'voice',
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: _buildMonitorModeButton(
-                        classifier,
-                        label: 'Environment sounds',
-                        icon: Icons.graphic_eq_rounded,
-                        selected: monitorMode == 'environment',
-                        mode: 'environment',
+                      child: Text(
+                        "UNIFIED SENSOR: Listening for Both Sinhala Voice Keywords & Environmental Sounds",
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Color(0xFFE2E8F0),
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ],

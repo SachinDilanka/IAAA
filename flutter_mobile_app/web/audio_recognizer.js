@@ -641,26 +641,26 @@
     const t = text.replace(/[^\u0D80-\u0DFFa-z0-9\s]/g, ' ').toLowerCase();
     let m = null;
 
-    // Spoken Emergency Sinhala & English Phrases ONLY (Environmental sounds are classified purely by Deep Neural ML)
-    if (t.includes('උදව්') || t.includes('උදවු') || t.includes('udaw') || /\bhelp\b/.test(t) || /\bsave me\b/.test(t))
+    // Spoken Emergency Sinhala & English Phrases (Matches inside full Sinhala sentences)
+    if (t.includes('උදව්') || t.includes('උදවු') || t.includes('උදව්වක්') || t.includes('udaw') || t.includes('udhaw') || t.includes('udhav') || /\bhelp\b/.test(t) || /\bsave me\b/.test(t) || /\bsave\b/.test(t))
       m = 'udaw';
-    else if (t.includes('බේරගන්න') || t.includes('බේරන්න') || t.includes('beeraganna') || /\brescue\b/.test(t))
+    else if (t.includes('බේරගන්න') || t.includes('බේර ගන්න') || t.includes('බේරගනින්') || t.includes('බේරන්න') || t.includes('beeraganna') || t.includes('beraganna') || /\brescue\b/.test(t))
       m = 'beeraganna';
-    else if (t.includes('ගින්නක්') || t.includes('ගින්න') || t.includes('ginnak'))
+    else if (t.includes('ගින්නක්') || t.includes('ගින්න') || t.includes('ගින්දර') || t.includes('ගිනි') || t.includes('ginnak') || t.includes('ginna') || /\bfire\b/.test(t))
       m = 'ginnak';
-    else if (t.includes('අනතුරක්') || t.includes('අනතුර') || t.includes('anathurak') || /\bdanger\b/.test(t))
+    else if (t.includes('අනතුරක්') || t.includes('අනතුර') || t.includes('අනතුරු') || t.includes('anathurak') || t.includes('anathura') || t.includes('anaturak') || /\bdanger\b/.test(t) || /\bhazard\b/.test(t))
       m = 'anathurak';
-    else if (t.includes('කරදරයක්') || t.includes('කරදර') || t.includes('karadarayak'))
+    else if (t.includes('කරදරයක්') || t.includes('කරදර') || t.includes('කරදරේ') || t.includes('karadarayak') || t.includes('karadaraya') || /\btrouble\b/.test(t))
       m = 'karadarayak';
-    else if (t.includes('බලාගෙන') || t.includes('balagena') || /\bwatch out\b/.test(t) || /\blook out\b/.test(t))
+    else if (t.includes('බලාගෙන') || t.includes('බලා ගෙන') || t.includes('බලාපන්') || t.includes('balagena') || /\bwatch out\b/.test(t) || /\blook out\b/.test(t))
       m = 'balagena';
-    else if (t.includes('පරිස්සමින්') || t.includes('පරිස්සමෙන්') || t.includes('parissamin') || /\bbe careful\b/.test(t))
+    else if (t.includes('පරිස්සමින්') || t.includes('පරිස්සමෙන්') || t.includes('පරිස්සම්') || t.includes('parissamin') || t.includes('parissamen') || /\bcareful\b/.test(t) || /\bcaution\b/.test(t))
       m = 'parissamin';
-    else if (t.includes('එහාට') || t.includes('ehata') || /\bmove away\b/.test(t))
+    else if (t.includes('එහාට වෙන්න') || t.includes('එහාට') || t.includes('අයින් වෙන්න') || t.includes('ehata') || /\bmove away\b/.test(t))
       m = 'ehata_wenna';
-    else if (t.includes('නවත්තන්න') || t.includes('nawaththanna') || /\bstop\b/.test(t))
+    else if (t.includes('නවත්තන්න') || t.includes('නවත්වන්න') || t.includes('නවතින්න') || t.includes('nawaththanna') || /\bstop\b/.test(t))
       m = 'nawaththanna';
-    else if (t.includes('කෑගැසීම') || /\bscream\b/.test(t) || /\bscreaming\b/.test(t))
+    else if (t.includes('කෑගැසීම') || t.includes('කෑ ගහනවා') || /\bscream\b/.test(t) || /\bscreaming\b/.test(t))
       m = 'screaming';
 
     if (m) _trigger(m, 0.98, `Spoken Voice Keyword: "${text}"`);

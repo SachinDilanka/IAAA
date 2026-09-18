@@ -475,14 +475,6 @@ class AudioCaptureNative implements AudioCaptureInterface {
       // Require audible sound (RMS >= 0.010 or peak >= 0.025) to ignore ambient background silence
       if (maxAmp >= 0.025 || rms >= 0.010) {
         _lastMlTime = nowMs;
-
-        // The model contains keyword labels, but MFCC classification cannot
-        // reliably distinguish a spoken word from an environmental sound.
-        // Speech recognition owns keyword alerts; give it priority here.
-        if (DateTime.now().difference(_lastSpeechTime).inMilliseconds < 4000) {
-          return;
-        }
-
         // Extract 1-second continuous rolling buffer
         final List<double> window1s = List<double>.filled(windowLen, 0.0);
         for (int i = 0; i < windowLen; i++) {
@@ -510,8 +502,8 @@ class AudioCaptureNative implements AudioCaptureInterface {
           final topClass = prediction.label;
           final topProb = prediction.probability;
 
-          if (environmentalClasses.contains(topClass)) {
-            final double reqThreshold = classThresholds[topClass] ?? 0.65;
+          if (topClass != 'background_traffic') {
+            final double reqThreshold = classThresholds[topClass] ?? 0.60;
             if (topProb >= reqThreshold) {
               _triggerMlAlert(topClass, topProb);
             }
