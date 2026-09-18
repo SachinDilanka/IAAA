@@ -291,8 +291,7 @@ class AudioCaptureNative implements AudioCaptureInterface {
         listenFor: const Duration(seconds: 30),
       );
 
-      await _speechToText.listen(
-        onResult: (result) {
+        if (DateTime.now().difference(_lastSpeechTime).inMilliseconds < 4000) {
           final words = result.recognizedWords.trim();
           if (words.isNotEmpty) {
             _lastSpeechTime = DateTime.now();
@@ -782,6 +781,20 @@ class AudioCaptureNative implements AudioCaptureInterface {
       _onAudioEvent?.call(matched, 0.98, 'Voice Speech Recognition: "$text"');
     }
   }
+  clean.contains('udhaw') ||
+  clean.contains('udhav') ||
+  clean.contains('udawu') ||
+  clean.contains('anathura') ||
+  clean.contains('anadura') ||
+  clean.contains('karadaraya') ||
+  clean.contains('kadadaria') ||
+  clean.contains('ehata wena') ||
+  clean.contains('ehata venna') ||
+  clean.contains('ehatavena') ||
+  clean.contains('beraganna') ||
+  clean.contains('beeraganna') ||
+  clean.contains('parisamin') ||
+  clean.contains('pare sami') ||
 
   @override
   void stopCapture() {
