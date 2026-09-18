@@ -496,6 +496,45 @@ class _HomeScreenState extends State<HomeScreen> {
   );
 }
 
+  Widget _buildMonitorModeButton(
+    SoundClassifierService classifier, {
+    required String label,
+    required IconData icon,
+    required bool selected,
+    required String mode,
+  }) {
+    return InkWell(
+      onTap: () => classifier.setMonitorMode(mode),
+      borderRadius: BorderRadius.circular(7),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF2563EB).withValues(alpha: 0.35) : Colors.transparent,
+          borderRadius: BorderRadius.circular(7),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 15, color: selected ? const Color(0xFF60A5FA) : const Color(0xFF64748B)),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: selected ? const Color(0xFFDBEAFE) : const Color(0xFF94A3B8),
+                  fontSize: 11,
+                  fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// Live Microphone & Speech Recognition Card with Language Toggle & Dancing Spectrum Visualizer
   Widget _buildLiveMicrophoneAcousticCard(BuildContext context) {
     return Consumer<SoundClassifierService>(
@@ -506,6 +545,7 @@ class _HomeScreenState extends State<HomeScreen> {
         final transcript = classifier.liveSpeechTranscript;
         final frame = classifier.liveSpectrogramFrame;
         final currentLang = classifier.speechLanguage;
+        final monitorMode = classifier.monitorMode;
 
         return Container(
           padding: const EdgeInsets.all(16),
@@ -683,6 +723,40 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 10),
 
+              // Android must use one microphone owner at a time.
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF334155)),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _buildMonitorModeButton(
+                        classifier,
+                        label: 'Voice keywords',
+                        icon: Icons.record_voice_over_rounded,
+                        selected: monitorMode == 'voice',
+                        mode: 'voice',
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: _buildMonitorModeButton(
+                        classifier,
+                        label: 'Environment sounds',
+                        icon: Icons.graphic_eq_rounded,
+                        selected: monitorMode == 'environment',
+                        mode: 'environment',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+
               // Dynamic 40-Band Audio Visualizer (Tall, undulating bars with gradient colors)
               Container(
                 height: 96,
@@ -700,6 +774,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     final normalized = val.clamp(0.08, 1.0);
                     // Lively minimum height of 14px so bars are always tall, dancing, and visible
                     final barHeight = (14.0 + (68.0 * normalized)).clamp(14.0, 80.0);
+
 
                     Color barColor;
                     if (normalized > 0.60) {

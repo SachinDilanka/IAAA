@@ -35,6 +35,7 @@ class AudioCaptureNative implements AudioCaptureInterface {
 
   DateTime _lastTriggerTime = DateTime.fromMillisecondsSinceEpoch(0);
   DateTime _lastSpeechTime = DateTime.fromMillisecondsSinceEpoch(0);
+  String _monitorMode = 'voice';
   final Map<String, DateTime> _classCooldown = {};
   int _lastMlTime = 0;
 
@@ -182,12 +183,9 @@ class AudioCaptureNative implements AudioCaptureInterface {
     _latestTranscript = "🎤 Live Mic Active: Listening for Sinhala Voice & Environmental Sounds...";
     _onSpeechTranscript?.call(_latestTranscript);
 
-    // Open the raw PCM stream before speech recognition. Android devices often
-    // reject a second recorder when the recognition service owns the mic first.
-    _startAudioStreamer();
-
-    // Speech recognition is supplemental; acoustic detection must keep running
-    // even when the platform recognition service is unavailable or busy.
+    // Android cannot reliably share one microphone between the speech service
+    // and a second PCM recorder. Voice mode therefore gives the microphone to
+    // speech recognition, which is the only reliable path for exact keywords.
     _initAndStartSpeechRecognition();
   }
 
@@ -394,6 +392,8 @@ class AudioCaptureNative implements AudioCaptureInterface {
   }
 
   void _processPcmBuffer(List<double> rawBuffer) {
+    if (_monitorMode == 'voice') return;
+
     _totalPcmReceived += rawBuffer.length;
     _pcmPacketCount++;
     _firstPacketTime ??= DateTime.now();
@@ -833,7 +833,17 @@ class AudioCaptureNative implements AudioCaptureInterface {
 
   @override
   void setMonitorMode(String mode) {
-    debugPrint('[AudioCaptureNative] Monitor Mode updated: $mode');
+    _monitorMode = mode == 'environment' ? 'environment' : 'voice';
+    debugPrint('[AudioCaptureNative] Monitor Mode updated: $_monitorMode');
+
+    if (!_isListening) return;
+    if (_monitorMode == 'environment') {
+      _startAudioStreamer();
+      _stopSpeechRecognition();
+    } else {
+      _stopAudioStreamer();
+      _startSpeechSession();
+    }
   }
 
   @override
