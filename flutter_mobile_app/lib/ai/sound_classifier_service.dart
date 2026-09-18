@@ -158,6 +158,7 @@ class SoundClassifierService extends ChangeNotifier {
   void dismissActiveAlert() {
     _activeAlertDismissTimer?.cancel();
     _activeAlert = null;
+    _bridge.acknowledgeAlert();
     notifyListeners();
   }
 

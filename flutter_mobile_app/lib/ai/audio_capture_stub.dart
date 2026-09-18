@@ -35,7 +35,9 @@ class AudioCaptureNative implements AudioCaptureInterface {
 
   DateTime _lastTriggerTime = DateTime.fromMillisecondsSinceEpoch(0);
   DateTime _lastSpeechTime = DateTime.fromMillisecondsSinceEpoch(0);
-  String _monitorMode = 'voice';
+  bool _alertLatched = false;
+  String? _candidateClass;
+  int _candidateCount = 0;
   final Map<String, DateTime> _classCooldown = {};
   int _lastMlTime = 0;
 
@@ -151,6 +153,9 @@ class AudioCaptureNative implements AudioCaptureInterface {
     _onAudioEvent = onAudioEvent;
     _onSpeechTranscript = onSpeechTranscript;
     _totalPcmReceived = 0;
+    _alertLatched = false;
+    _candidateClass = null;
+    _candidateCount = 0;
 
     // 1. Request Android Runtime Permissions
     PermissionStatus mic = PermissionStatus.denied;
@@ -183,9 +188,9 @@ class AudioCaptureNative implements AudioCaptureInterface {
     _latestTranscript = "🎤 Live Mic Active: Listening for Sinhala Voice & Environmental Sounds...";
     _onSpeechTranscript?.call(_latestTranscript);
 
-    // Android cannot reliably share one microphone between the speech service
-    // and a second PCM recorder. Voice mode therefore gives the microphone to
-    // speech recognition, which is the only reliable path for exact keywords.
+    // Run both recognition paths. The latch and two-window confirmation below
+    // prevent competing predictions from producing a cascade of alerts.
+    _startAudioStreamer();
     _initAndStartSpeechRecognition();
   }
 
@@ -392,7 +397,7 @@ class AudioCaptureNative implements AudioCaptureInterface {
   }
 
   void _processPcmBuffer(List<double> rawBuffer) {
-    if (_monitorMode == 'voice') return;
+    if (_alertLatched) return;
 
     _totalPcmReceived += rawBuffer.length;
     _pcmPacketCount++;
@@ -517,6 +522,16 @@ class AudioCaptureNative implements AudioCaptureInterface {
   }
 
   void _triggerMlAlert(String rawCls, double confidence) {
+    if (_alertLatched) return;
+
+    if (_candidateClass == rawCls) {
+      _candidateCount++;
+    } else {
+      _candidateClass = rawCls;
+      _candidateCount = 1;
+    }
+    if (_candidateCount < 2) return;
+
     final now = DateTime.now();
 
     final fc = flutterClassMap[rawCls];
@@ -533,6 +548,9 @@ class AudioCaptureNative implements AudioCaptureInterface {
 
     _lastTriggerTime = now;
     _classCooldown[fc] = now;
+    _alertLatched = true;
+    _candidateClass = null;
+    _candidateCount = 0;
 
     final sinhala = sinhalaTitles[fc] ?? fc;
     final source = "Acoustic AI Model: $rawCls (${(confidence * 100).toStringAsFixed(0)}%)";
@@ -616,7 +634,7 @@ class AudioCaptureNative implements AudioCaptureInterface {
   /// Match Sinhala Unicode Speech, Sinhala Transliterations, and English Emergency Keywords
   void _matchKeywords(String text) {
     final now = DateTime.now();
-    if (now.difference(_lastTriggerTime).inMilliseconds < 3500) return;
+    if (_alertLatched || now.difference(_lastTriggerTime).inMilliseconds < 3500) return;
 
     final clean = text.toLowerCase().replaceAll(RegExp(r'[^a-z0-9\u0D80-\u0DFF\s]'), ' ');
 
@@ -748,6 +766,7 @@ class AudioCaptureNative implements AudioCaptureInterface {
 
     if (matched != null) {
       _lastTriggerTime = now;
+      _alertLatched = true;
       final sinhala = sinhalaTitles[matched] ?? matched;
       final displayText = '🗣️ Heard: "$text" ➔ 🚨 $sinhala';
       _latestTranscript = displayText;
@@ -778,6 +797,16 @@ class AudioCaptureNative implements AudioCaptureInterface {
     _latestPitch = 0;
     _latestFrame = List.generate(40, (i) => 0.02);
     _latestTranscript = "Microphone monitoring paused.";
+  }
+
+  @override
+  void acknowledgeAlert() {
+    _alertLatched = false;
+    _candidateClass = null;
+    _candidateCount = 0;
+    _latestAlert = null;
+    _latestTranscript = "🎤 Listening for Sinhala keywords and environmental sounds...";
+    _onSpeechTranscript?.call(_latestTranscript);
   }
 
   @override
@@ -833,17 +862,7 @@ class AudioCaptureNative implements AudioCaptureInterface {
 
   @override
   void setMonitorMode(String mode) {
-    _monitorMode = mode == 'environment' ? 'environment' : 'voice';
-    debugPrint('[AudioCaptureNative] Monitor Mode updated: $_monitorMode');
-
-    if (!_isListening) return;
-    if (_monitorMode == 'environment') {
-      _startAudioStreamer();
-      _stopSpeechRecognition();
-    } else {
-      _stopAudioStreamer();
-      _startSpeechSession();
-    }
+    debugPrint('[AudioCaptureNative] Combined monitor enabled');
   }
 
   @override

@@ -7,6 +7,8 @@ abstract class AudioCaptureInterface {
 
   void stopCapture();
 
+  void acknowledgeAlert();
+
   Future<bool> connectBleWatch();
 
   void sendWatchVibration(String priority, {String? title, String? sinhala, String? soundClass});
