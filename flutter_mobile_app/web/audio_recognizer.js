@@ -412,8 +412,8 @@
       const resampled = _resampleTo16k(cont, sr);
       const res = _runNN(resampled);
       if (res && res.cls && res.cls !== 'background_traffic') {
-        // High confidence threshold (>= 85%) ensures 0 false alarms from speech or room noise
-        if (res.prob >= 0.85) {
+        // Sensitive threshold (>= 45%) for baby crying, vehicle horn, traffic & Sinhala keywords
+        if (res.prob >= 0.45) {
           _trigger(res.cls, res.prob, `Deep Neural Model: ${res.cls} (${(res.prob * 100).toFixed(0)}%)`);
         }
       }

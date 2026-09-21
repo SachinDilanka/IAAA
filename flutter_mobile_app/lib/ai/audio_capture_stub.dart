@@ -81,32 +81,36 @@ class AudioCaptureNative implements AudioCaptureInterface {
     'ambulance': 'ambulance',
     'fire_alarm': 'firetruck',
     'firetruck': 'firetruck',
-    'vehicle_horn': 'vehicle horns',
-    'vehicle horns': 'vehicle horns',
-    'baby_crying': 'baby crying',
-    'baby crying': 'baby crying',
-    'dog_barking': 'dog_bark',
-    'dog_bark': 'dog_bark',
+    'vehicle_horn': 'vehicle_horn',
+    'vehicle horns': 'vehicle_horn',
+    'baby_crying': 'baby_crying',
+    'baby crying': 'baby_crying',
+    'dog_barking': 'dog_barking',
+    'dog_bark': 'dog_barking',
     'road': 'road',
     'traffic': 'traffic',
     'background_traffic': null,
   };
 
-  // Calibrated confidence thresholds: High confidence for environmental sounds, responsive for Sinhala keywords
+  // High-sensitivity confidence thresholds for real-world acoustic detection
   static const Map<String, double> classThresholds = {
-    'baby_crying': 0.70,
-    'dog_barking': 0.70,
-    'vehicle_horn': 0.75,
-    'ambulance_siren': 0.70,
-    'fire_alarm': 0.70,
-    'udaw': 0.55,
-    'beeraganna': 0.55,
-    'ginnak': 0.55,
-    'anathurak': 0.55,
-    'karadarayak': 0.55,
-    'balagena': 0.55,
-    'parissamin': 0.55,
-    'screaming': 0.55,
+    'baby_crying': 0.40,
+    'dog_barking': 0.40,
+    'vehicle_horn': 0.40,
+    'ambulance_siren': 0.40,
+    'fire_alarm': 0.40,
+    'traffic': 0.40,
+    'road': 0.40,
+    'udaw': 0.40,
+    'beeraganna': 0.40,
+    'ginnak': 0.40,
+    'anathurak': 0.40,
+    'karadarayak': 0.40,
+    'balagena': 0.40,
+    'parissamin': 0.40,
+    'ehata_wenna': 0.40,
+    'nawaththanna': 0.40,
+    'screaming': 0.40,
   };
 
   static const Set<String> environmentalClasses = {
@@ -473,7 +477,7 @@ class AudioCaptureNative implements AudioCaptureInterface {
     final int windowLen = _rollingCap;
     if (nowMs - _lastMlTime > 250 && _classifier.isLoaded && _totalPcmReceived >= windowLen) {
       // Require audible sound (RMS >= 0.010 or peak >= 0.025) to ignore ambient background silence
-      if (maxAmp >= 0.025 || rms >= 0.010) {
+      if (maxAmp >= 0.012 || rms >= 0.005) {
         _lastMlTime = nowMs;
         // Extract 1-second continuous rolling buffer
         final List<double> window1s = List<double>.filled(windowLen, 0.0);
@@ -489,8 +493,8 @@ class AudioCaptureNative implements AudioCaptureInterface {
           final a = resampled16k[i].abs();
           if (a > winPeak) winPeak = a;
         }
-        if (winPeak > 0.012) {
-          final double scale = (0.75 / winPeak).clamp(1.0, 15.0);
+        if (winPeak > 0.008) {
+          final double scale = (0.75 / winPeak).clamp(1.0, 20.0);
           for (int i = 0; i < 16000; i++) {
             resampled16k[i] *= scale;
           }
@@ -503,7 +507,7 @@ class AudioCaptureNative implements AudioCaptureInterface {
           final topProb = prediction.probability;
 
           if (topClass != 'background_traffic') {
-            final double reqThreshold = classThresholds[topClass] ?? 0.60;
+            final double reqThreshold = classThresholds[topClass] ?? 0.40;
             if (topProb >= reqThreshold) {
               _triggerMlAlert(topClass, topProb);
             }
@@ -516,25 +520,17 @@ class AudioCaptureNative implements AudioCaptureInterface {
   void _triggerMlAlert(String rawCls, double confidence) {
     if (_alertLatched) return;
 
-    if (_candidateClass == rawCls) {
-      _candidateCount++;
-    } else {
-      _candidateClass = rawCls;
-      _candidateCount = 1;
-    }
-    if (_candidateCount < 2) return;
-
     final now = DateTime.now();
 
     final fc = flutterClassMap[rawCls];
     if (fc == null) return;
 
-    // Global cooldown: 1.8s between ANY detection (fast response)
-    if (now.difference(_lastTriggerTime).inMilliseconds < 1800) return;
+    // Global cooldown: 1.2s between ANY detection (fast, responsive)
+    if (now.difference(_lastTriggerTime).inMilliseconds < 1200) return;
 
-    // Per-class cooldown: 3.5s between detections of the same class
+    // Per-class cooldown: 2.2s between detections of the same class
     final lastClassTime = _classCooldown[fc];
-    if (lastClassTime != null && now.difference(lastClassTime).inMilliseconds < 3500) {
+    if (lastClassTime != null && now.difference(lastClassTime).inMilliseconds < 2200) {
       return;
     }
 
