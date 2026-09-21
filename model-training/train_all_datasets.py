@@ -24,20 +24,28 @@ N_MFCC = 40
 
 # Normalized Classes Mapping from all folders in dataset
 CLASS_MAP = {
-    # 7 Core Sinhala Emergency Dataset Keywords
+    # 8 Core Sinhala Emergency Dataset Keywords
     "udaw": "udaw",
     "beeraganna": "beeraganna",
+    "beraganna": "beeraganna",
     "ginnak": "ginnak",
+    "fire": "ginnak",
+    "firetruck": "ginnak",
+    "fire_alarm": "ginnak",
     "anathurak": "anathurak",
     "karadarayak": "karadarayak",
     "balagena": "balagena",
     "parissamin": "parissamin",
+    "ehata_wenna": "ehata_wenna",
+    "ehata": "ehata_wenna",
     # Critical Environmental Emergency Sounds
     "ambulance": "ambulance_siren",
-    "firetruck": "fire_alarm",
     "vehicle horns": "vehicle_horn",
+    "vehicle_horn": "vehicle_horn",
     "baby crying": "baby_crying",
+    "baby_crying": "baby_crying",
     "dog_bark_dataset": "dog_barking",
+    "dog_barking": "dog_barking",
     # Ambient / Traffic Background
     "traffic": "background_traffic",
     "road": "background_traffic",
@@ -51,8 +59,8 @@ CLASSES = [
     "karadarayak",
     "balagena",
     "parissamin",
+    "ehata_wenna",
     "ambulance_siren",
-    "fire_alarm",
     "vehicle_horn",
     "baby_crying",
     "dog_barking",
@@ -130,10 +138,14 @@ def load_all_datasets():
         folder_path = os.path.join(DATASET_DIR, folder)
         audio_files = []
         for ext in ("*.wav", "*.mp3", "*.ogg", "*.flac"):
-            audio_files.extend(glob.glob(os.path.join(folder_path, ext)))
+            audio_files.extend(glob.glob(os.path.join(folder_path, "**", ext), recursive=True))
             
         print(f"  -> Found {len(audio_files)} samples for class: '{mapped_class}' (folder: '{folder}')")
         
+        # Cap high-volume classes to prevent dataset imbalance
+        if len(audio_files) > 400:
+            audio_files = audio_files[:400]
+            
         for fpath in audio_files:
             feats = extract_mfcc_augmented(fpath)
             for feat in feats:
@@ -197,7 +209,7 @@ def main():
     model.summary()
 
     callbacks = [
-        keras.callbacks.EarlyStopping(monitor="val_accuracy", patience=12, restore_best_weights=True),
+        keras.callbacks.EarlyStopping(monitor="val_accuracy", patience=15, restore_best_weights=True),
         keras.callbacks.ReduceLROnPlateau(monitor="val_loss", factor=0.5, patience=4, verbose=1)
     ]
 
@@ -205,7 +217,7 @@ def main():
     history = model.fit(
         X_train_norm, y_train,
         validation_data=(X_val_norm, y_val),
-        epochs=60,
+        epochs=80,
         batch_size=32,
         callbacks=callbacks,
         verbose=1
@@ -226,7 +238,7 @@ def main():
         json.dump(labels_dict, f, indent=2)
     print(f"[+] Saved labels dictionary to '{LABELS_SAVE_PATH}'")
     
-    # Export weights for Web Audio JavaScript
+    # Export weights for Web Audio JavaScript & Flutter Native Classifier
     W0, b0 = model.layers[0].get_weights()
     W1, b1 = model.layers[2].get_weights()
     W2, b2 = model.layers[4].get_weights()
@@ -255,7 +267,10 @@ def main():
     with open("../flutter_mobile_app/web/sound_model_data.js", "w") as f:
         f.write("window._SOUND_MODEL_DATA = " + json.dumps(js_model_data) + ";\n")
 
-    print("[+] Exported sound_model_data.js and sound_model_data.json successfully!")
+    with open("../flutter_mobile_app/assets/models/sound_model_data.json", "w") as f:
+        json.dump(js_model_data, f)
+
+    print("[+] Exported sound_model_data.js and sound_model_data.json successfully to web & flutter assets!")
 
     # Convert and Export to TFLite
     print("\n--- Exporting TensorFlow Lite (TFLite) Model ---")
@@ -276,7 +291,9 @@ def main():
         if os.path.exists(target):
             shutil.copy(TFLITE_SAVE_PATH, os.path.join(target, "sound_model.tflite"))
             shutil.copy(LABELS_SAVE_PATH, os.path.join(target, "labels.json"))
-            print(f"   [>] Deployed new model & labels to '{target}'")
+            with open(os.path.join(target, "sound_model_data.json"), "w") as f:
+                json.dump(js_model_data, f)
+            print(f"   [>] Deployed new model, labels & weights JSON to '{target}'")
             
     print("\nALL MODEL TRAINING & DEPLOYMENT COMPLETED SUCCESSFULLY!\n")
 

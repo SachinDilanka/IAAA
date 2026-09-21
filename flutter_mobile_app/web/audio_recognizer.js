@@ -214,8 +214,10 @@
         const db = 10.0 * Math.log10(Math.max(1e-10, mels[m]));
         logM[m] = db; if (db > maxDb) maxDb = db;
       }
-      const minDb = maxDb - 80.0;
-      for (let m = 0; m < 128; m++) { if (logM[m] < minDb) logM[m] = minDb; }
+      for (let m = 0; m < 128; m++) {
+        const minDb = maxDb - 80.0;
+        if (logM[m] < minDb) logM[m] = minDb;
+      }
 
       for (let i = 0; i < 40; i++) {
         let d = 0;

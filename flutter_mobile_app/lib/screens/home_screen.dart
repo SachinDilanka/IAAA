@@ -378,13 +378,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     _buildTestChip(
                       context,
-                      label: '🛑 nawaththanna ("නවත්තන්න")',
-                      color: AlertLevel.high.color,
-                      onTap: () => Provider.of<SoundClassifierService>(context, listen: false)
-                          .simulateDetection('nawaththanna', confidence: 0.97),
-                    ),
-                    _buildTestChip(
-                      context,
                       label: '⚠️ karadarayak ("කරදරයක්")',
                       color: AlertLevel.medium.color,
                       onTap: () => Provider.of<SoundClassifierService>(context, listen: false)
@@ -403,6 +396,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       color: AlertLevel.medium.color,
                       onTap: () => Provider.of<SoundClassifierService>(context, listen: false)
                           .simulateDetection('parissamin', confidence: 0.97),
+                    ),
+                    _buildTestChip(
+                      context,
+                      label: '⚠️ ehata_wenna ("එහාට වෙන්න")',
+                      color: AlertLevel.medium.color,
+                      onTap: () => Provider.of<SoundClassifierService>(context, listen: false)
+                          .simulateDetection('ehata_wenna', confidence: 0.96),
                     ),
                   ],
                 ),
@@ -447,42 +447,21 @@ class _HomeScreenState extends State<HomeScreen> {
                       label: '🚗 Vehicle Horn',
                       color: AlertLevel.high.color,
                       onTap: () => Provider.of<SoundClassifierService>(context, listen: false)
-                          .simulateDetection('vehicle horns', confidence: 0.97),
-                    ),
-                    _buildTestChip(
-                      context,
-                      label: '😱 Distress Screaming',
-                      color: AlertLevel.high.color,
-                      onTap: () => Provider.of<SoundClassifierService>(context, listen: false)
-                          .simulateDetection('screaming', confidence: 0.96),
+                          .simulateDetection('vehicle_horn', confidence: 0.97),
                     ),
                     _buildTestChip(
                       context,
                       label: '👶 Baby Crying',
                       color: AlertLevel.medium.color,
                       onTap: () => Provider.of<SoundClassifierService>(context, listen: false)
-                          .simulateDetection('baby crying', confidence: 0.95),
+                          .simulateDetection('baby_crying', confidence: 0.95),
                     ),
                     _buildTestChip(
                       context,
                       label: '🐕 Dog Barking',
                       color: AlertLevel.low.color,
                       onTap: () => Provider.of<SoundClassifierService>(context, listen: false)
-                          .simulateDetection('dog_bark', confidence: 0.94),
-                    ),
-                    _buildTestChip(
-                      context,
-                      label: '🛣️ Road Noise',
-                      color: AlertLevel.low.color,
-                      onTap: () => Provider.of<SoundClassifierService>(context, listen: false)
-                          .simulateDetection('road', confidence: 0.92),
-                    ),
-                    _buildTestChip(
-                      context,
-                      label: '🚦 Traffic Movement',
-                      color: AlertLevel.low.color,
-                      onTap: () => Provider.of<SoundClassifierService>(context, listen: false)
-                          .simulateDetection('traffic', confidence: 0.92),
+                          .simulateDetection('dog_barking', confidence: 0.94),
                     ),
                   ],
                 ),

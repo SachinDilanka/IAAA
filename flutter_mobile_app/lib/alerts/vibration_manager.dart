@@ -24,6 +24,7 @@ class VibrationManager {
 
     try {
       final bool hasVibrator = await Vibration.hasVibrator() == true;
+      final bool hasAmplitude = await Vibration.hasAmplitudeControl() == true;
 
       if (priority == AlertLevel.high ||
           sound.contains('fire') ||
@@ -33,37 +34,60 @@ class VibrationManager {
           sound.contains('udaw') ||
           sound.contains('beeraganna') ||
           sound.contains('anathurak') ||
-          sound.contains('nawaththanna') ||
           sound.contains('horn') ||
           sound.contains('scream')) {
-        // High priority: Long strong vibration
-        _activePatternDescription = "🚨 HIGH EMERGENCY: Long Sustained Vibration";
+        // High priority: Ultra-Strong Repeated Heavy Pulse for Deaf Users
+        _activePatternDescription = "🚨 HIGH EMERGENCY: Heavy Multi-Pulse Tactile Vibration (255 Max Amplitude)";
         if (hasVibrator) {
-          await Vibration.vibrate(pattern: [0, 1200, 250, 1200]);
+          if (hasAmplitude) {
+            await Vibration.vibrate(
+              pattern: [0, 1000, 150, 1000, 150, 1200],
+              intensities: [0, 255, 0, 255, 0, 255],
+            );
+          } else {
+            await Vibration.vibrate(pattern: [0, 1000, 150, 1000, 150, 1200]);
+          }
         }
+        await HapticFeedback.heavyImpact();
+        await Future.delayed(const Duration(milliseconds: 300));
+        await HapticFeedback.heavyImpact();
       } else if (priority == AlertLevel.medium ||
           sound.contains('baby') ||
           sound.contains('karadarayak') ||
           sound.contains('balagena') ||
-          sound.contains('parissamin')) {
-        // Medium priority: "bit-bit" rhythmic double vibration
-        _activePatternDescription = "⚠️ MEDIUM CAUTION: Rhythmic Bit-Bit Double Pulse";
+          sound.contains('parissamin') ||
+          sound.contains('ehata')) {
+        // Medium priority: Strong 3-Pulse Rhythmic Caution Vibration
+        _activePatternDescription = "⚠️ MEDIUM CAUTION: 3-Pulse Strong Vibration (255 Amplitude)";
         if (hasVibrator) {
-          await Vibration.vibrate(pattern: [0, 320, 140, 320]);
+          if (hasAmplitude) {
+            await Vibration.vibrate(
+              pattern: [0, 600, 150, 600, 150, 600],
+              intensities: [0, 255, 0, 255, 0, 255],
+            );
+          } else {
+            await Vibration.vibrate(pattern: [0, 600, 150, 600, 150, 600]);
+          }
         }
+        await HapticFeedback.heavyImpact();
       } else {
-        // Low priority: Short single vibration
-        _activePatternDescription = "ℹ️ LOW NOTICE: Short Quick Tap";
+        // Low priority: Strong Double-Tap Vibrations
+        _activePatternDescription = "ℹ️ LOW NOTICE: Strong Double Pulse";
         if (hasVibrator) {
-          await Vibration.vibrate(duration: 220);
+          if (hasAmplitude) {
+            await Vibration.vibrate(
+              pattern: [0, 450, 150, 450],
+              intensities: [0, 255, 0, 255],
+            );
+          } else {
+            await Vibration.vibrate(pattern: [0, 450, 150, 450]);
+          }
         }
+        await HapticFeedback.mediumImpact();
       }
-
-      // Always execute HapticFeedback in parallel for additional hardware haptics
-      await HapticFeedback.vibrate();
     } catch (e) {
       try {
-        await HapticFeedback.vibrate();
+        await HapticFeedback.heavyImpact();
       } catch (_) {}
     } finally {
       _isVibrating = false;

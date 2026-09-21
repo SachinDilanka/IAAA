@@ -28,11 +28,11 @@ void main() {
       print('Dart Ambulance Pred: ${ambPred?.label} (${ambPred?.probability})');
       expect(ambPred?.label, equals('ambulance_siren'));
 
-      // 3. Firetruck
+      // 3. Fire / Ginnak
       final firetruck = (sampleMap['firetruck'] as List).map((e) => (e as num).toDouble()).toList();
       final firePred = classifier.predict(firetruck);
       print('Dart Firetruck Pred: ${firePred?.label} (${firePred?.probability})');
-      expect(firePred?.label, equals('fire_alarm'));
+      expect(firePred?.label, equals('ginnak'));
 
       // 4. Horn
       final horn = (sampleMap['horn'] as List).map((e) => (e as num).toDouble()).toList();

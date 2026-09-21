@@ -204,7 +204,7 @@ class NativeNeuralAudioClassifier {
         mels[m] = s;
       }
 
-      // Log Mel (dB) with dynamic range clamping
+      // Log Mel (dB) matching librosa.power_to_db(mels, ref=np.max, top_db=80.0)
       final List<double> logM = List<double>.filled(128, 0.0);
       double maxDb = -1e9;
       for (int m = 0; m < 128; m++) {
@@ -212,8 +212,8 @@ class NativeNeuralAudioClassifier {
         logM[m] = db;
         if (db > maxDb) maxDb = db;
       }
-      final double minDb = maxDb - 80.0;
       for (int m = 0; m < 128; m++) {
+        final double minDb = maxDb - 80.0;
         if (logM[m] < minDb) logM[m] = minDb;
       }
 

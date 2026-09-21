@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/detection_event.dart';
 import '../services/priority_engine.dart';
+import '../services/notification_service.dart';
 import '../alerts/vibration_manager.dart';
 import '../wearable/smartwatch_service.dart';
 import '../storage/history_database.dart';
@@ -190,6 +191,9 @@ class SoundClassifierService extends ChangeNotifier {
 
     // Phone Tactile Vibration (Differentiated per sound class)
     await _vibrationManager.triggerHapticPattern(event.priority, rawClass: rawClass);
+
+    // Dispatch System Phone Notification
+    await NotificationService().sendEventNotification(event);
 
     // Send Distinct Vibration & Warning Message to Yesido IO39 Smartwatch
     _bridge.sendWatchVibration(

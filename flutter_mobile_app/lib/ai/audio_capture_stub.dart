@@ -41,16 +41,14 @@ class AudioCaptureNative implements AudioCaptureInterface {
   final Map<String, DateTime> _classCooldown = {};
   int _lastMlTime = 0;
 
-  // Dynamic circular PCM buffer capable of holding up to 2 seconds at 48,000 Hz
+  // Fixed 16,000 Hz circular buffer (1.0 second = 16,000 samples)
   static const int _targetSampleRate = 16000;
-  static const int _maxBufferCap = 96000;
-  final List<double> _rollingBuf = List<double>.filled(_maxBufferCap, 0.0);
-  int _rollingCap = 16000; // Calibrated 16,000 Hz by default (0 pitch distortion)
+  final List<double> _rollingBuf16k = List<double>.filled(16000, 0.0);
   int _rollingIdx = 0;
-  int _totalPcmReceived = 0;
-  int _actualSampleRate = 16000; // Calibrated 16,000 Hz by default (0 pitch distortion)
-  int _pcmPacketCount = 0;
-  DateTime? _firstPacketTime;
+  int _total16kPushed = 0;
+
+  DateTime? _lastPcmPacketTime;
+  int _hardwareSampleRate = 16000;
 
   double _latestVolume = 0.08;
   int _latestPitch = 220;
@@ -92,33 +90,22 @@ class AudioCaptureNative implements AudioCaptureInterface {
     'background_traffic': null,
   };
 
-  // High-sensitivity confidence thresholds for real-world acoustic detection
   static const Map<String, double> classThresholds = {
-    'baby_crying': 0.40,
-    'dog_barking': 0.40,
-    'vehicle_horn': 0.40,
-    'ambulance_siren': 0.40,
-    'fire_alarm': 0.40,
-    'traffic': 0.40,
-    'road': 0.40,
-    'udaw': 0.40,
-    'beeraganna': 0.40,
-    'ginnak': 0.40,
-    'anathurak': 0.40,
-    'karadarayak': 0.40,
-    'balagena': 0.40,
-    'parissamin': 0.40,
-    'ehata_wenna': 0.40,
-    'nawaththanna': 0.40,
-    'screaming': 0.40,
-  };
-
-  static const Set<String> environmentalClasses = {
-    'ambulance_siren',
-    'fire_alarm',
-    'vehicle_horn',
-    'baby_crying',
-    'dog_barking',
+    'baby_crying': 0.65,
+    'dog_barking': 0.65,
+    'vehicle_horn': 0.65,
+    'ambulance_siren': 0.65,
+    'fire_alarm': 0.65,
+    'traffic': 0.65,
+    'road': 0.65,
+    'udaw': 0.65,
+    'beeraganna': 0.65,
+    'ginnak': 0.65,
+    'anathurak': 0.65,
+    'karadarayak': 0.65,
+    'balagena': 0.65,
+    'parissamin': 0.65,
+    'ehata_wenna': 0.65,
   };
 
   static const Map<String, String> sinhalaTitles = {
@@ -156,10 +143,9 @@ class AudioCaptureNative implements AudioCaptureInterface {
     _onAudioFrame = onAudioFrame;
     _onAudioEvent = onAudioEvent;
     _onSpeechTranscript = onSpeechTranscript;
-    _totalPcmReceived = 0;
+    _total16kPushed = 0;
+    _rollingIdx = 0;
     _alertLatched = false;
-    _candidateClass = null;
-    _candidateCount = 0;
 
     // 1. Request Android Runtime Permissions
     PermissionStatus mic = PermissionStatus.denied;
@@ -173,27 +159,18 @@ class AudioCaptureNative implements AudioCaptureInterface {
       if (!mic.isGranted) {
         _latestTranscript = "⚠️ Microphone permission required. Please allow microphone in App Settings.";
         onSpeechTranscript(_latestTranscript);
+        return;
       }
     } catch (e) {
       debugPrint('[AudioCaptureNative] Permission error: $e');
     }
 
-    if (!mic.isGranted) {
-      return;
-    }
-
-    // Load the model before opening the stream so the first one-second window
-    // cannot be discarded while the asset files are still loading.
     await _loadNeuralNetwork();
-
-    // 3. Start continuous visualizer animation ticker
     _startAmbientWaveTicker();
 
     _latestTranscript = "🎤 Live Mic Active: Listening for Sinhala Voice & Environmental Sounds...";
     _onSpeechTranscript?.call(_latestTranscript);
 
-    // Run both recognition paths. The latch and two-window confirmation below
-    // prevent competing predictions from producing a cascade of alerts.
     _startAudioStreamer();
     _initAndStartSpeechRecognition();
   }
@@ -208,7 +185,7 @@ class AudioCaptureNative implements AudioCaptureInterface {
   }
 
   // =========================================================================
-  // SPEECH RECOGNITION (CONTINUOUS & AUTO-RESTARTING)
+  // SPEECH RECOGNITION (CONTINUOUS & LIVE SINHALA TRANSCRIPT)
   // =========================================================================
 
   Future<void> _initAndStartSpeechRecognition() async {
@@ -229,18 +206,16 @@ class AudioCaptureNative implements AudioCaptureInterface {
                 _onSpeechTranscript?.call(_latestTranscript);
               }
             } else if (status == 'notListening' || status == 'done') {
-              _scheduleSpeechRestart(delayMs: 250);
+              _scheduleSpeechRestart(delayMs: 300);
             }
           },
           onError: (errorNotification) {
             debugPrint('[AudioCaptureNative STT Error]: ${errorNotification.errorMsg}');
             if (!_isListening) return;
-            // On speech timeout or silence, restart with backoff
-            _scheduleSpeechRestart(delayMs: 3500);
+            _scheduleSpeechRestart(delayMs: 1200);
           },
         );
 
-        // Detect device supported locales for Sinhala
         try {
           final locales = await _speechToText.locales();
           for (final loc in locales) {
@@ -291,7 +266,7 @@ class AudioCaptureNative implements AudioCaptureInterface {
         autoPunctuation: true,
         enableHapticFeedback: false,
         localeId: targetLocale,
-        pauseFor: const Duration(seconds: 4),
+        pauseFor: const Duration(seconds: 3),
         listenFor: const Duration(seconds: 30),
       );
 
@@ -313,11 +288,11 @@ class AudioCaptureNative implements AudioCaptureInterface {
       );
     } catch (e) {
       debugPrint('[AudioCaptureNative] STT listen error: $e');
-      _scheduleSpeechRestart(delayMs: 3500);
+      _scheduleSpeechRestart(delayMs: 1500);
     }
   }
 
-  void _scheduleSpeechRestart({int delayMs = 350}) {
+  void _scheduleSpeechRestart({int delayMs = 300}) {
     if (!_isListening) return;
     _speechRestartTimer?.cancel();
     _speechRestartTimer = Timer(Duration(milliseconds: delayMs), () {
@@ -336,7 +311,7 @@ class AudioCaptureNative implements AudioCaptureInterface {
   }
 
   // =========================================================================
-  // AUDIO STREAMER (PURE 16,000 HZ NATIVE CAPTURE)
+  // AUDIO STREAMER (PER-PACKET 16,000 HZ RESAMPLING WITH 0 PITCH DISTORTION)
   // =========================================================================
 
   void _startAudioStreamer() {
@@ -350,10 +325,8 @@ class AudioCaptureNative implements AudioCaptureInterface {
 
       streamer.actualSampleRate.then((rate) {
         if (rate > 0) {
-          _actualSampleRate = rate;
-          _rollingCap = rate.clamp(16000, _maxBufferCap);
-          _rollingIdx = 0;
-          debugPrint('[AudioCaptureNative] Native sample rate: $_actualSampleRate Hz (rollingCap: $_rollingCap)');
+          _hardwareSampleRate = rate;
+          debugPrint('[AudioCaptureNative] Native hardware sample rate: $_hardwareSampleRate Hz');
         }
       }).catchError((_) {});
 
@@ -379,53 +352,50 @@ class AudioCaptureNative implements AudioCaptureInterface {
     } catch (_) {}
   }
 
-  List<double> _resampleTo16k(List<double> buf, int sr) {
-    if (sr == 16000 && buf.length == 16000) return buf;
-    if (sr == 16000) {
-      return buf.length >= 16000 ? buf.sublist(0, 16000) : buf;
-    }
-    final List<double> out = List<double>.filled(16000, 0.0);
-    final double step = buf.length / 16000.0;
-    for (int i = 0; i < 16000; i++) {
-      final int startIdx = (i * step).floor();
-      final int endIdx = math.min(buf.length, ((i + 1) * step).floor());
-      double sum = 0.0;
-      int count = 0;
-      for (int j = startIdx; j < endIdx; j++) {
-        sum += buf[j];
-        count++;
-      }
-      out[i] = count > 0 ? (sum / count) : buf[startIdx.clamp(0, buf.length - 1)];
-    }
-    return out;
-  }
-
   void _processPcmBuffer(List<double> rawBuffer) {
-    if (_alertLatched) return;
+    if (rawBuffer.isEmpty) return;
 
-    _totalPcmReceived += rawBuffer.length;
-    _pcmPacketCount++;
-    _firstPacketTime ??= DateTime.now();
-
-    // Dynamically calibrate actual hardware sample rate from PCM packet rate
-    if (_pcmPacketCount >= 5) {
-      final elapsedSec = DateTime.now().difference(_firstPacketTime!).inMilliseconds / 1000.0;
-      if (elapsedSec >= 0.8 && _totalPcmReceived > 0) {
-        final measured = (_totalPcmReceived / elapsedSec).round();
-        if (measured >= 38000) {
-          final target = measured >= 46000 ? 48000 : 44100;
-          if (_actualSampleRate != target) {
-            _actualSampleRate = target;
-            _rollingCap = target;
-            debugPrint('[AudioCaptureNative] Calibrated hardware sample rate: $_actualSampleRate Hz');
-          }
-        } else {
-          if (_actualSampleRate != 16000) {
-            _actualSampleRate = 16000;
-            _rollingCap = 16000;
-            debugPrint('[AudioCaptureNative] Calibrated hardware sample rate: 16000 Hz');
-          }
+    final now = DateTime.now();
+    if (_lastPcmPacketTime != null) {
+      final elapsedMs = now.difference(_lastPcmPacketTime!).inMilliseconds;
+      if (elapsedMs > 5 && elapsedMs < 2000) {
+        final calcSr = (rawBuffer.length * 1000 / elapsedMs).round();
+        if (calcSr >= 36000) {
+          _hardwareSampleRate = calcSr >= 46000 ? 48000 : 44100;
+        } else if (calcSr >= 12000 && calcSr <= 24000) {
+          _hardwareSampleRate = 16000;
         }
+      }
+    }
+    _lastPcmPacketTime = now;
+
+    // Detect 16-bit PCM scale
+    double maxRaw = 0.0;
+    for (int i = 0; i < rawBuffer.length; i++) {
+      final a = rawBuffer[i].abs();
+      if (a > maxRaw) maxRaw = a;
+    }
+    final double normScale = maxRaw > 1.5 ? (1.0 / 32768.0) : 1.0;
+
+    // Downsample/resample THIS packet immediately to exact 16,000 Hz
+    List<double> packet16k;
+    if (_hardwareSampleRate == 16000) {
+      packet16k = List<double>.generate(rawBuffer.length, (i) => rawBuffer[i] * normScale);
+    } else {
+      final int targetCount = ((rawBuffer.length * 16000) / _hardwareSampleRate).round();
+      if (targetCount <= 0) return;
+      packet16k = List<double>.filled(targetCount, 0.0);
+      final double step = rawBuffer.length / targetCount.toDouble();
+      for (int i = 0; i < targetCount; i++) {
+        final int startIdx = (i * step).floor();
+        final int endIdx = math.min(rawBuffer.length, ((i + 1) * step).floor());
+        double sum = 0.0;
+        int count = 0;
+        for (int j = startIdx; j < endIdx; j++) {
+          sum += rawBuffer[j] * normScale;
+          count++;
+        }
+        packet16k[i] = count > 0 ? (sum / count) : (rawBuffer[startIdx.clamp(0, rawBuffer.length - 1)] * normScale);
       }
     }
 
@@ -433,23 +403,24 @@ class AudioCaptureNative implements AudioCaptureInterface {
     int zeroCrossings = 0;
     double maxAmp = 0.0;
 
-    for (int i = 0; i < rawBuffer.length; i++) {
-      final s = rawBuffer[i];
+    for (int i = 0; i < packet16k.length; i++) {
+      final s = packet16k[i];
       final absS = s.abs();
       if (absS > maxAmp) maxAmp = absS;
       sumSquares += s * s;
-      if (i > 0 && ((rawBuffer[i - 1] >= 0 && s < 0) || (rawBuffer[i - 1] < 0 && s >= 0))) {
+      if (i > 0 && ((packet16k[i - 1] >= 0 && s < 0) || (packet16k[i - 1] < 0 && s >= 0))) {
         zeroCrossings++;
       }
 
-      _rollingBuf[_rollingIdx] = s;
-      _rollingIdx = (_rollingIdx + 1) % _rollingCap;
+      _rollingBuf16k[_rollingIdx] = s;
+      _rollingIdx = (_rollingIdx + 1) % 16000;
+      _total16kPushed++;
     }
 
-    final rms = math.sqrt(sumSquares / rawBuffer.length);
+    final rms = math.sqrt(sumSquares / packet16k.length);
     final double normalizedVol = (rms * 8.0).clamp(0.04, 1.0);
 
-    final double durationSec = rawBuffer.length / _actualSampleRate.toDouble();
+    final double durationSec = packet16k.length / 16000.0;
     double estimatedHz = 0.0;
     if (durationSec > 0) {
       estimatedHz = ((zeroCrossings / 2.0) / durationSec).clamp(60.0, 5000.0);
@@ -459,7 +430,7 @@ class AudioCaptureNative implements AudioCaptureInterface {
     _latestVolume = normalizedVol;
     _latestPitch = pitchInt;
 
-    // Build visualizer frame
+    // Visualizer frame
     final centerBand = ((estimatedHz / 3500.0) * 40).clamp(2, 38).round();
     final List<double> frame = List<double>.generate(40, (i) {
       final dist = (i - centerBand).abs();
@@ -471,46 +442,43 @@ class AudioCaptureNative implements AudioCaptureInterface {
     _onAudioFrame?.call(frame, _latestVolume, _latestPitch);
 
     // =========================================================================
-    // ACOUSTIC CLASSIFIER (Deep 40-MFCC Neural Network - No Hertz Filtering)
+    // ACOUSTIC CLASSIFIER (Deep 40-MFCC Neural Network - Exact Librosa ref=1.0)
     // =========================================================================
     final nowMs = DateTime.now().millisecondsSinceEpoch;
-    final int windowLen = _rollingCap;
-    if (nowMs - _lastMlTime > 250 && _classifier.isLoaded && _totalPcmReceived >= windowLen) {
-      // Require audible sound (RMS >= 0.010 or peak >= 0.025) to ignore ambient background silence
-      if (maxAmp >= 0.012 || rms >= 0.005) {
+    if (nowMs - _lastMlTime > 200 && _classifier.isLoaded && _total16kPushed >= 16000) {
+      if (maxAmp >= 0.035 && rms >= 0.012) {
         _lastMlTime = nowMs;
-        // Extract 1-second continuous rolling buffer
-        final List<double> window1s = List<double>.filled(windowLen, 0.0);
-        for (int i = 0; i < windowLen; i++) {
-          window1s[i] = _rollingBuf[(_rollingIdx - windowLen + i + _rollingCap) % _rollingCap];
-        }
-
-        final List<double> resampled16k = _resampleTo16k(window1s, _actualSampleRate);
-
-        // Amplitude Normalization: Rescale quiet or distant audio so MFCC feature extraction is invariant to distance
-        double winPeak = 0.0;
+        final List<double> window1s = List<double>.filled(16000, 0.0);
         for (int i = 0; i < 16000; i++) {
-          final a = resampled16k[i].abs();
-          if (a > winPeak) winPeak = a;
-        }
-        if (winPeak > 0.008) {
-          final double scale = (0.75 / winPeak).clamp(1.0, 20.0);
-          for (int i = 0; i < 16000; i++) {
-            resampled16k[i] *= scale;
-          }
+          window1s[i] = _rollingBuf16k[(_rollingIdx - 16000 + i + 16000) % 16000];
         }
 
-        final prediction = _classifier.predict(resampled16k);
+        final prediction = _classifier.predict(window1s);
 
         if (prediction != null) {
           final topClass = prediction.label;
           final topProb = prediction.probability;
 
           if (topClass != 'background_traffic') {
-            final double reqThreshold = classThresholds[topClass] ?? 0.40;
+            final double reqThreshold = classThresholds[topClass] ?? 0.65;
             if (topProb >= reqThreshold) {
-              _triggerMlAlert(topClass, topProb);
+              if (topClass == _candidateClass) {
+                _candidateCount++;
+              } else {
+                _candidateClass = topClass;
+                _candidateCount = 1;
+              }
+
+              if (_candidateCount >= 2) {
+                _triggerMlAlert(topClass, topProb);
+              }
+            } else {
+              _candidateClass = null;
+              _candidateCount = 0;
             }
+          } else {
+            _candidateClass = null;
+            _candidateCount = 0;
           }
         }
       }
@@ -539,6 +507,10 @@ class AudioCaptureNative implements AudioCaptureInterface {
     _alertLatched = true;
     _candidateClass = null;
     _candidateCount = 0;
+
+    Timer(const Duration(milliseconds: 2200), () {
+      _alertLatched = false;
+    });
 
     final sinhala = sinhalaTitles[fc] ?? fc;
     final source = "Acoustic AI Model: $rawCls (${(confidence * 100).toStringAsFixed(0)}%)";
@@ -645,7 +617,10 @@ class AudioCaptureNative implements AudioCaptureInterface {
         clean.contains('you dow') ||
         clean.contains('wood how') ||
         clean.contains('who dow') ||
-        clean.contains('u dow')) {
+        clean.contains('u dow') ||
+        clean.contains('u daw') ||
+        clean.contains('you daw') ||
+        clean.contains('who daw')) {
       matched = 'udaw';
     }
     // 2. RESCUE / BEERAGANNA ("බේරගන්න", "බේර ගන්න", "බේරගනින්", "බේරන්න", "beeraganna", "rescue")
@@ -655,14 +630,16 @@ class AudioCaptureNative implements AudioCaptureInterface {
         clean.contains('බේරන්න') ||
         clean.contains('බේරපන්') ||
         clean.contains('beeraganna') ||
+        clean.contains('beera ganna') ||
         clean.contains('beraganna') ||
-        clean.contains('beraganna') ||
+        clean.contains('bera ganna') ||
         clean.contains('beeranna') ||
         clean.contains('beranna') ||
         clean.contains('rescue') ||
         clean.contains('beer gonna') ||
         clean.contains('better gonna') ||
-        clean.contains('bear gonna')) {
+        clean.contains('bear gonna') ||
+        clean.contains('bera gana')) {
       matched = 'beeraganna';
     }
     // 3. FIRE / GINNAK ("ගින්නක්", "ගින්න", "ගින්දර", "ginnak")
@@ -677,7 +654,8 @@ class AudioCaptureNative implements AudioCaptureInterface {
         clean.contains('burning') ||
         clean.contains('gin knock') ||
         clean.contains('gin duck') ||
-        clean.contains('green lock')) {
+        clean.contains('green lock') ||
+        clean.contains('gin nak')) {
       matched = 'ginnak';
     }
     // 4. DANGER / ANATHURAK ("අනතුරක්", "අනතුර", "අනතුරු", "anathurak", "danger")
@@ -695,7 +673,9 @@ class AudioCaptureNative implements AudioCaptureInterface {
         clean.contains('hazard') ||
         clean.contains('accident') ||
         clean.contains('another rug') ||
-        clean.contains('on a truck')) {
+        clean.contains('on a truck') ||
+        clean.contains('ana turak') ||
+        clean.contains('ana thurak')) {
       matched = 'anathurak';
     }
     // 5. TROUBLE / KARADARAYAK ("කරදරයක්", "කරදර", "කරදරේ", "karadarayak")
@@ -707,7 +687,8 @@ class AudioCaptureNative implements AudioCaptureInterface {
         clean.contains('kadadaria') ||
         clean.contains('karadari') ||
         clean.contains('karadare') ||
-        clean.contains('trouble')) {
+        clean.contains('trouble') ||
+        clean.contains('kara darayak')) {
       matched = 'karadarayak';
     }
     // 6. WATCH OUT / BALAGENA ("බලාගෙන", "බලා ගෙන", "balagena", "watch out")
@@ -715,7 +696,12 @@ class AudioCaptureNative implements AudioCaptureInterface {
         clean.contains('බලා ගෙන') ||
         clean.contains('බලාපන්') ||
         clean.contains('balagena') ||
-        clean.contains('balaagena') ||
+        clean.contains('bala gena') ||
+        clean.contains('balagana') ||
+        clean.contains('bala gana') ||
+        clean.contains('balaagana') ||
+        clean.contains('blagena') ||
+        clean.contains('balagen') ||
         clean.contains('watch out') ||
         clean.contains('look out')) {
       matched = 'balagena';
@@ -729,7 +715,8 @@ class AudioCaptureNative implements AudioCaptureInterface {
         clean.contains('pare sami') ||
         clean.contains('parissamen') ||
         clean.contains('careful') ||
-        clean.contains('caution')) {
+        clean.contains('caution') ||
+        clean.contains('paris samin')) {
       matched = 'parissamin';
     }
     // 8. MOVE AWAY / EHATA WENNA ("එහාට වෙන්න", "එහාට", "අයින් වෙන්න", "ehata")
@@ -743,7 +730,8 @@ class AudioCaptureNative implements AudioCaptureInterface {
         clean.contains('akihata') ||
         clean.contains('akihata venna') ||
         clean.contains('akihata wenna') ||
-        clean.contains('move away')) {
+        clean.contains('move away') ||
+        clean.contains('get away')) {
       matched = 'ehata_wenna';
     }
     // 9. STOP / NAWATHTHANNA ("නවත්තන්න", "නවත්වන්න", "නවත්තපන්", "නවතින්න", "nawaththanna", "stop")
@@ -768,6 +756,9 @@ class AudioCaptureNative implements AudioCaptureInterface {
     if (matched != null) {
       _lastTriggerTime = now;
       _alertLatched = true;
+      Timer(const Duration(milliseconds: 2500), () {
+        _alertLatched = false;
+      });
       final sinhala = sinhalaTitles[matched] ?? matched;
       final displayText = '🗣️ Heard: "$text" ➔ 🚨 $sinhala';
       _latestTranscript = displayText;
