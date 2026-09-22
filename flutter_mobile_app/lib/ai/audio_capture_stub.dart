@@ -189,6 +189,7 @@ class AudioCaptureNative implements AudioCaptureInterface {
             final msg = errorNotification.errorMsg.toLowerCase();
             if (msg.contains('language') || msg.contains('locale') || msg.contains('not supported')) {
               _matchedLocaleId = 'en-US';
+              _selectedLocaleId = 'en-US';
             }
             _scheduleSpeechRestart(delayMs: 800);
           },
@@ -260,6 +261,7 @@ class AudioCaptureNative implements AudioCaptureInterface {
       debugPrint('[AudioCaptureNative] STT listen error: $e');
       if (_matchedLocaleId != 'en-US') {
         _matchedLocaleId = 'en-US';
+        _selectedLocaleId = 'en-US';
       }
       _scheduleSpeechRestart(delayMs: 300);
     }
@@ -460,10 +462,10 @@ class AudioCaptureNative implements AudioCaptureInterface {
               topClass == 'baby_crying' ||
               topClass == 'dog_barking');
 
-          if (isEnvironmental && topProb >= 0.85 && _consecutiveClassCount >= 4) {
+          if (isSinhalaKeyword && topProb >= 0.50) {
             _triggerMlAlert(topClass, topProb);
             _consecutiveClassCount = 0;
-          } else if (isSinhalaKeyword && topProb >= 0.85 && _consecutiveClassCount >= 3) {
+          } else if (isEnvironmental && topProb >= 0.80 && _consecutiveClassCount >= 2) {
             _triggerMlAlert(topClass, topProb);
             _consecutiveClassCount = 0;
           }
