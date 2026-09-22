@@ -189,11 +189,14 @@ class NativeNeuralAudioClassifier {
     final int nFrames = ((pad.length - 2048) / hop).floor() + 1;
     final List<double> mfccSum = List<double>.filled(40, 0.0);
 
+    // 1. Calculate mel energies for all frames
+    final List<List<double>> allMels = [];
+    double globalMaxDb = -1e9;
+
     for (int f = 0; f < nFrames; f++) {
       final slice = pad.sublist(f * hop, f * hop + 2048);
       final spec = _rfft2048(slice);
 
-      // 128 Mel Filterbanks
       final List<double> mels = List<double>.filled(128, 0.0);
       for (int m = 0; m < 128; m++) {
         double s = 0.0;
@@ -202,19 +205,22 @@ class NativeNeuralAudioClassifier {
           s += row[k] * spec[k];
         }
         mels[m] = s;
+        final double db = 10.0 * (math.log(math.max(1e-10, s)) / math.ln10);
+        if (db > globalMaxDb) globalMaxDb = db;
       }
+      allMels.add(mels);
+    }
 
-      // Log Mel (dB) matching librosa.power_to_db(mels, ref=np.max, top_db=80.0)
+    final double minDbThreshold = globalMaxDb - 80.0;
+
+    // 2. Convert to log-mel dB and compute DCT (40 MFCCs) across frames
+    for (int f = 0; f < nFrames; f++) {
+      final mels = allMels[f];
       final List<double> logM = List<double>.filled(128, 0.0);
-      double maxDb = -1e9;
+
       for (int m = 0; m < 128; m++) {
         final double db = 10.0 * (math.log(math.max(1e-10, mels[m])) / math.ln10);
-        logM[m] = db;
-        if (db > maxDb) maxDb = db;
-      }
-      for (int m = 0; m < 128; m++) {
-        final double minDb = maxDb - 80.0;
-        if (logM[m] < minDb) logM[m] = minDb;
+        logM[m] = db < minDbThreshold ? minDbThreshold : db;
       }
 
       // DCT (MFCC 40 coefficients)

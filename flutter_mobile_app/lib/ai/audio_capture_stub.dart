@@ -9,15 +9,7 @@ import 'native_neural_audio_classifier.dart';
 
 AudioCaptureInterface getAudioCaptureBridge() => AudioCaptureNative();
 
-/// Production-ready Native Android Acoustic AI Engine
-/// Solves Android Hardware Microphone Contention & False Sound Classifications:
-///  1) Primary Voice Engine: Continuous Speech Recognition for Sinhala & Singlish emergency keywords
-///  2) Frequency-Gated Acoustic Classifier: Pure 16kHz neural network with physical frequency discriminators
-///     - Vehicle Horn strictly requires dominant pitch >= 360 Hz and RMS >= 0.03 (Adult voice is 100-260 Hz)
-///     - Baby Crying strictly requires dominant pitch >= 450 Hz (Adult voice is 100-260 Hz)
-///     - Sirens strictly require dominant pitch >= 500 Hz
-///     - Voice harmonics can NEVER falsely trigger Vehicle Horn or Baby Crying
-///  3) Dual Detection: Sinhala keywords detected via BOTH Speech Recognition and Deep Acoustic Model
+/// Rebuilt High-Performance Mobile Acoustic AI & Live Sinhala Speech Engine
 class AudioCaptureNative implements AudioCaptureInterface {
   final SpeechToText _speechToText = SpeechToText();
   final NativeNeuralAudioClassifier _classifier = NativeNeuralAudioClassifier();
@@ -36,20 +28,18 @@ class AudioCaptureNative implements AudioCaptureInterface {
   DateTime _lastTriggerTime = DateTime.fromMillisecondsSinceEpoch(0);
   DateTime _lastSpeechTime = DateTime.fromMillisecondsSinceEpoch(0);
   bool _alertLatched = false;
-  String? _candidateClass;
-  int _candidateCount = 0;
   final Map<String, DateTime> _classCooldown = {};
   int _lastMlTime = 0;
+  int _lastPcmTimeMs = 0;
+  String _consecutiveClassLabel = '';
+  int _consecutiveClassCount = 0;
 
   // Fixed 16,000 Hz circular buffer (1.0 second = 16,000 samples)
-  static const int _targetSampleRate = 16000;
   final List<double> _rollingBuf16k = List<double>.filled(16000, 0.0);
   int _rollingIdx = 0;
   int _total16kPushed = 0;
 
-  DateTime? _lastPcmPacketTime;
   int _hardwareSampleRate = 16000;
-
   double _latestVolume = 0.08;
   int _latestPitch = 220;
   List<double> _latestFrame = List.generate(40, (i) => 0.08);
@@ -63,7 +53,6 @@ class AudioCaptureNative implements AudioCaptureInterface {
   Function(String detectedClass, double confidence, String source)? _onAudioEvent;
   Function(String transcript)? _onSpeechTranscript;
 
-  // Class mapping to match Flutter internal identifiers
   static const Map<String, String?> flutterClassMap = {
     'udaw': 'udaw',
     'beeraganna': 'beeraganna',
@@ -73,39 +62,30 @@ class AudioCaptureNative implements AudioCaptureInterface {
     'balagena': 'balagena',
     'parissamin': 'parissamin',
     'ehata_wenna': 'ehata_wenna',
-    'nawaththanna': 'nawaththanna',
-    'screaming': 'screaming',
     'ambulance_siren': 'ambulance',
     'ambulance': 'ambulance',
-    'fire_alarm': 'firetruck',
-    'firetruck': 'firetruck',
     'vehicle_horn': 'vehicle_horn',
     'vehicle horns': 'vehicle_horn',
     'baby_crying': 'baby_crying',
     'baby crying': 'baby_crying',
     'dog_barking': 'dog_barking',
     'dog_bark': 'dog_barking',
-    'road': 'road',
-    'traffic': 'traffic',
     'background_traffic': null,
   };
 
   static const Map<String, double> classThresholds = {
-    'baby_crying': 0.65,
-    'dog_barking': 0.65,
-    'vehicle_horn': 0.65,
-    'ambulance_siren': 0.65,
-    'fire_alarm': 0.65,
-    'traffic': 0.65,
-    'road': 0.65,
-    'udaw': 0.65,
-    'beeraganna': 0.65,
-    'ginnak': 0.65,
-    'anathurak': 0.65,
-    'karadarayak': 0.65,
-    'balagena': 0.65,
-    'parissamin': 0.65,
-    'ehata_wenna': 0.65,
+    'baby_crying': 0.90,
+    'dog_barking': 0.90,
+    'vehicle_horn': 0.90,
+    'ambulance_siren': 0.90,
+    'udaw': 0.35,
+    'beeraganna': 0.35,
+    'ginnak': 0.35,
+    'anathurak': 0.35,
+    'karadarayak': 0.35,
+    'balagena': 0.35,
+    'parissamin': 0.35,
+    'ehata_wenna': 0.35,
   };
 
   static const Map<String, String> sinhalaTitles = {
@@ -117,20 +97,14 @@ class AudioCaptureNative implements AudioCaptureInterface {
     'balagena': 'බලාගෙන!',
     'parissamin': 'පරිස්සමින්!',
     'ehata_wenna': 'එහාට වෙන්න!',
-    'nawaththanna': 'නවත්තන්න!',
-    'screaming': 'කෑගැසීමක්!',
     'ambulance': 'ගිලන් රථ සයිරන්',
     'ambulance_siren': 'ගිලන් රථ සයිරන්',
-    'firetruck': 'ගිනි නිවන සංඥාව',
-    'fire_alarm': 'ගිනි නිවන සංඥාව',
     'vehicle horns': 'වාහන හෝන්',
     'vehicle_horn': 'වාහන හෝන්',
     'baby crying': 'ළදරු හැඬීම',
     'baby_crying': 'ළදරු හැඬීම',
     'dog_bark': 'බල්ලා බිරීම',
     'dog_barking': 'බල්ලා බිරීම',
-    'road': 'මාර්ග ඝෝෂාව',
-    'traffic': 'රථවාහන ශබ්දය',
   };
 
   @override
@@ -148,16 +122,16 @@ class AudioCaptureNative implements AudioCaptureInterface {
     _alertLatched = false;
 
     // 1. Request Android Runtime Permissions
-    PermissionStatus mic = PermissionStatus.denied;
     try {
-      mic = await Permission.microphone.request();
+      final mic = await Permission.microphone.request();
       await [
         Permission.notification,
         Permission.bluetoothConnect,
         Permission.bluetoothScan,
       ].request();
+
       if (!mic.isGranted) {
-        _latestTranscript = "⚠️ Microphone permission required. Please allow microphone in App Settings.";
+        _latestTranscript = "⚠️ Microphone permission required. Please grant permission in Settings.";
         onSpeechTranscript(_latestTranscript);
         return;
       }
@@ -171,21 +145,21 @@ class AudioCaptureNative implements AudioCaptureInterface {
     _latestTranscript = "🎤 Live Mic Active: Listening for Sinhala Voice & Environmental Sounds...";
     _onSpeechTranscript?.call(_latestTranscript);
 
+    await _initAndStartSpeechRecognition();
     _startAudioStreamer();
-    _initAndStartSpeechRecognition();
   }
 
   Future<void> _loadNeuralNetwork() async {
     try {
       final ok = await _classifier.loadModel();
-      debugPrint('[AudioCaptureNative] Deep Neural Network loaded: $ok');
+      debugPrint('[AudioCaptureNative] Neural Classifier loaded: $ok');
     } catch (e) {
-      debugPrint('[AudioCaptureNative] Deep Neural Network load error: $e');
+      debugPrint('[AudioCaptureNative] Neural Classifier load error: $e');
     }
   }
 
   // =========================================================================
-  // SPEECH RECOGNITION (CONTINUOUS & LIVE SINHALA TRANSCRIPT)
+  // SPEECH RECOGNITION (CONTINUOUS LIVE TRANSCRIPT STREAM & SINHALA KEYWORDS)
   // =========================================================================
 
   Future<void> _initAndStartSpeechRecognition() async {
@@ -206,21 +180,22 @@ class AudioCaptureNative implements AudioCaptureInterface {
                 _onSpeechTranscript?.call(_latestTranscript);
               }
             } else if (status == 'notListening' || status == 'done') {
-              _scheduleSpeechRestart(delayMs: 300);
+              _scheduleSpeechRestart(delayMs: 200);
             }
           },
           onError: (errorNotification) {
             debugPrint('[AudioCaptureNative STT Error]: ${errorNotification.errorMsg}');
             if (!_isListening) return;
-            _scheduleSpeechRestart(delayMs: 1200);
+            final msg = errorNotification.errorMsg.toLowerCase();
+            if (msg.contains('language') || msg.contains('locale') || msg.contains('not supported')) {
+              _matchedLocaleId = 'en-US';
+            }
+            _scheduleSpeechRestart(delayMs: 800);
           },
         );
 
         try {
           final locales = await _speechToText.locales();
-          for (final loc in locales) {
-            debugPrint('[AudioCaptureNative] Device STT locale: ${loc.localeId} (${loc.name})');
-          }
           final siMatch = locales.firstWhere(
             (l) => l.localeId.toLowerCase().startsWith('si'),
             orElse: () => locales.firstWhere(
@@ -229,30 +204,23 @@ class AudioCaptureNative implements AudioCaptureInterface {
             ),
           );
           _matchedLocaleId = siMatch.localeId;
-          debugPrint('[AudioCaptureNative] Matched best locale: $_matchedLocaleId');
+          debugPrint('[AudioCaptureNative] Best speech locale matched: $_matchedLocaleId');
         } catch (_) {
           _matchedLocaleId = 'si-LK';
         }
       }
 
-      if (_isSpeechInitialized && _isListening) {
+      if (_isListening) {
         _startSpeechSession();
-      } else if (!_isSpeechInitialized && _isListening) {
-        _speechRestartTimer?.cancel();
-        _speechRestartTimer = Timer(const Duration(milliseconds: 1000), () {
-          if (_isListening && !_isSpeechInitialized) {
-            _initAndStartSpeechRecognition();
-          }
-        });
       }
     } catch (e) {
       debugPrint('[AudioCaptureNative] STT Init exception: $e');
-      _scheduleSpeechRestart(delayMs: 800);
+      _scheduleSpeechRestart(delayMs: 600);
     }
   }
 
   void _startSpeechSession() async {
-    if (!_isListening || _speechToText.isListening) return;
+    if (!_isListening) return;
 
     try {
       final targetLocale = _selectedLocaleId.toLowerCase().startsWith('si')
@@ -266,16 +234,18 @@ class AudioCaptureNative implements AudioCaptureInterface {
         autoPunctuation: true,
         enableHapticFeedback: false,
         localeId: targetLocale,
-        pauseFor: const Duration(seconds: 3),
-        listenFor: const Duration(seconds: 30),
+        pauseFor: const Duration(seconds: 10),
+        listenFor: const Duration(hours: 2),
       );
+
+      if (_speechToText.isListening) return;
 
       await _speechToText.listen(
         onResult: (result) {
           final words = result.recognizedWords.trim();
           if (words.isNotEmpty) {
             _lastSpeechTime = DateTime.now();
-            final displayText = '🗣️ Heard: "$words"';
+            final displayText = '🗣️ Live Voice: "$words"';
             _latestTranscript = displayText;
             _onSpeechTranscript?.call(displayText);
             _matchKeywords(words);
@@ -288,11 +258,14 @@ class AudioCaptureNative implements AudioCaptureInterface {
       );
     } catch (e) {
       debugPrint('[AudioCaptureNative] STT listen error: $e');
-      _scheduleSpeechRestart(delayMs: 1500);
+      if (_matchedLocaleId != 'en-US') {
+        _matchedLocaleId = 'en-US';
+      }
+      _scheduleSpeechRestart(delayMs: 300);
     }
   }
 
-  void _scheduleSpeechRestart({int delayMs = 300}) {
+  void _scheduleSpeechRestart({int delayMs = 200}) {
     if (!_isListening) return;
     _speechRestartTimer?.cancel();
     _speechRestartTimer = Timer(Duration(milliseconds: delayMs), () {
@@ -311,7 +284,7 @@ class AudioCaptureNative implements AudioCaptureInterface {
   }
 
   // =========================================================================
-  // AUDIO STREAMER (PER-PACKET 16,000 HZ RESAMPLING WITH 0 PITCH DISTORTION)
+  // AUDIO STREAMER & NEURAL CLASSIFIER (40-MFCC DEEP MODEL)
   // =========================================================================
 
   void _startAudioStreamer() {
@@ -321,14 +294,6 @@ class AudioCaptureNative implements AudioCaptureInterface {
       _audioStreamSubscription?.cancel();
       _audioStreamSubscription = null;
       final streamer = AudioStreamer();
-      streamer.sampleRate = _targetSampleRate;
-
-      streamer.actualSampleRate.then((rate) {
-        if (rate > 0) {
-          _hardwareSampleRate = rate;
-          debugPrint('[AudioCaptureNative] Native hardware sample rate: $_hardwareSampleRate Hz');
-        }
-      }).catchError((_) {});
 
       _audioStreamSubscription = streamer.audioStream.listen(
         (buffer) {
@@ -355,29 +320,39 @@ class AudioCaptureNative implements AudioCaptureInterface {
   void _processPcmBuffer(List<double> rawBuffer) {
     if (rawBuffer.isEmpty) return;
 
-    final now = DateTime.now();
-    if (_lastPcmPacketTime != null) {
-      final elapsedMs = now.difference(_lastPcmPacketTime!).inMilliseconds;
-      if (elapsedMs > 5 && elapsedMs < 2000) {
-        final calcSr = (rawBuffer.length * 1000 / elapsedMs).round();
-        if (calcSr >= 36000) {
-          _hardwareSampleRate = calcSr >= 46000 ? 48000 : 44100;
-        } else if (calcSr >= 12000 && calcSr <= 24000) {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (_lastPcmTimeMs > 0) {
+      final deltaMs = nowMs - _lastPcmTimeMs;
+      if (deltaMs > 5 && deltaMs < 200) {
+        final estimatedRate = (rawBuffer.length * 1000.0) / deltaMs;
+        if (estimatedRate > 38000 && estimatedRate < 46000) {
+          _hardwareSampleRate = 44100;
+        } else if (estimatedRate >= 46000 && estimatedRate < 56000) {
+          _hardwareSampleRate = 48000;
+        } else if (estimatedRate >= 12000 && estimatedRate <= 24000) {
           _hardwareSampleRate = 16000;
         }
       }
     }
-    _lastPcmPacketTime = now;
+    _lastPcmTimeMs = nowMs;
 
-    // Detect 16-bit PCM scale
+    if (_hardwareSampleRate <= 0) {
+      if (rawBuffer.length >= 4096) {
+        _hardwareSampleRate = 48000;
+      } else if (rawBuffer.length >= 3528 || rawBuffer.length == 4410) {
+        _hardwareSampleRate = 44100;
+      } else {
+        _hardwareSampleRate = 44100; // Default to standard 44.1 kHz on mobile
+      }
+    }
+
     double maxRaw = 0.0;
     for (int i = 0; i < rawBuffer.length; i++) {
       final a = rawBuffer[i].abs();
       if (a > maxRaw) maxRaw = a;
     }
-    final double normScale = maxRaw > 1.5 ? (1.0 / 32768.0) : 1.0;
+    final double normScale = maxRaw > 2.0 ? (1.0 / 32768.0) : 1.0;
 
-    // Downsample/resample THIS packet immediately to exact 16,000 Hz
     List<double> packet16k;
     if (_hardwareSampleRate == 16000) {
       packet16k = List<double>.generate(rawBuffer.length, (i) => rawBuffer[i] * normScale);
@@ -426,11 +401,9 @@ class AudioCaptureNative implements AudioCaptureInterface {
       estimatedHz = ((zeroCrossings / 2.0) / durationSec).clamp(60.0, 5000.0);
     }
 
-    final int pitchInt = estimatedHz.round();
     _latestVolume = normalizedVol;
-    _latestPitch = pitchInt;
+    _latestPitch = estimatedHz.round();
 
-    // Visualizer frame
     final centerBand = ((estimatedHz / 3500.0) * 40).clamp(2, 38).round();
     final List<double> frame = List<double>.generate(40, (i) {
       final dist = (i - centerBand).abs();
@@ -441,44 +414,58 @@ class AudioCaptureNative implements AudioCaptureInterface {
     _latestFrame = frame;
     _onAudioFrame?.call(frame, _latestVolume, _latestPitch);
 
-    // =========================================================================
-    // ACOUSTIC CLASSIFIER (Deep 40-MFCC Neural Network - Exact Librosa ref=1.0)
-    // =========================================================================
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
-    if (nowMs - _lastMlTime > 200 && _classifier.isLoaded && _total16kPushed >= 16000) {
-      if (maxAmp >= 0.035 && rms >= 0.012) {
-        _lastMlTime = nowMs;
-        final List<double> window1s = List<double>.filled(16000, 0.0);
-        for (int i = 0; i < 16000; i++) {
-          window1s[i] = _rollingBuf16k[(_rollingIdx - 16000 + i + 16000) % 16000];
-        }
+    // Run Neural Network Inference on 1-second rolling buffer
+    final bool isSpeechActive = nowMs - _lastSpeechTime.millisecondsSinceEpoch < 2500;
 
+    if (nowMs - _lastMlTime > 150 && _classifier.isLoaded && _total16kPushed >= 16000) {
+      final List<double> window1s = List<double>.filled(16000, 0.0);
+      double winSumSq = 0.0;
+      double winMaxAmp = 0.0;
+      for (int i = 0; i < 16000; i++) {
+        final val = _rollingBuf16k[(_rollingIdx - 16000 + i + 16000) % 16000];
+        window1s[i] = val;
+        final absV = val.abs();
+        if (absV > winMaxAmp) winMaxAmp = absV;
+        winSumSq += val * val;
+      }
+      final winRms = math.sqrt(winSumSq / 16000.0);
+
+      // Require real energy
+      if (winRms >= 0.015 && winMaxAmp >= 0.030) {
+        _lastMlTime = nowMs;
         final prediction = _classifier.predict(window1s);
 
         if (prediction != null) {
           final topClass = prediction.label;
           final topProb = prediction.probability;
 
-          if (topClass != 'background_traffic') {
-            final double reqThreshold = classThresholds[topClass] ?? 0.65;
-            if (topProb >= reqThreshold) {
-              if (topClass == _candidateClass) {
-                _candidateCount++;
-              } else {
-                _candidateClass = topClass;
-                _candidateCount = 1;
-              }
-
-              if (_candidateCount >= 2) {
-                _triggerMlAlert(topClass, topProb);
-              }
-            } else {
-              _candidateClass = null;
-              _candidateCount = 0;
-            }
+          if (topClass == _consecutiveClassLabel) {
+            _consecutiveClassCount++;
           } else {
-            _candidateClass = null;
-            _candidateCount = 0;
+            _consecutiveClassLabel = topClass;
+            _consecutiveClassCount = 1;
+          }
+
+          final bool isSinhalaKeyword = (topClass == 'udaw' ||
+              topClass == 'beeraganna' ||
+              topClass == 'ginnak' ||
+              topClass == 'anathurak' ||
+              topClass == 'karadarayak' ||
+              topClass == 'balagena' ||
+              topClass == 'parissamin' ||
+              topClass == 'ehata_wenna');
+
+          final bool isEnvironmental = (topClass == 'ambulance_siren' ||
+              topClass == 'vehicle_horn' ||
+              topClass == 'baby_crying' ||
+              topClass == 'dog_barking');
+
+          if (isEnvironmental && topProb >= 0.85 && _consecutiveClassCount >= 4) {
+            _triggerMlAlert(topClass, topProb);
+            _consecutiveClassCount = 0;
+          } else if (isSinhalaKeyword && topProb >= 0.85 && _consecutiveClassCount >= 3) {
+            _triggerMlAlert(topClass, topProb);
+            _consecutiveClassCount = 0;
           }
         }
       }
@@ -489,14 +476,11 @@ class AudioCaptureNative implements AudioCaptureInterface {
     if (_alertLatched) return;
 
     final now = DateTime.now();
-
     final fc = flutterClassMap[rawCls];
     if (fc == null) return;
 
-    // Global cooldown: 1.2s between ANY detection (fast, responsive)
     if (now.difference(_lastTriggerTime).inMilliseconds < 1200) return;
 
-    // Per-class cooldown: 2.2s between detections of the same class
     final lastClassTime = _classCooldown[fc];
     if (lastClassTime != null && now.difference(lastClassTime).inMilliseconds < 2200) {
       return;
@@ -505,8 +489,6 @@ class AudioCaptureNative implements AudioCaptureInterface {
     _lastTriggerTime = now;
     _classCooldown[fc] = now;
     _alertLatched = true;
-    _candidateClass = null;
-    _candidateCount = 0;
 
     Timer(const Duration(milliseconds: 2200), () {
       _alertLatched = false;
@@ -519,26 +501,15 @@ class AudioCaptureNative implements AudioCaptureInterface {
     String titleText = "";
     if (fc.contains('baby')) {
       emoji = "👶";
-      titleText = "$emoji Sound Detected: $sinhala ($fc)";
     } else if (fc.contains('dog')) {
       emoji = "🐕";
-      titleText = "$emoji Sound Detected: $sinhala ($fc)";
     } else if (fc.contains('horn')) {
       emoji = "🚗";
-      titleText = "$emoji Sound Detected: $sinhala ($fc)";
     } else if (fc.contains('ambulance')) {
       emoji = "🚑";
-      titleText = "$emoji Emergency Siren: $sinhala ($fc)";
-    } else if (fc.contains('fire')) {
-      emoji = "🔥";
-      titleText = "$emoji Emergency Alarm: $sinhala ($fc)";
-    } else {
-      emoji = "🗣️";
-      titleText = "$emoji Sinhala Keyword: $sinhala ($fc)";
     }
-    _latestTranscript = titleText;
-    _onSpeechTranscript?.call(_latestTranscript);
 
+    // Sound alerts trigger event listeners directly without overwriting the live speech transcript
     _latestAlert = {
       'category': fc,
       'confidence': confidence,
@@ -568,7 +539,6 @@ class AudioCaptureNative implements AudioCaptureInterface {
       return (normalizedVol * (0.35 + wave * 0.65)).clamp(0.04, 1.0);
     });
     _latestFrame = frame;
-
     _onAudioFrame?.call(frame, _latestVolume, _latestPitch);
   }
 
@@ -594,173 +564,101 @@ class AudioCaptureNative implements AudioCaptureInterface {
   /// Match Sinhala Unicode Speech, Sinhala Transliterations, and English Emergency Keywords
   void _matchKeywords(String text) {
     final now = DateTime.now();
-    if (_alertLatched || now.difference(_lastTriggerTime).inMilliseconds < 3500) return;
+    if (_alertLatched || now.difference(_lastTriggerTime).inMilliseconds < 1200) return;
 
     final clean = text.toLowerCase().replaceAll(RegExp(r'[^a-z0-9\u0D80-\u0DFF\s]'), ' ');
-
+    final tokens = clean.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toList();
     String? matched;
 
-    // 1. HELP / UDAW ("උදව්", "උදවු", "උදව්වක්", "උදව් කරන්න", "udaw", "help", "save")
-    if (clean.contains('උදව්') ||
-        clean.contains('උදවු') ||
-        clean.contains('උදව') ||
-        clean.contains('udaw') ||
-        clean.contains('udhaw') ||
-        clean.contains('udhav') ||
-        clean.contains('udawu') ||
-        clean.contains('udau') ||
-        clean.contains('udav') ||
-        clean.contains('udaau') ||
-        clean.contains('help') ||
-        clean.contains('save me') ||
-        clean.contains('save') ||
-        clean.contains('you dow') ||
-        clean.contains('wood how') ||
-        clean.contains('who dow') ||
-        clean.contains('u dow') ||
-        clean.contains('u daw') ||
-        clean.contains('you daw') ||
-        clean.contains('who daw')) {
-      matched = 'udaw';
-    }
-    // 2. RESCUE / BEERAGANNA ("බේරගන්න", "බේර ගන්න", "බේරගනින්", "බේරන්න", "beeraganna", "rescue")
-    else if (clean.contains('බේරගන්න') ||
-        clean.contains('බේර ගන්න') ||
-        clean.contains('බේරගනින්') ||
-        clean.contains('බේරන්න') ||
-        clean.contains('බේරපන්') ||
-        clean.contains('beeraganna') ||
-        clean.contains('beera ganna') ||
-        clean.contains('beraganna') ||
-        clean.contains('bera ganna') ||
-        clean.contains('beeranna') ||
-        clean.contains('beranna') ||
-        clean.contains('rescue') ||
-        clean.contains('beer gonna') ||
-        clean.contains('better gonna') ||
-        clean.contains('bear gonna') ||
-        clean.contains('bera gana')) {
-      matched = 'beeraganna';
-    }
-    // 3. FIRE / GINNAK ("ගින්නක්", "ගින්න", "ගින්දර", "ginnak")
-    else if (clean.contains('ගින්නක්') ||
-        clean.contains('ගින්න') ||
-        clean.contains('ගින්දර') ||
-        clean.contains('ගිනි') ||
-        clean.contains('ginnak') ||
-        clean.contains('ginna') ||
-        clean.contains('gindara') ||
-        clean.contains('fire') ||
-        clean.contains('burning') ||
-        clean.contains('gin knock') ||
-        clean.contains('gin duck') ||
-        clean.contains('green lock') ||
-        clean.contains('gin nak')) {
-      matched = 'ginnak';
-    }
-    // 4. DANGER / ANATHURAK ("අනතුරක්", "අනතුර", "අනතුරු", "anathurak", "danger")
-    else if (clean.contains('අනතුරක්') ||
-        clean.contains('අනතුර') ||
-        clean.contains('අනතුරු') ||
-        clean.contains('anathurak') ||
-        clean.contains('anathura') ||
-        clean.contains('anadura') ||
-        clean.contains('anaturak') ||
-        clean.contains('anuturak') ||
-        clean.contains('anutura') ||
-        clean.contains('anature') ||
-        clean.contains('danger') ||
-        clean.contains('hazard') ||
-        clean.contains('accident') ||
-        clean.contains('another rug') ||
-        clean.contains('on a truck') ||
-        clean.contains('ana turak') ||
-        clean.contains('ana thurak')) {
-      matched = 'anathurak';
-    }
-    // 5. TROUBLE / KARADARAYAK ("කරදරයක්", "කරදර", "කරදරේ", "karadarayak")
-    else if (clean.contains('කරදරයක්') ||
-        clean.contains('කරදර') ||
-        clean.contains('කරදරේ') ||
-        clean.contains('karadarayak') ||
-        clean.contains('karadaraya') ||
-        clean.contains('kadadaria') ||
-        clean.contains('karadari') ||
-        clean.contains('karadare') ||
-        clean.contains('trouble') ||
-        clean.contains('kara darayak')) {
-      matched = 'karadarayak';
-    }
-    // 6. WATCH OUT / BALAGENA ("බලාගෙන", "බලා ගෙන", "balagena", "watch out")
-    else if (clean.contains('බලාගෙන') ||
-        clean.contains('බලා ගෙන') ||
-        clean.contains('බලාපන්') ||
-        clean.contains('balagena') ||
-        clean.contains('bala gena') ||
-        clean.contains('balagana') ||
-        clean.contains('bala gana') ||
-        clean.contains('balaagana') ||
-        clean.contains('blagena') ||
-        clean.contains('balagen') ||
-        clean.contains('watch out') ||
-        clean.contains('look out')) {
-      matched = 'balagena';
-    }
-    // 7. BE CAREFUL / PARISSAMIN ("පරිස්සමින්", "පරිස්සමෙන්", "පරිස්සම්", "parissamin", "careful")
-    else if (clean.contains('පරිස්සමින්') ||
-        clean.contains('පරිස්සමෙන්') ||
-        clean.contains('පරිස්සම්') ||
-        clean.contains('parissamin') ||
-        clean.contains('parisamin') ||
-        clean.contains('pare sami') ||
-        clean.contains('parissamen') ||
-        clean.contains('careful') ||
-        clean.contains('caution') ||
-        clean.contains('paris samin')) {
-      matched = 'parissamin';
-    }
-    // 8. MOVE AWAY / EHATA WENNA ("එහාට වෙන්න", "එහාට", "අයින් වෙන්න", "ehata")
-    else if (clean.contains('එහාට වෙන්න') ||
-        clean.contains('එහාට') ||
-        clean.contains('අයින් වෙන්න') ||
-        clean.contains('ehata') ||
-        clean.contains('ehata wena') ||
-        clean.contains('ehata venna') ||
-        clean.contains('ehatavena') ||
-        clean.contains('akihata') ||
-        clean.contains('akihata venna') ||
-        clean.contains('akihata wenna') ||
-        clean.contains('move away') ||
-        clean.contains('get away')) {
-      matched = 'ehata_wenna';
-    }
-    // 9. STOP / NAWATHTHANNA ("නවත්තන්න", "නවත්වන්න", "නවත්තපන්", "නවතින්න", "nawaththanna", "stop")
-    else if (clean.contains('නවත්තන්න') ||
-        clean.contains('නවත්වන්න') ||
-        clean.contains('නවත්තපන්') ||
-        clean.contains('නවතින්න') ||
-        clean.contains('nawaththanna') ||
-        clean.contains('nawathwanna') ||
-        clean.contains('stop')) {
-      matched = 'nawaththanna';
-    }
-    // 10. SCREAMING ("කෑගැසීමක්", "කෑ ගහනවා", "scream", "screaming")
-    else if (clean.contains('කෑගැසීම') ||
-        clean.contains('කෑ ගහනවා') ||
-        clean.contains('කෑගහනවා') ||
-        clean.contains('scream') ||
-        clean.contains('screaming')) {
-      matched = 'screaming';
+    for (final token in [...tokens, clean]) {
+      if (matched != null) break;
+
+      // 1. UDAW ("උදව්", "උදවු", "udaw", "help", "save me")
+      if (token.contains('උදව්') ||
+          token.contains('උදවු') ||
+          token.contains('udaw') ||
+          token.contains('udhaw') ||
+          token.contains('udhav') ||
+          token.contains('udawu') ||
+          token.contains('udau') ||
+          token.contains('udav') ||
+          token.contains('help') ||
+          token.contains('save me')) {
+        matched = 'udaw';
+      }
+      // 2. BEERAGANNA ("බේරගන්න", "බේර ගන්න", "beeraganna", "rescue")
+      else if (token.contains('බේරගන්න') ||
+          token.contains('බේර') ||
+          token.contains('බේරගනින්') ||
+          token.contains('beeraganna') ||
+          token.contains('beraganna') ||
+          token.contains('rescue')) {
+        matched = 'beeraganna';
+      }
+      // 3. GINNAK ("ගින්නක්", "ගින්න", "ගින්දර", "ginnak", "fire")
+      else if (token.contains('ගින්නක්') ||
+          token.contains('ගින්න') ||
+          token.contains('ගින්දර') ||
+          token.contains('ginnak') ||
+          token.contains('ginna') ||
+          token.contains('gindara') ||
+          token.contains('fire')) {
+        matched = 'ginnak';
+      }
+      // 4. ANATHURAK ("අනතුරක්", "අනතුර", "anathurak", "danger")
+      else if (token.contains('අනතුරක්') ||
+          token.contains('අනතුර') ||
+          token.contains('anathurak') ||
+          token.contains('anathura') ||
+          token.contains('anadurak') ||
+          token.contains('anaturak') ||
+          token.contains('danger') ||
+          token.contains('hazard')) {
+        matched = 'anathurak';
+      }
+      // 5. KARADARAYAK ("කරදරයක්", "කරදර", "karadarayak", "trouble")
+      else if (token.contains('කරදරයක්') ||
+          token.contains('කරදර') ||
+          token.contains('karadarayak') ||
+          token.contains('karadaraya') ||
+          token.contains('trouble')) {
+        matched = 'karadarayak';
+      }
+      // 6. BALAGENA ("බලාගෙන", "බලා ගන්න", "balagena", "watch out")
+      else if (token.contains('බලාගෙන') ||
+          token.contains('බලා') ||
+          token.contains('balagena') ||
+          token.contains('balagana') ||
+          token.contains('watch out') ||
+          token.contains('look out')) {
+        matched = 'balagena';
+      }
+      // 7. PARISSAMIN ("පරිස්සමින්", "පරිස්සමෙන්", "parissamin", "careful")
+      else if (token.contains('පරිස්සමින්') ||
+          token.contains('පරිස්සමෙන්') ||
+          token.contains('පරිස්සම්') ||
+          token.contains('parissamin') ||
+          token.contains('parisamin') ||
+          token.contains('careful') ||
+          token.contains('caution')) {
+        matched = 'parissamin';
+      }
+      // 8. EHATA WENNA ("එහාට වෙන්න", "එහාට", "ehata")
+      else if (token.contains('එහාට') ||
+          token.contains('අයින්') ||
+          token.contains('ehata') ||
+          token.contains('move away')) {
+        matched = 'ehata_wenna';
+      }
     }
 
     if (matched != null) {
       _lastTriggerTime = now;
       _alertLatched = true;
-      Timer(const Duration(milliseconds: 2500), () {
+      Timer(const Duration(milliseconds: 2200), () {
         _alertLatched = false;
       });
-      final sinhala = sinhalaTitles[matched] ?? matched;
-      final displayText = '🗣️ Heard: "$text" ➔ 🚨 $sinhala';
+      final displayText = '🗣️ Live Voice: "$text"';
       _latestTranscript = displayText;
       _onSpeechTranscript?.call(displayText);
 
@@ -770,7 +668,7 @@ class AudioCaptureNative implements AudioCaptureInterface {
         'source': 'Voice Speech Recognition: "$text"',
         'timestamp': now.millisecondsSinceEpoch,
       };
-      debugPrint('[AudioCaptureNative Emergency Keyword Triggered]: $matched from "$text"');
+      debugPrint('[AudioCaptureNative Keyword Alert]: $matched from "$text"');
       _onAudioEvent?.call(matched, 0.98, 'Voice Speech Recognition: "$text"');
     }
   }
@@ -778,7 +676,6 @@ class AudioCaptureNative implements AudioCaptureInterface {
   @override
   void stopCapture() {
     _isListening = false;
-
     _stopSpeechRecognition();
     _stopAudioStreamer();
 
@@ -794,10 +691,8 @@ class AudioCaptureNative implements AudioCaptureInterface {
   @override
   void acknowledgeAlert() {
     _alertLatched = false;
-    _candidateClass = null;
-    _candidateCount = 0;
     _latestAlert = null;
-    _latestTranscript = "🎤 Listening for Sinhala keywords and environmental sounds...";
+    _latestTranscript = "🎤 Listening for Sinhala voice keywords & environmental sounds...";
     _onSpeechTranscript?.call(_latestTranscript);
   }
 
@@ -814,7 +709,7 @@ class AudioCaptureNative implements AudioCaptureInterface {
 
   @override
   void playSample(String soundName) {
-    debugPrint('[AudioCaptureNative] Test sound sample triggered: $soundName');
+    debugPrint('[AudioCaptureNative] Test sound sample: $soundName');
   }
 
   @override
@@ -833,32 +728,14 @@ class AudioCaptureNative implements AudioCaptureInterface {
 
   @override
   void setSpeechLanguage(String langCode) {
-    debugPrint('[AudioCaptureNative] Language switch requested: $langCode');
-    if (langCode.toLowerCase().startsWith('si')) {
-      _selectedLocaleId = _matchedLocaleId;
-    } else {
-      _selectedLocaleId = 'en-US';
-    }
-
+    _selectedLocaleId = langCode.toLowerCase().startsWith('si') ? _matchedLocaleId : 'en-US';
     _latestTranscript = "🎤 Voice Recognition Language set to: $langCode";
     _onSpeechTranscript?.call(_latestTranscript);
-
-    if (_isListening) {
-      _speechToText.stop().then((_) {
-        _startSpeechSession();
-      }).catchError((_) {
-        _startSpeechSession();
-      });
-    }
   }
 
   @override
-  void setMonitorMode(String mode) {
-    debugPrint('[AudioCaptureNative] Combined monitor enabled');
-  }
+  void setMonitorMode(String mode) {}
 
   @override
-  void setSensitivity(String level) {
-    debugPrint('[AudioCaptureNative] Sensitivity updated to: $level');
-  }
+  void setSensitivity(String level) {}
 }

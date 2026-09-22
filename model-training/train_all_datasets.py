@@ -6,7 +6,10 @@ import numpy as np
 import librosa
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras import layers
+try:
+    import keras.layers as layers
+except ImportError:
+    layers = tf.keras.layers
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix
 
@@ -153,6 +156,18 @@ def load_all_datasets():
                     X.append(feat)
                     y.append(class_idx)
                     class_counts[mapped_class] += 1
+
+    # Add synthetic ambient room noise & silence to background_traffic to prevent false room-noise detections
+    bg_idx = CLASSES.index("background_traffic")
+    print("  -> Generating 600 synthetic ambient room noise & static samples for 'background_traffic'...")
+    for _ in range(600):
+        amp = np.random.uniform(0.00005, 0.025)
+        y_noise = np.random.randn(SAMPLE_RATE).astype(np.float32) * amp
+        mfccs = librosa.feature.mfcc(y=y_noise, sr=SAMPLE_RATE, n_mfcc=N_MFCC)
+        feat = np.mean(mfccs.T, axis=0)
+        X.append(feat)
+        y.append(bg_idx)
+        class_counts["background_traffic"] += 1
 
     print("-------------------------------------------------------")
     print("Class Sample Distribution:")
