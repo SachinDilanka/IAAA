@@ -229,14 +229,14 @@ class AudioCaptureNative implements AudioCaptureInterface {
           : 'en-US';
 
       final options = SpeechListenOptions(
-        listenMode: ListenMode.dictation,
+        listenMode: ListenMode.confirmation,
         partialResults: true,
         cancelOnError: false,
         autoPunctuation: true,
         enableHapticFeedback: false,
         localeId: targetLocale,
-        pauseFor: const Duration(seconds: 10),
-        listenFor: const Duration(hours: 2),
+        pauseFor: const Duration(seconds: 4),
+        listenFor: const Duration(seconds: 30),
       );
 
       if (_speechToText.isListening) return;
@@ -263,17 +263,21 @@ class AudioCaptureNative implements AudioCaptureInterface {
         _matchedLocaleId = 'en-US';
         _selectedLocaleId = 'en-US';
       }
-      _scheduleSpeechRestart(delayMs: 300);
+      _scheduleSpeechRestart(delayMs: 400);
     }
   }
 
-  void _scheduleSpeechRestart({int delayMs = 200}) {
+  void _scheduleSpeechRestart({int delayMs = 300}) {
     if (!_isListening) return;
     _speechRestartTimer?.cancel();
-    _speechRestartTimer = Timer(Duration(milliseconds: delayMs), () {
-      if (_isListening && !_speechToText.isListening) {
-        _startSpeechSession();
-      }
+    _speechRestartTimer = Timer(Duration(milliseconds: delayMs), () async {
+      if (!_isListening) return;
+      try {
+        if (_speechToText.isListening) {
+          await _speechToText.stop();
+        }
+      } catch (_) {}
+      _startSpeechSession();
     });
   }
 
@@ -462,10 +466,10 @@ class AudioCaptureNative implements AudioCaptureInterface {
               topClass == 'baby_crying' ||
               topClass == 'dog_barking');
 
-          if (isSinhalaKeyword && topProb >= 0.50) {
+          if (isSinhalaKeyword && topProb >= 0.85 && _consecutiveClassCount >= 2) {
             _triggerMlAlert(topClass, topProb);
             _consecutiveClassCount = 0;
-          } else if (isEnvironmental && topProb >= 0.80 && _consecutiveClassCount >= 2) {
+          } else if (isEnvironmental && topProb >= 0.94 && _consecutiveClassCount >= 4 && !isSpeechActive) {
             _triggerMlAlert(topClass, topProb);
             _consecutiveClassCount = 0;
           }

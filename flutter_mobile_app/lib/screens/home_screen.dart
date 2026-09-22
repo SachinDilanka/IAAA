@@ -302,82 +302,90 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildMicControlCard(BuildContext context, SoundClassifierService classifier) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFF1E293B),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFF334155)),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: classifier.isListening
-                  ? const Color(0xFF059669).withValues(alpha: 0.25)
-                  : const Color(0xFFDC2626).withValues(alpha: 0.25),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              classifier.isListening ? Icons.mic_rounded : Icons.mic_off_rounded,
-              color: classifier.isListening ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-              size: 26,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: classifier.isListening
+                      ? const Color(0xFF059669).withValues(alpha: 0.25)
+                      : const Color(0xFFDC2626).withValues(alpha: 0.25),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  classifier.isListening ? Icons.mic_rounded : Icons.mic_off_rounded,
+                  color: classifier.isListening ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      classifier.isListening ? 'MICROPHONE ACTIVE' : 'MICROPHONE PAUSED',
-                      style: TextStyle(
-                        color: classifier.isListening ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    if (classifier.isListening)
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF10B981),
-                          shape: BoxShape.circle,
+                    Row(
+                      children: [
+                        Text(
+                          classifier.isListening ? 'MICROPHONE ACTIVE' : 'MICROPHONE PAUSED',
+                          style: TextStyle(
+                            color: classifier.isListening ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 6),
+                        if (classifier.isListening)
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF10B981),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Continuous Voice & Ambient Monitoring',
+                      style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 2),
-                const Text(
-                  'Continuous Voice & Ambient Monitoring',
-                  style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: classifier.isListening ? const Color(0xFFDC2626) : const Color(0xFF059669),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: classifier.isListening ? const Color(0xFFDC2626) : const Color(0xFF059669),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              icon: Icon(classifier.isListening ? Icons.pause_rounded : Icons.mic_rounded, size: 20),
+              label: Text(
+                classifier.isListening ? 'STOP MICROPHONE MONITORING' : 'START MICROPHONE MONITORING',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              onPressed: () {
+                if (classifier.isListening) {
+                  classifier.stopListening();
+                } else {
+                  classifier.startListening();
+                }
+              },
             ),
-            icon: Icon(classifier.isListening ? Icons.pause_rounded : Icons.mic_rounded, size: 18),
-            label: Text(
-              classifier.isListening ? 'STOP MIC' : 'START MIC',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-            ),
-            onPressed: () {
-              if (classifier.isListening) {
-                classifier.stopListening();
-              } else {
-                classifier.startListening();
-              }
-            },
           ),
         ],
       ),
