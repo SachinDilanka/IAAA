@@ -511,7 +511,20 @@ class AudioCaptureNative implements AudioCaptureInterface {
       emoji = "🚑";
     }
 
-    // Sound alerts trigger event listeners directly without overwriting the live speech transcript
+    // Update live transcript box if a Sinhala keyword was detected by acoustic model
+    if (fc == 'udaw' ||
+        fc == 'beeraganna' ||
+        fc == 'ginnak' ||
+        fc == 'anathurak' ||
+        fc == 'karadarayak' ||
+        fc == 'balagena' ||
+        fc == 'parissamin' ||
+        fc == 'ehata_wenna') {
+      final displayText = '🗣️ Live Voice (AI Keyword): "$rawCls ($sinhala)"';
+      _latestTranscript = displayText;
+      _onSpeechTranscript?.call(displayText);
+    }
+
     _latestAlert = {
       'category': fc,
       'confidence': confidence,

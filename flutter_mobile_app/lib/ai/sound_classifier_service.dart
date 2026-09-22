@@ -32,7 +32,7 @@ class SoundClassifierService extends ChangeNotifier {
   List<double> _liveSpectrogramFrame = List.generate(40, (i) => 0.16);
   double _currentRmsVolume = 0.12;
   int _currentPitchHz = 220;
-  String _liveSpeechTranscript = "🎤 AI Audio & Voice Monitor Standby (Tap 'Start Mic' or anywhere to activate)...";
+  String _liveSpeechTranscript = "⏸️ Microphone Off (Tap 'START MIC' button to activate live voice & sound recognition)";
   String _speechLanguage = 'si-LK';
   String _sensitivity = 'high';
 

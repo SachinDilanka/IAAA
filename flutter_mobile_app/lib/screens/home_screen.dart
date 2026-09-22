@@ -17,12 +17,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final classifier = Provider.of<SoundClassifierService>(context, listen: false);
-      if (!classifier.isListening) {
-        classifier.startListening();
-      }
-    });
   }
 
   @override
@@ -365,15 +359,23 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
-          const SizedBox(width: 8),
-          Switch(
-            value: classifier.isListening,
-            activeColor: const Color(0xFF10B981),
-            onChanged: (val) {
-              if (val) {
-                classifier.startListening();
-              } else {
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: classifier.isListening ? const Color(0xFFDC2626) : const Color(0xFF059669),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            icon: Icon(classifier.isListening ? Icons.pause_rounded : Icons.mic_rounded, size: 18),
+            label: Text(
+              classifier.isListening ? 'STOP MIC' : 'START MIC',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            onPressed: () {
+              if (classifier.isListening) {
                 classifier.stopListening();
+              } else {
+                classifier.startListening();
               }
             },
           ),
