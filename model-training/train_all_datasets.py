@@ -49,9 +49,19 @@ CLASS_MAP = {
     "baby_crying": "baby_crying",
     "dog_bark_dataset": "dog_barking",
     "dog_barking": "dog_barking",
-    # Ambient / Traffic Background
+    # Ambient / Traffic / Room / Talking / Noise Background
     "traffic": "background_traffic",
     "road": "background_traffic",
+    "talking": "background_traffic",
+    "restaurant": "background_traffic",
+    "classroom": "background_traffic",
+    "fan": "background_traffic",
+    "ac_fan": "background_traffic",
+    "train": "background_traffic",
+    "tv": "background_traffic",
+    "radio": "background_traffic",
+    "wind": "background_traffic",
+    "noise": "background_traffic",
 }
 
 CLASSES = [

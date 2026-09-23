@@ -43,6 +43,10 @@ class AudioCaptureNative implements AudioCaptureInterface {
   double _latestVolume = 0.08;
   int _latestPitch = 220;
   List<double> _latestFrame = List.generate(40, (i) => 0.08);
+  static const double unknownThreshold = 0.80;
+  int _rejectedFrameCount = 0;
+  Map<String, double> _latestTop5 = {};
+
   String _latestTranscript = "🎤 AI Audio & Voice Monitor Standby...";
   Map<String, dynamic>? _latestAlert;
 
@@ -436,27 +440,38 @@ class AudioCaptureNative implements AudioCaptureInterface {
       }
       final winRms = math.sqrt(winSumSq / 16000.0);
 
+      // Requirement 5: Discard hardware audio clipping frames (winMaxAmp > 0.90)
+      if (winMaxAmp > 0.90) {
+        _rejectedFrameCount++;
+        debugPrint('[AudioCaptureNative] Frame rejected due to clipping (winMaxAmp: ${winMaxAmp.toStringAsFixed(3)}, total rejected: $_rejectedFrameCount)');
+        return;
+      }
+
       // Require real energy
       if (winRms >= 0.015 && winMaxAmp >= 0.030) {
         _lastMlTime = nowMs;
         final prediction = _classifier.predict(window1s);
 
         if (prediction != null) {
+          _latestTop5 = prediction.top5Probabilities;
           final topClass = prediction.label;
           final topProb = prediction.probability;
 
-          if (topClass == _consecutiveClassLabel) {
+          // Requirement 2: Unknown Sound Rejection (If topProb < 0.80, return UNKNOWN_SOUND / background_traffic)
+          final String effectiveClass = topProb < unknownThreshold ? 'background_traffic' : topClass;
+
+          if (effectiveClass == _consecutiveClassLabel) {
             _consecutiveClassCount++;
           } else {
-            _consecutiveClassLabel = topClass;
+            _consecutiveClassLabel = effectiveClass;
             _consecutiveClassCount = 1;
           }
 
           // Environmental ML Model ONLY processes environmental sound classes
-          final bool isEnvironmental = (topClass == 'ambulance_siren' ||
-              topClass == 'vehicle_horn' ||
-              topClass == 'baby_crying' ||
-              topClass == 'dog_barking');
+          final bool isEnvironmental = (effectiveClass == 'ambulance_siren' ||
+              effectiveClass == 'vehicle_horn' ||
+              effectiveClass == 'baby_crying' ||
+              effectiveClass == 'dog_barking');
 
           // Enforce 95%+ confidence, 4 consecutive frames, no speech active, and no hardware clipping
           if (isEnvironmental &&
@@ -464,7 +479,7 @@ class AudioCaptureNative implements AudioCaptureInterface {
               _consecutiveClassCount >= 4 &&
               !isSpeechActive &&
               winMaxAmp < 0.90) {
-            _triggerMlAlert(topClass, topProb);
+            _triggerMlAlert(effectiveClass, topProb);
             _consecutiveClassCount = 0;
           }
         }
@@ -705,6 +720,8 @@ class AudioCaptureNative implements AudioCaptureInterface {
       'pitch': _latestPitch,
       'transcript': _latestTranscript,
       'frame': _latestFrame,
+      'top5': _latestTop5,
+      'rejectedFrames': _rejectedFrameCount,
       'alertCategory': _latestAlert?['category'],
       'alertConfidence': _latestAlert?['confidence'] ?? 0.98,
       'alertSource': _latestAlert?['source'],

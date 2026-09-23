@@ -32,6 +32,8 @@ class SoundClassifierService extends ChangeNotifier {
   List<double> _liveSpectrogramFrame = List.generate(40, (i) => 0.16);
   double _currentRmsVolume = 0.12;
   int _currentPitchHz = 220;
+  Map<String, double> _top5Probabilities = {};
+  int _rejectedFrames = 0;
   String _liveSpeechTranscript = "⏸️ Microphone Off (Tap 'START MIC' button to activate live voice & sound recognition)";
   String _speechLanguage = 'si-LK';
   String _sensitivity = 'high';
@@ -43,6 +45,8 @@ class SoundClassifierService extends ChangeNotifier {
   List<double> get liveSpectrogramFrame => _liveSpectrogramFrame;
   double get currentRmsVolume => _currentRmsVolume;
   int get currentPitchHz => _currentPitchHz;
+  Map<String, double> get top5Probabilities => _top5Probabilities;
+  int get rejectedFrames => _rejectedFrames;
   String get liveSpeechTranscript => _liveSpeechTranscript;
   String get speechLanguage => _speechLanguage;
   String get sensitivity => _sensitivity;
@@ -112,6 +116,18 @@ class SoundClassifierService extends ChangeNotifier {
         final List<double>? frame = state['frame'] as List<double>?;
         if (frame != null && frame.length == 40) {
           _liveSpectrogramFrame = frame;
+          changed = true;
+        }
+
+        final Map<String, double>? top5 = state['top5'] as Map<String, double>?;
+        if (top5 != null && top5.isNotEmpty) {
+          _top5Probabilities = top5;
+          changed = true;
+        }
+
+        final int? rejected = state['rejectedFrames'] as int?;
+        if (rejected != null && rejected != _rejectedFrames) {
+          _rejectedFrames = rejected;
           changed = true;
         }
 

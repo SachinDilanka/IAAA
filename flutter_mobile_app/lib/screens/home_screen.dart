@@ -466,10 +466,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildVisualizerCard(BuildContext context, SoundClassifierService classifier) {
     final frame = classifier.liveSpectrogramFrame;
+    final top5 = classifier.top5Probabilities;
+    final rejected = classifier.rejectedFrames;
 
     return Container(
-      height: 110,
-      width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: const Color(0xFF1E293B),
@@ -486,14 +486,24 @@ class _HomeScreenState extends State<HomeScreen> {
                 'ACOUSTIC WAVEFORM (16,000 HZ)',
                 style: TextStyle(color: Color(0xFF64748B), fontSize: 10, fontWeight: FontWeight.bold),
               ),
-              Text(
-                'Vol: ${(classifier.currentRmsVolume * 100).toStringAsFixed(0)}%',
-                style: const TextStyle(color: Color(0xFF64748B), fontSize: 10),
+              Row(
+                children: [
+                  Text(
+                    'Clipping Rejects: $rejected',
+                    style: const TextStyle(color: Color(0xFFF59E0B), fontSize: 10, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Vol: ${(classifier.currentRmsVolume * 100).toStringAsFixed(0)}%',
+                    style: const TextStyle(color: Color(0xFF64748B), fontSize: 10),
+                  ),
+                ],
               ),
             ],
           ),
           const SizedBox(height: 8),
-          Expanded(
+          SizedBox(
+            height: 45,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -510,7 +520,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                 return Container(
                   width: 4,
-                  height: 65 * normalized,
+                  height: 45 * normalized,
                   decoration: BoxDecoration(
                     color: barColor,
                     borderRadius: BorderRadius.circular(4),
@@ -519,6 +529,38 @@ class _HomeScreenState extends State<HomeScreen> {
               }).toList(),
             ),
           ),
+          if (top5.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            const Text(
+              'TOP-5 MODEL DIAGNOSTIC PROBABILITIES',
+              style: TextStyle(color: Color(0xFF60A5FA), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.8),
+            ),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: top5.entries.map((e) {
+                final pct = (e.value * 100).toStringAsFixed(1);
+                final isTop = e == top5.entries.first;
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isTop ? const Color(0xFF2563EB).withValues(alpha: 0.3) : const Color(0xFF334155),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: isTop ? const Color(0xFF60A5FA) : const Color(0xFF475569)),
+                  ),
+                  child: Text(
+                    '${e.key}: $pct%',
+                    style: TextStyle(
+                      color: isTop ? const Color(0xFF60A5FA) : const Color(0xFF94A3B8),
+                      fontSize: 9.5,
+                      fontWeight: isTop ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
         ],
       ),
     );

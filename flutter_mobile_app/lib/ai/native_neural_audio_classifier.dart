@@ -6,11 +6,13 @@ class ModelPrediction {
   final String label;
   final double probability;
   final Map<String, double> allProbabilities;
+  final Map<String, double> top5Probabilities;
 
   ModelPrediction({
     required this.label,
     required this.probability,
     required this.allProbabilities,
+    required this.top5Probabilities,
   });
 }
 
@@ -309,19 +311,27 @@ class NativeNeuralAudioClassifier {
     int bestIdx = 0;
     double bestP = 0.0;
     final Map<String, double> allProbs = {};
+    final List<MapEntry<String, double>> entries = [];
+
     for (int j = 0; j < 13; j++) {
       final String cls = _classes[j];
-      allProbs[cls] = probs[j];
-      if (probs[j] > bestP) {
-        bestP = probs[j];
+      final double p = probs[j];
+      allProbs[cls] = p;
+      entries.add(MapEntry(cls, p));
+      if (p > bestP) {
+        bestP = p;
         bestIdx = j;
       }
     }
+
+    entries.sort((a, b) => b.value.compareTo(a.value));
+    final Map<String, double> top5 = Map.fromEntries(entries.take(5));
 
     return ModelPrediction(
       label: _classes[bestIdx],
       probability: bestP,
       allProbabilities: allProbs,
+      top5Probabilities: top5,
     );
   }
 }
