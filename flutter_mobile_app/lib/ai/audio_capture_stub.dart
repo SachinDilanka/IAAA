@@ -229,14 +229,14 @@ class AudioCaptureNative implements AudioCaptureInterface {
           : 'en-US';
 
       final options = SpeechListenOptions(
-        listenMode: ListenMode.confirmation,
+        listenMode: ListenMode.dictation,
         partialResults: true,
         cancelOnError: false,
         autoPunctuation: true,
         enableHapticFeedback: false,
         localeId: targetLocale,
-        pauseFor: const Duration(seconds: 4),
-        listenFor: const Duration(seconds: 30),
+        pauseFor: const Duration(seconds: 10),
+        listenFor: const Duration(hours: 1),
       );
 
       if (_speechToText.isListening) return;
@@ -458,8 +458,12 @@ class AudioCaptureNative implements AudioCaptureInterface {
               topClass == 'baby_crying' ||
               topClass == 'dog_barking');
 
-          // Enforce 92%+ confidence threshold & 3 consecutive frames for environmental acoustic sounds
-          if (isEnvironmental && topProb >= 0.92 && _consecutiveClassCount >= 3) {
+          // Enforce 95%+ confidence, 4 consecutive frames, no speech active, and no hardware clipping
+          if (isEnvironmental &&
+              topProb >= 0.95 &&
+              _consecutiveClassCount >= 4 &&
+              !isSpeechActive &&
+              winMaxAmp < 0.90) {
             _triggerMlAlert(topClass, topProb);
             _consecutiveClassCount = 0;
           }
