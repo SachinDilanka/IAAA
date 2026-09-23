@@ -452,24 +452,14 @@ class AudioCaptureNative implements AudioCaptureInterface {
             _consecutiveClassCount = 1;
           }
 
-          final bool isSinhalaKeyword = (topClass == 'udaw' ||
-              topClass == 'beeraganna' ||
-              topClass == 'ginnak' ||
-              topClass == 'anathurak' ||
-              topClass == 'karadarayak' ||
-              topClass == 'balagena' ||
-              topClass == 'parissamin' ||
-              topClass == 'ehata_wenna');
-
+          // Environmental ML Model ONLY processes environmental sound classes
           final bool isEnvironmental = (topClass == 'ambulance_siren' ||
               topClass == 'vehicle_horn' ||
               topClass == 'baby_crying' ||
               topClass == 'dog_barking');
 
-          if (isSinhalaKeyword && topProb >= 0.85 && _consecutiveClassCount >= 2) {
-            _triggerMlAlert(topClass, topProb);
-            _consecutiveClassCount = 0;
-          } else if (isEnvironmental && topProb >= 0.94 && _consecutiveClassCount >= 4 && !isSpeechActive) {
+          // Enforce 92%+ confidence threshold & 3 consecutive frames for environmental acoustic sounds
+          if (isEnvironmental && topProb >= 0.92 && _consecutiveClassCount >= 3) {
             _triggerMlAlert(topClass, topProb);
             _consecutiveClassCount = 0;
           }
@@ -500,34 +490,7 @@ class AudioCaptureNative implements AudioCaptureInterface {
       _alertLatched = false;
     });
 
-    final sinhala = sinhalaTitles[fc] ?? fc;
-    final source = "Acoustic AI Model: $rawCls (${(confidence * 100).toStringAsFixed(0)}%)";
-
-    String emoji = "🚨";
-    String titleText = "";
-    if (fc.contains('baby')) {
-      emoji = "👶";
-    } else if (fc.contains('dog')) {
-      emoji = "🐕";
-    } else if (fc.contains('horn')) {
-      emoji = "🚗";
-    } else if (fc.contains('ambulance')) {
-      emoji = "🚑";
-    }
-
-    // Update live transcript box if a Sinhala keyword was detected by acoustic model
-    if (fc == 'udaw' ||
-        fc == 'beeraganna' ||
-        fc == 'ginnak' ||
-        fc == 'anathurak' ||
-        fc == 'karadarayak' ||
-        fc == 'balagena' ||
-        fc == 'parissamin' ||
-        fc == 'ehata_wenna') {
-      final displayText = '🗣️ Live Voice (AI Keyword): "$rawCls ($sinhala)"';
-      _latestTranscript = displayText;
-      _onSpeechTranscript?.call(displayText);
-    }
+    final source = "Acoustic AI Classifier: $rawCls (${(confidence * 100).toStringAsFixed(0)}%)";
 
     _latestAlert = {
       'category': fc,
