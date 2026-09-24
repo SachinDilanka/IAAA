@@ -1,9 +1,8 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:record/record.dart';
+import 'package:audio_streamer/audio_streamer.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../models/detected_sound.dart';
 import 'vibration_service.dart';
@@ -18,19 +17,21 @@ class AudioClassifierService {
   AudioClassifierService._internal();
 
   final NativeNeuralAudioClassifier _neuralClassifier = NativeNeuralAudioClassifier();
-  AudioRecorder? _audioRecorder;
-  StreamSubscription<Uint8List>? _audioStreamSubscription;
-
   final stt.SpeechToText _speech = stt.SpeechToText();
+  StreamSubscription<List<double>>? _audioStreamSubscription;
+
   bool _speechAvailable = false;
   String _sinhalaLocaleId = 'si_LK';
-  Timer? _waveformTimer;
   bool _isListening = false;
   DateTime? _lastPeakDetectionTime;
+  DateTime _lastSpeechTime = DateTime.fromMillisecondsSinceEpoch(0);
 
+  // 16,000 Hz circular rolling audio buffer (1 second)
   final List<double> _rollingBuf16k = List<double>.filled(16000, 0.0);
   int _rollingIdx = 0;
-  int _totalSamplesPushed = 0;
+  int _total16kPushed = 0;
+  int _hardwareSampleRate = 44100;
+  int _lastPcmTimeMs = 0;
   final Map<String, DateTime> _lastKeywordTriggerTimes = {};
 
   final _controller = StreamController<DetectedSound>.broadcast();
@@ -92,7 +93,7 @@ class AudioClassifierService {
   Future<void> init() async {
     try {
       await _neuralClassifier.loadModel();
-      print('Native Neural Audio Classifier loaded successfully!');
+      print('Native Neural Classifier loaded successfully!');
     } catch (e) {
       print('Neural Classifier load exception: $e');
     }
@@ -114,13 +115,12 @@ class AudioClassifierService {
       if (_speechAvailable) {
         final locales = await _speech.locales();
         for (var loc in locales) {
-          if (loc.localeId.startsWith('si')) {
+          if (loc.localeId.toLowerCase().startsWith('si')) {
             _sinhalaLocaleId = loc.localeId;
             break;
           }
         }
       }
-      print('SpeechToText initialized. Sinhala Locale: $_sinhalaLocaleId');
     } catch (e) {
       print('SpeechToText init exception: $e');
     }
@@ -135,9 +135,20 @@ class AudioClassifierService {
             if (!_isListening) return;
             String text = result.recognizedWords.toLowerCase().trim();
             if (text.isNotEmpty) {
+              _lastSpeechTime = DateTime.now();
               _transcriptController.add(result.recognizedWords);
               _processSpeechText(text);
             }
+          },
+          onSoundLevelChange: (level) {
+            if (!_isListening) return;
+            double norm = ((level + 40.0) / 50.0).clamp(0.08, 1.0);
+            final math.Random rand = math.Random();
+            final List<double> waveform = List.generate(40, (i) {
+              double wave = math.sin((i * 0.3) + (DateTime.now().millisecondsSinceEpoch * 0.02)).abs() * 0.3;
+              return (norm * (0.6 + wave + (rand.nextDouble() - 0.5) * 0.1)).clamp(0.08, 1.0);
+            });
+            _waveformController.add(waveform);
           },
           localeId: _sinhalaLocaleId,
           listenFor: const Duration(minutes: 30),
@@ -162,75 +173,122 @@ class AudioClassifierService {
     if (_isListening) return true;
 
     try {
-      final status = await Permission.microphone.request();
-      if (status.isDenied || status.isPermanentlyDenied) {
-        print('Microphone permission status denied');
-      }
+      await [
+        Permission.microphone,
+        Permission.notification,
+      ].request();
     } catch (_) {}
 
-    _audioRecorder = AudioRecorder();
     _isListening = true;
     _rollingIdx = 0;
-    _totalSamplesPushed = 0;
+    _total16kPushed = 0;
 
-    // 1. Start continuous raw 16kHz PCM Audio Stream for 100% Offline AI Neural Classification
-    try {
-      final hasPerm = await _audioRecorder!.hasPermission();
-      if (hasPerm) {
-        final pcmStream = await _audioRecorder!.startStream(
-          const RecordConfig(
-            encoder: AudioEncoder.pcm16bits,
-            sampleRate: 16000,
-            numChannels: 1,
-          ),
-        );
+    // 1. High-Performance Audio Streamer for Real-Time PCM Mic Data & Visualizer
+    _startAudioStreamer();
 
-        _audioStreamSubscription = pcmStream.listen((Uint8List chunk) {
-          if (!_isListening) return;
-          _handlePcmAudioChunk(chunk);
-        }, onError: (err) {
-          print('PCM Stream exception: $err');
-        });
-      }
-    } catch (e) {
-      print('Audio stream start exception: $e');
-    }
-
-    // 2. Parallel Speech Recognition Stream for Live Speech Transcript
+    // 2. Speech Recognition Engine for Live Speech Transcripts & Sinhala Voice Match
     _safeListenSpeech();
 
     return true;
   }
 
-  void _handlePcmAudioChunk(Uint8List chunk) {
-    if (chunk.isEmpty) return;
+  void _startAudioStreamer() {
+    try {
+      _audioStreamSubscription?.cancel();
+      _audioStreamSubscription = null;
+      final streamer = AudioStreamer();
 
-    final ByteData byteData = ByteData.sublistView(chunk);
-    final int sampleCount = chunk.length ~/ 2;
-    double sumSquare = 0.0;
+      _audioStreamSubscription = streamer.audioStream.listen(
+        (buffer) {
+          if (!_isListening || buffer.isEmpty) return;
+          _processPcmBuffer(buffer);
+        },
+        onError: (error) {
+          print('AudioStreamer error: $error');
+        },
+        cancelOnError: false,
+      );
+    } catch (e) {
+      print('AudioStreamer init error: $e');
+    }
+  }
 
-    for (int i = 0; i < sampleCount; i++) {
-      int sample16 = byteData.getInt16(i * 2, Endian.little);
-      double normSample = (sample16 / 32768.0).clamp(-1.0, 1.0);
-      sumSquare += normSample * normSample;
+  void _processPcmBuffer(List<double> rawBuffer) {
+    if (rawBuffer.isEmpty) return;
 
-      _rollingBuf16k[_rollingIdx] = normSample;
-      _rollingIdx = (_rollingIdx + 1) % 16000;
-      _totalSamplesPushed++;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (_lastPcmTimeMs > 0) {
+      final deltaMs = nowMs - _lastPcmTimeMs;
+      if (deltaMs > 5 && deltaMs < 200) {
+        final estimatedRate = (rawBuffer.length * 1000.0) / deltaMs;
+        if (estimatedRate > 38000 && estimatedRate < 46000) {
+          _hardwareSampleRate = 44100;
+        } else if (estimatedRate >= 46000 && estimatedRate < 56000) {
+          _hardwareSampleRate = 48000;
+        } else if (estimatedRate >= 12000 && estimatedRate <= 24000) {
+          _hardwareSampleRate = 16000;
+        }
+      }
+    }
+    _lastPcmTimeMs = nowMs;
+
+    double maxRaw = 0.0;
+    for (int i = 0; i < rawBuffer.length; i++) {
+      final a = rawBuffer[i].abs();
+      if (a > maxRaw) maxRaw = a;
+    }
+    final double normScale = maxRaw > 2.0 ? (1.0 / 32768.0) : 1.0;
+
+    List<double> packet16k;
+    if (_hardwareSampleRate == 16000) {
+      packet16k = List<double>.generate(rawBuffer.length, (i) => rawBuffer[i] * normScale);
+    } else {
+      final int targetCount = ((rawBuffer.length * 16000) / _hardwareSampleRate).round();
+      if (targetCount <= 0) return;
+      packet16k = List<double>.filled(targetCount, 0.0);
+      final double step = rawBuffer.length / targetCount.toDouble();
+      for (int i = 0; i < targetCount; i++) {
+        final int startIdx = (i * step).floor();
+        final int endIdx = math.min(rawBuffer.length, ((i + 1) * step).floor());
+        double sum = 0.0;
+        int count = 0;
+        for (int j = startIdx; j < endIdx; j++) {
+          sum += rawBuffer[j] * normScale;
+          count++;
+        }
+        packet16k[i] = count > 0 ? (sum / count) : (rawBuffer[startIdx.clamp(0, rawBuffer.length - 1)] * normScale);
+      }
     }
 
-    final double rms = math.sqrt(sumSquare / (sampleCount > 0 ? sampleCount : 1));
+    double sumSquares = 0.0;
+    double maxAmp = 0.0;
 
-    // Emit 40-band real-time visualizer waveform
+    for (int i = 0; i < packet16k.length; i++) {
+      final s = packet16k[i];
+      final absS = s.abs();
+      if (absS > maxAmp) maxAmp = absS;
+      sumSquares += s * s;
+
+      _rollingBuf16k[_rollingIdx] = s;
+      _rollingIdx = (_rollingIdx + 1) % 16000;
+      _total16kPushed++;
+    }
+
+    final rms = math.sqrt(sumSquares / (packet16k.isEmpty ? 1 : packet16k.length));
+    final double normalizedVol = (rms * 10.0).clamp(0.04, 1.0);
+
+    // 40-band Real-time Audio Visualizer Frame Output
     final math.Random rand = math.Random();
-    final List<double> waveform = List.generate(40, (i) {
-      double noise = (rand.nextDouble() - 0.5) * 0.15;
-      return (rms * 4.0 + noise).clamp(0.08, 1.0);
+    final List<double> frame = List<double>.generate(40, (i) {
+      final dist = (i - 20).abs();
+      final spread = math.exp(-dist * 0.15);
+      final wave = math.sin((i * 0.4) + (nowMs * 0.02)).abs() * 0.35;
+      return (normalizedVol * (spread * 0.75 + wave + (rand.nextDouble() - 0.5) * 0.1)).clamp(0.04, 1.0);
     });
-    _waveformController.add(waveform);
+    _waveformController.add(frame);
 
-    // Run 100% Offline Deep Neural Network inference when RMS volume > ambient room threshold
-    if (rms > 0.012 && _totalSamplesPushed >= 16000) {
+    // 100% Offline AI Deep Neural Network Classification on 1-second rolling audio buffer
+    if (_total16kPushed >= 16000 && rms > 0.010) {
       _runOfflineNeuralInference(rms);
     }
   }
@@ -238,17 +296,23 @@ class AudioClassifierService {
   void _runOfflineNeuralInference(double rms) {
     final now = DateTime.now();
     if (_lastPeakDetectionTime != null &&
-        now.difference(_lastPeakDetectionTime!).inMilliseconds < 750) {
+        now.difference(_lastPeakDetectionTime!).inMilliseconds < 700) {
       return;
     }
 
-    // Reconstruct 1.0-second contiguous audio buffer
-    final List<double> audioSlice = List<double>.filled(16000, 0.0);
+    final List<double> window1s = List<double>.filled(16000, 0.0);
+    double winMaxAmp = 0.0;
     for (int i = 0; i < 16000; i++) {
-      audioSlice[i] = _rollingBuf16k[(_rollingIdx + i) % 16000];
+      final val = _rollingBuf16k[(_rollingIdx - 16000 + i + 16000) % 16000];
+      window1s[i] = val;
+      final absV = val.abs();
+      if (absV > winMaxAmp) winMaxAmp = absV;
     }
 
-    final prediction = _neuralClassifier.predict(audioSlice);
+    // Reject distorted hardware clipping audio (> 0.95)
+    if (winMaxAmp > 0.95) return;
+
+    final prediction = _neuralClassifier.predict(window1s);
     if (prediction != null && prediction.probability >= 0.25) {
       String rawClass = prediction.label;
       String? mappedKey = _labelToSoundKey[rawClass];
@@ -307,12 +371,6 @@ class AudioClassifierService {
     }
     _audioStreamSubscription?.cancel();
     _audioStreamSubscription = null;
-    _waveformTimer?.cancel();
-    _waveformTimer = null;
-    try {
-      _audioRecorder?.dispose();
-    } catch (_) {}
-    _audioRecorder = null;
   }
 
   Future<void> simulateSoundDetection(String soundKey, {double confidence = 0.92}) async {

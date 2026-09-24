@@ -17,6 +17,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.13.1"
+  audio_streamer:
+    dependency: "direct main"
+    description:
+      name: audio_streamer
+      sha256: "3cd4550110659e788ccc122f23770d43e3b81fda43c3e23d5999d04f08ef0768"
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.0.0"
   bluez:
     dependency: transitive
     description:
