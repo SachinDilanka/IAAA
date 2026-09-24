@@ -133,38 +133,17 @@ class AudioClassifierService {
           listenFor: const Duration(minutes: 30),
           pauseFor: const Duration(seconds: 10),
           partialResults: true,
-          onDevice: true,
           cancelOnError: false,
         );
       }
-    } catch (_) {
-      try {
-        if (!_speech.isListening) {
-          _speech.listen(
-            onResult: (result) {
-              if (!_isListening) return;
-              String text = result.recognizedWords.toLowerCase().trim();
-              if (text.isNotEmpty) {
-                _transcriptController.add(result.recognizedWords);
-                _processSpeechText(text);
-              }
-            },
-            localeId: _sinhalaLocaleId,
-            listenFor: const Duration(minutes: 30),
-            pauseFor: const Duration(seconds: 10),
-            partialResults: true,
-            cancelOnError: false,
-          );
-        }
-      } catch (e) {
-        print('Speech listen error: $e');
-      }
+    } catch (e) {
+      print('Speech listen error: $e');
     }
   }
 
   void _restartSpeechListeningIfNeeded() {
     if (!_isListening || !_speechAvailable) return;
-    Timer(const Duration(milliseconds: 150), () {
+    Timer(const Duration(milliseconds: 200), () {
       _safeListenSpeech();
     });
   }
@@ -182,47 +161,19 @@ class AudioClassifierService {
     _audioRecorder = AudioRecorder();
     _isListening = true;
 
-    // 1. Hardware PCM Audio Stream for 100% Offline Sound Classification
+    // 1. Mic Amplitude Listener for Acoustic Environmental Sound Peak Detection
     try {
       final hasPerm = await _audioRecorder!.hasPermission();
       if (hasPerm) {
-        // Also listen to amplitude changes if emitted
         _amplitudeSubscription = _audioRecorder!
-            .onAmplitudeChanged(const Duration(milliseconds: 100))
+            .onAmplitudeChanged(const Duration(milliseconds: 150))
             .listen((amp) {
           if (!_isListening) return;
-          double db = amp.current;
-          double normAmp = ((db + 65.0) / 65.0).clamp(0.05, 1.0);
-          if (db > -55.0) {
-            _processEnvironmentalAudioPeak(normAmp, db);
-          }
-        });
 
-        // Start raw PCM 16-bit audio stream from microphone sensor
-        final stream = await _audioRecorder!.startStream(
-          const RecordConfig(
-            encoder: AudioEncoder.pcm16bits,
-            sampleRate: 16000,
-            numChannels: 1,
-          ),
-        );
+          double db = amp.current; // -160 to 0 dBFS
+          double normAmp = ((db + 55.0) / 55.0).clamp(0.05, 1.0);
 
-        stream.listen((chunk) {
-          if (!_isListening || chunk.isEmpty) return;
-
-          // Calculate RMS amplitude from 16-bit PCM bytes
-          double sumSq = 0;
-          int samplesCount = chunk.length ~/ 2;
-          for (int i = 0; i < chunk.length - 1; i += 2) {
-            int sample = chunk[i] | (chunk[i + 1] << 8);
-            if (sample > 32767) sample -= 65536;
-            sumSq += sample * sample;
-          }
-          double rms = sqrt(sumSq / max(1, samplesCount));
-          double db = 20 * (log(max(1.0, rms) / 32768.0) / log(10)); // dBFS
-          double normAmp = ((db + 65.0) / 65.0).clamp(0.05, 1.0);
-
-          // Build 64-band spectral energy frame from raw mic PCM
+          // Build 64-band spectral energy frame
           final List<double> frame64 = List.generate(64, (band) {
             double freqFactor = sin((band + 1) * pi / 65.0);
             return (normAmp * freqFactor * (0.7 + Random().nextDouble() * 0.3)).clamp(0.0, 1.0);
@@ -239,19 +190,17 @@ class AudioClassifierService {
           });
           _waveformController.add(waveform);
 
-          // Trigger TFLite neural model classification when sound is detected (db > -55 dBFS)
-          if (db > -55.0) {
+          // Trigger acoustic classification ONLY when an actual loud sound peak is heard (db > -32.0 dBFS)
+          if (db > -32.0) {
             _processEnvironmentalAudioPeak(normAmp, db);
           }
-        }, onError: (err) {
-          print('Mic stream error: $err');
         });
       }
     } catch (e) {
-      print('Mic audio stream initialization exception: $e');
+      print('Mic amplitude listener exception: $e');
     }
 
-    // 2. Start Speech Recognition safely (Online & Offline)
+    // 2. Start Live Speech Recognition for Instant Live Transcript & Sinhala Keywords
     _safeListenSpeech();
 
     // Smooth UI visualizer backup timer
@@ -300,18 +249,17 @@ class AudioClassifierService {
   }
 
   Future<void> _processEnvironmentalAudioPeak(double normAmp, double db) async {
-    // 500ms cooldown for rapid offline sound recognition
+    // 1.5s cooldown to prevent duplicate false triggers
     if (_lastPeakDetectionTime != null &&
-        DateTime.now().difference(_lastPeakDetectionTime!).inMilliseconds < 500) {
+        DateTime.now().difference(_lastPeakDetectionTime!).inMilliseconds < 1500) {
       return;
     }
 
     try {
-      final Random rand = Random();
       int predictedIdx = -1;
-      double confidence = 0.88;
+      double confidence = 0.0;
 
-      if (_interpreter != null) {
+      if (_interpreter != null && _spectralHistory.length >= 8) {
         var input = List.generate(
           1,
           (_) => List.generate(
@@ -325,7 +273,7 @@ class AudioClassifierService {
                 } else {
                   val = normAmp * (1.0 - (row / 64.0));
                 }
-                return (val + (rand.nextDouble() - 0.5) * 0.1).clamp(0.0, 1.0);
+                return val.clamp(0.0, 1.0);
               }),
             ),
           ),
@@ -342,12 +290,11 @@ class AudioClassifierService {
             predictedIdx = i;
           }
         }
-        if (maxP > 0.01) {
-          confidence = maxP.clamp(0.82, 0.99);
-        }
+        confidence = maxP;
       }
 
-      if (predictedIdx >= 0 && predictedIdx < _labelKeys.length) {
+      // Require high neural confidence (>= 60%) so background room noise NEVER triggers false alerts
+      if (predictedIdx >= 0 && predictedIdx < _labelKeys.length && confidence >= 0.60) {
         String detectedKey = _labelKeys[predictedIdx];
         _lastPeakDetectionTime = DateTime.now();
         await simulateSoundDetection(detectedKey, confidence: confidence);
@@ -367,7 +314,6 @@ class AudioClassifierService {
     _waveformTimer?.cancel();
     _waveformTimer = null;
     try {
-      _audioRecorder?.stop();
       _audioRecorder?.dispose();
     } catch (_) {}
     _audioRecorder = null;
