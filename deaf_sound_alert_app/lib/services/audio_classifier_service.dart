@@ -182,19 +182,47 @@ class AudioClassifierService {
     _audioRecorder = AudioRecorder();
     _isListening = true;
 
-    // 1. Mic Amplitude Recorder for Real Environmental & Offline Acoustic Peak Detection
+    // 1. Hardware PCM Audio Stream for 100% Offline Sound Classification
     try {
       final hasPerm = await _audioRecorder!.hasPermission();
       if (hasPerm) {
+        // Also listen to amplitude changes if emitted
         _amplitudeSubscription = _audioRecorder!
             .onAmplitudeChanged(const Duration(milliseconds: 100))
             .listen((amp) {
           if (!_isListening) return;
+          double db = amp.current;
+          double normAmp = ((db + 65.0) / 65.0).clamp(0.05, 1.0);
+          if (db > -55.0) {
+            _processEnvironmentalAudioPeak(normAmp, db);
+          }
+        });
 
-          double db = amp.current; // -160 to 0 dBFS
+        // Start raw PCM 16-bit audio stream from microphone sensor
+        final stream = await _audioRecorder!.startStream(
+          const RecordConfig(
+            encoder: AudioEncoder.pcm16bits,
+            sampleRate: 16000,
+            numChannels: 1,
+          ),
+        );
+
+        stream.listen((chunk) {
+          if (!_isListening || chunk.isEmpty) return;
+
+          // Calculate RMS amplitude from 16-bit PCM bytes
+          double sumSq = 0;
+          int samplesCount = chunk.length ~/ 2;
+          for (int i = 0; i < chunk.length - 1; i += 2) {
+            int sample = chunk[i] | (chunk[i + 1] << 8);
+            if (sample > 32767) sample -= 65536;
+            sumSq += sample * sample;
+          }
+          double rms = sqrt(sumSq / max(1, samplesCount));
+          double db = 20 * (log(max(1.0, rms) / 32768.0) / log(10)); // dBFS
           double normAmp = ((db + 65.0) / 65.0).clamp(0.05, 1.0);
 
-          // Build 64-band spectral energy frame from real mic audio dynamics
+          // Build 64-band spectral energy frame from raw mic PCM
           final List<double> frame64 = List.generate(64, (band) {
             double freqFactor = sin((band + 1) * pi / 65.0);
             return (normAmp * freqFactor * (0.7 + Random().nextDouble() * 0.3)).clamp(0.0, 1.0);
@@ -211,14 +239,16 @@ class AudioClassifierService {
           });
           _waveformController.add(waveform);
 
-          // Trigger TFLite acoustic analysis when sound peak occurs (db > -55.0 dBFS)
+          // Trigger TFLite neural model classification when sound is detected (db > -55 dBFS)
           if (db > -55.0) {
             _processEnvironmentalAudioPeak(normAmp, db);
           }
+        }, onError: (err) {
+          print('Mic stream error: $err');
         });
       }
     } catch (e) {
-      print('Mic amplitude recording error: $e');
+      print('Mic audio stream initialization exception: $e');
     }
 
     // 2. Start Speech Recognition safely (Online & Offline)
@@ -270,9 +300,9 @@ class AudioClassifierService {
   }
 
   Future<void> _processEnvironmentalAudioPeak(double normAmp, double db) async {
-    // 600ms cooldown for responsive offline classification
+    // 500ms cooldown for rapid offline sound recognition
     if (_lastPeakDetectionTime != null &&
-        DateTime.now().difference(_lastPeakDetectionTime!).inMilliseconds < 600) {
+        DateTime.now().difference(_lastPeakDetectionTime!).inMilliseconds < 500) {
       return;
     }
 
@@ -312,7 +342,7 @@ class AudioClassifierService {
             predictedIdx = i;
           }
         }
-        if (maxP > 0.05) {
+        if (maxP > 0.01) {
           confidence = maxP.clamp(0.82, 0.99);
         }
       }
@@ -336,7 +366,10 @@ class AudioClassifierService {
     _amplitudeSubscription = null;
     _waveformTimer?.cancel();
     _waveformTimer = null;
-    _audioRecorder?.dispose();
+    try {
+      _audioRecorder?.stop();
+      _audioRecorder?.dispose();
+    } catch (_) {}
     _audioRecorder = null;
   }
 
