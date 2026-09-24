@@ -341,10 +341,9 @@ class AudioClassifierService {
     });
     _waveformController.add(frame);
 
-    // Instant Acoustic Neural Inference for Environmental Sounds (Every 100ms)
-    // Only run if audio has an actual acoustic peak (RMS > 0.032) to eliminate background room noise popups
-    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 500) && rms > 0.032) {
-      if (nowMs - _lastMlTimeMs > 100) {
+    // Continuous Acoustic Neural Inference for Sinhala Keywords & Environmental Sounds (Every 80ms)
+    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 500) && rms > 0.015) {
+      if (nowMs - _lastMlTimeMs > 80) {
         _lastMlTimeMs = nowMs;
         _runOfflineNeuralInference(rms);
       }
@@ -354,8 +353,8 @@ class AudioClassifierService {
   void _runOfflineNeuralInference(double rms) {
     final now = DateTime.now();
 
-    // 1500ms Cooldown lockout per sound burst to prevent sound spam
-    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 1500) {
+    // 1000ms Cooldown lockout per sound burst to prevent duplicate sound popups
+    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 1000) {
       return;
     }
 
@@ -368,8 +367,8 @@ class AudioClassifierService {
       if (absV > winMaxAmp) winMaxAmp = absV;
     }
 
-    // Reject distorted hardware clipping (> 0.98) or background noise (< 0.032)
-    if (winMaxAmp > 0.98 || winMaxAmp < 0.12 || rms < 0.032) return;
+    // Reject distorted hardware clipping (> 0.98) or silent noise (< 0.015)
+    if (winMaxAmp > 0.98 || winMaxAmp < 0.015) return;
 
     final prediction = _neuralClassifier.predict(window1s);
     if (prediction == null) return;
@@ -377,7 +376,7 @@ class AudioClassifierService {
     String topLabel = prediction.label;
     String? soundKey = _labelToSoundKey[topLabel];
 
-    if (soundKey == null || soundKey.startsWith('sinhala_') || soundKey == 'traffic' || soundKey == 'road' || topLabel == 'background_traffic') {
+    if (soundKey == null || soundKey == 'traffic' || soundKey == 'road' || topLabel == 'background_traffic') {
       return;
     }
 
@@ -386,12 +385,30 @@ class AudioClassifierService {
     double secondBest = top5.length > 1 ? top5[1] : 0.0;
     double margin = prob - secondBest;
 
-    // Environmental Emergency Sound Detection (Baby Crying, Dog Barking, Ambulance Siren, Vehicle Horns)
-    if (prob >= 0.72 && margin >= 0.15 && rms >= 0.032) {
-      _lastGlobalAlertTime = now;
-      _classCooldown[soundKey] = now;
+    // CATEGORY A: Sinhala Voice Emergency Keyword Detection (Udaw, Beraganna, Ginnak, Anathurak, Karadarayak, Balaagena, Ehata Wenna, Parissamin)
+    if (soundKey.startsWith('sinhala_')) {
+      // Require moderate confidence >= 0.45, margin >= 0.08, energy rms >= 0.015 (detects near or far!)
+      if (prob >= 0.45 && margin >= 0.08 && rms >= 0.015) {
+        _lastGlobalAlertTime = now;
+        _classCooldown[soundKey] = now;
 
-      simulateSoundDetection(soundKey, confidence: prob);
+        // Display detected Sinhala keyword clearly in the live transcript box
+        if (_displayNames.containsKey(soundKey)) {
+          _transcriptController.add(_displayNames[soundKey]!);
+        }
+
+        simulateSoundDetection(soundKey, confidence: prob);
+      }
+    }
+    // CATEGORY B: Environmental Emergency Sound Detection (Baby Crying, Dog Barking, Ambulance Siren, Vehicle Horns)
+    else {
+      // Require strong confidence >= 0.72, margin >= 0.15, energy rms >= 0.028
+      if (prob >= 0.72 && margin >= 0.15 && rms >= 0.028) {
+        _lastGlobalAlertTime = now;
+        _classCooldown[soundKey] = now;
+
+        simulateSoundDetection(soundKey, confidence: prob);
+      }
     }
   }
 
