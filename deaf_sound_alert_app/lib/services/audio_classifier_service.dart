@@ -54,6 +54,8 @@ class AudioClassifierService {
     'vehicle horns',        // Index 13: Vehicle Horns
   ];
 
+  final Map<String, DateTime> _lastKeywordTriggerTimes = {};
+
   Future<void> init() async {
     try {
       _interpreter = await Interpreter.fromAsset('assets/models/sound_classifier.tflite');
@@ -64,8 +66,16 @@ class AudioClassifierService {
 
     try {
       _speechAvailable = await _speech.initialize(
-        onError: (val) => print('SpeechToText onError: $val'),
-        onStatus: (val) => print('SpeechToText onStatus: $val'),
+        onError: (val) {
+          print('SpeechToText onError: $val');
+          _restartSpeechListeningIfNeeded();
+        },
+        onStatus: (val) {
+          print('SpeechToText onStatus: $val');
+          if ((val == 'done' || val == 'notListening') && _isListening) {
+            _restartSpeechListeningIfNeeded();
+          }
+        },
       );
 
       if (_speechAvailable) {
@@ -105,6 +115,34 @@ class AudioClassifierService {
     }
   }
 
+  void _restartSpeechListeningIfNeeded() {
+    if (!_isListening || !_speechAvailable) return;
+    Timer(const Duration(milliseconds: 150), () {
+      if (!_isListening) return;
+      try {
+        if (!_speech.isListening) {
+          _speech.listen(
+            onResult: (result) {
+              if (!_isListening) return;
+              String text = result.recognizedWords.toLowerCase().trim();
+              if (text.isNotEmpty) {
+                _transcriptController.add(result.recognizedWords);
+                _processSpeechText(text);
+              }
+            },
+            localeId: _sinhalaLocaleId,
+            listenFor: const Duration(minutes: 30),
+            pauseFor: const Duration(seconds: 10),
+            partialResults: true,
+            cancelOnError: false,
+          );
+        }
+      } catch (e) {
+        print('Error restarting speech listen: $e');
+      }
+    });
+  }
+
   Future<bool> startListening() async {
     if (_isListening) return true;
 
@@ -128,7 +166,7 @@ class AudioClassifierService {
           if (!_isListening) return;
 
           double db = amp.current; // -160 to 0 dBFS
-          double normAmp = ((db + 55.0) / 55.0).clamp(0.08, 1.0);
+          double normAmp = ((db + 60.0) / 60.0).clamp(0.08, 1.0);
 
           final Random rand = Random();
           final List<double> waveform = List.generate(40, (i) {
@@ -137,8 +175,8 @@ class AudioClassifierService {
           });
           _waveformController.add(waveform);
 
-          // Trigger acoustic environmental sound analysis when sound peak is played near mic
-          if (db > -36.0) {
+          // Lower threshold to -48.0 dBFS so far-away speech and distant ambient sounds get detected easily
+          if (db > -48.0) {
             _processEnvironmentalAudioPeak(normAmp, db);
           }
         });
@@ -161,7 +199,7 @@ class AudioClassifierService {
           },
           localeId: _sinhalaLocaleId,
           listenFor: const Duration(minutes: 30),
-          pauseFor: const Duration(seconds: 4),
+          pauseFor: const Duration(seconds: 10),
           partialResults: true,
           cancelOnError: false,
         );
@@ -182,48 +220,43 @@ class AudioClassifierService {
   }
 
   void _processSpeechText(String text) {
-    String matchedKey = '';
+    // Check all keywords to allow detecting multiple spoken keywords in a single phrase
+    final Map<String, List<String>> keywordPatterns = {
+      'sinhala_udaw_': ['udaw', 'udaww', 'udau', 'udawwa', 'udawwak', 'help', 'උදව්', 'උදව්වක්', 'උදවු'],
+      'sinhala_anathurak_': ['anathurak', 'anatura', 'anathurai', 'danger', 'අනතුරක්', 'අනතුර', 'අනතුරයි'],
+      'sinhala_beraganna_': ['beraganna', 'beeraganna', 'bcraganna', 'bera', 'beera', 'save', 'බේරාගන්න', 'බේරගන්න', 'බේරා', 'බේර'],
+      'sinhala_ginnak_': ['ginnak', 'ginna', 'ginnaki', 'fire', 'ගින්නක්', 'ගින්න', 'ගිනි'],
+      'sinhala_karadarayak_': ['karadarayak', 'karadara', 'karadarai', 'trouble', 'කරදරයක්', 'කරදර', 'කරදරයි'],
+      'sinhala_balagena_': ['balagena', 'balagenna', 'balaagena', 'balaganna', 'balang', 'watch', 'lookout', 'බලාගෙන', 'බලන්', 'බලාගෙනම'],
+      'sinhala_ehata_wenna_': ['ehata', 'wenna', 'ehatawenna', 'move', 'එහාට', 'වෙන්න', 'එහාටවෙන්න'],
+      'sinhala_parissamin_': ['parissamin', 'parisamin', 'parissamen', 'parisamen', 'parissam', 'parisam', 'careful', 'පරිස්සමින්', 'පරිස්සමෙන්', 'පරිසමින්', 'පරිස්සම්'],
+      'baby crying': ['baby', 'cry', 'crying', 'ළදරු'],
+      'vehicle horns': ['horn', 'horns', 'vehicle', 'වාහන'],
+      'ambulance': ['ambulance', 'siren', 'ගිලන්'],
+      'dog_bark_dataset': ['dog', 'bark', 'barking', 'බල්ලා'],
+      'traffic': ['traffic', 'තදබදය'],
+      'road': ['road', 'පාරේ'],
+    };
 
-    // Instant Sinhala & English Keyword Matcher
-    if (text.contains('udaw') || text.contains('udaww') || text.contains('udau') || text.contains('help') || text.contains('උදව්')) {
-      matchedKey = 'sinhala_udaw_';
-    } else if (text.contains('anathurak') || text.contains('anatura') || text.contains('danger') || text.contains('අනතුරක්')) {
-      matchedKey = 'sinhala_anathurak_';
-    } else if (text.contains('beraganna') || text.contains('beeraganna') || text.contains('save') || text.contains('බේරාගන්න')) {
-      matchedKey = 'sinhala_beraganna_';
-    } else if (text.contains('ginnak') || text.contains('ginna') || text.contains('fire') || text.contains('ගින්නක්')) {
-      matchedKey = 'sinhala_ginnak_';
-    } else if (text.contains('karadarayak') || text.contains('karadara') || text.contains('trouble') || text.contains('කරදරයක්')) {
-      matchedKey = 'sinhala_karadarayak_';
-    } else if (text.contains('balagena') || text.contains('balagenna') || text.contains('watch') || text.contains('බලාගෙන')) {
-      matchedKey = 'sinhala_balagena_';
-    } else if (text.contains('ehata') || text.contains('wenna') || text.contains('move') || text.contains('එහාට')) {
-      matchedKey = 'sinhala_ehata_wenna_';
-    } else if (text.contains('parissamin') || text.contains('parisamin') || text.contains('careful') || text.contains('පරිස්සමින්')) {
-      matchedKey = 'sinhala_parissamin_';
-    } else if (text.contains('baby') || text.contains('cry') || text.contains('crying') || text.contains('ළදරු')) {
-      matchedKey = 'baby crying';
-    } else if (text.contains('horn') || text.contains('horns') || text.contains('vehicle') || text.contains('වාහන')) {
-      matchedKey = 'vehicle horns';
-    } else if (text.contains('ambulance') || text.contains('siren') || text.contains('ගිලන්')) {
-      matchedKey = 'ambulance';
-    } else if (text.contains('dog') || text.contains('bark') || text.contains('barking') || text.contains('බල්ලා')) {
-      matchedKey = 'dog_bark_dataset';
-    } else if (text.contains('traffic') || text.contains('තදබදය')) {
-      matchedKey = 'traffic';
-    } else if (text.contains('road') || text.contains('පාරේ')) {
-      matchedKey = 'road';
-    }
+    final now = DateTime.now();
 
-    if (matchedKey.isNotEmpty) {
-      simulateSoundDetection(matchedKey, confidence: 0.98);
-    }
+    keywordPatterns.forEach((key, patterns) {
+      bool matches = patterns.any((pattern) => text.contains(pattern));
+      if (matches) {
+        // Cooldown of 1.2s per keyword to prevent spam while allowing distinct keywords immediately
+        final lastTime = _lastKeywordTriggerTimes[key];
+        if (lastTime == null || now.difference(lastTime).inMilliseconds > 1200) {
+          _lastKeywordTriggerTimes[key] = now;
+          simulateSoundDetection(key, confidence: 0.98);
+        }
+      }
+    });
   }
 
   Future<void> _processEnvironmentalAudioPeak(double normAmp, double db) async {
-    // 1.8 seconds cooldown for peak audio environmental detection
+    // 1.5 seconds cooldown for peak audio environmental detection
     if (_lastPeakDetectionTime != null &&
-        DateTime.now().difference(_lastPeakDetectionTime!).inMilliseconds < 1800) {
+        DateTime.now().difference(_lastPeakDetectionTime!).inMilliseconds < 1500) {
       return;
     }
 

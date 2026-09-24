@@ -58,28 +58,32 @@ class AlertBanner extends StatelessWidget {
                 children: [
                   PriorityBadge(priority: sound.priority),
                   if (onDismiss != null) ...[
-                    const SizedBox(width: 10),
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: onDismiss,
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFF3B30),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFFFF3B30).withValues(alpha: 0.8),
-                              blurRadius: 12,
-                              spreadRadius: 2,
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.close_rounded,
-                          color: Colors.white,
-                          size: 22,
+                    const SizedBox(width: 8),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: onDismiss,
+                        borderRadius: BorderRadius.circular(24),
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF3B30),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFFF3B30).withValues(alpha: 0.8),
+                                blurRadius: 12,
+                                spreadRadius: 2,
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.close_rounded,
+                            color: Colors.white,
+                            size: 24,
+                          ),
                         ),
                       ),
                     ),

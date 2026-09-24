@@ -163,9 +163,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                     children: [
                                       PriorityBadge(priority: item.priority),
                                       const SizedBox(width: 8),
-                                      GestureDetector(
-                                        onTap: () => provider.removeHistoryEvent(item.id),
-                                        child: Container(
+                                      IconButton(
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                        icon: Container(
                                           padding: const EdgeInsets.all(4),
                                           decoration: const BoxDecoration(
                                             color: Color(0xFFFF3B30),
@@ -174,9 +175,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                           child: const Icon(
                                             Icons.close_rounded,
                                             color: Colors.white,
-                                            size: 16,
+                                            size: 18,
                                           ),
                                         ),
+                                        onPressed: () => provider.removeHistoryEvent(item.id),
                                       ),
                                     ],
                                   ),
