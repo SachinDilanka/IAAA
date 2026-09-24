@@ -301,9 +301,9 @@ class AudioClassifierService {
     });
     _waveformController.add(frame);
 
-    // Acoustic Neural Peak Inference for Environmental Sounds (Every 150ms)
-    // Warmup check: wait 2.5 seconds after mic enable, require full 16,000 samples, and peak energy RMS >= 0.035
-    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 2500) && rms > 0.035) {
+    // Acoustic Neural Peak Inference for Sinhala Keywords & Environmental Sounds (Every 150ms)
+    // Warmup check: wait 1.0s after mic enable, require full 16,000 samples, and energy RMS >= 0.012
+    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 1000) && rms > 0.012) {
       if (nowMs - _lastMlTimeMs > 150) {
         _lastMlTimeMs = nowMs;
         _runOfflineNeuralInference(rms);
@@ -313,10 +313,6 @@ class AudioClassifierService {
 
   void _runOfflineNeuralInference(double rms) {
     final now = DateTime.now();
-    final nowMs = now.millisecondsSinceEpoch;
-
-    // Suppress environmental sound popups while user speech is active (within last 2000ms)
-    if (nowMs - _lastSpeechTimeMs < 2000) return;
 
     final List<double> window1s = List<double>.filled(16000, 0.0);
     double winMaxAmp = 0.0;
@@ -327,32 +323,48 @@ class AudioClassifierService {
       if (absV > winMaxAmp) winMaxAmp = absV;
     }
 
-    // Reject distorted clipping (> 0.98) or low peak amplitude (< 0.10) to prevent background noise popups
-    if (winMaxAmp > 0.98 || winMaxAmp < 0.10) return;
+    // Reject distorted clipping (> 0.98) or silent noise (< 0.012)
+    if (winMaxAmp > 0.98 || winMaxAmp < 0.012) return;
 
     final prediction = _neuralClassifier.predict(window1s);
     if (prediction == null) return;
 
     String topLabel = prediction.label;
-    String? envKey = _labelToSoundKey[topLabel];
+    String? soundKey = _labelToSoundKey[topLabel];
 
-    // ONLY classify Environmental Sounds from acoustic peaks (Baby Crying, Ambulance, Horns, Dog Barking).
-    // Ignore Sinhala keywords here so room speech NEVER triggers automatic wrong sound popups!
-    if (envKey != null &&
-        !envKey.startsWith('sinhala_') &&
-        envKey != 'traffic' &&
-        envKey != 'road' &&
-        topLabel != 'background_traffic') {
+    if (soundKey == null || soundKey == 'traffic' || soundKey == 'road' || topLabel == 'background_traffic') {
+      return;
+    }
 
-      double envProb = prediction.probability;
-      // High confidence threshold (0.82) and high peak energy (RMS >= 0.038) to guarantee real test audio detection without background room noise popups
-      if (envProb >= 0.82 && rms >= 0.038) {
-        final lastTrigger = _classCooldown[envKey];
+    double prob = prediction.probability;
+
+    // CATEGORY A: Sinhala Voice Keyword Detection (Udaw, Beraganna, Ginnak, Anathurak, Karadarayak, Balaagena, Ehata Wenna, Parissamin)
+    if (soundKey.startsWith('sinhala_')) {
+      // Spoken near or far: require confidence >= 0.48 and energy rms >= 0.012
+      if (prob >= 0.48 && rms >= 0.012) {
+        final lastTrigger = _classCooldown[soundKey];
+        if (lastTrigger == null || now.difference(lastTrigger).inMilliseconds > 1000) {
+          _classCooldown[soundKey] = now;
+
+          // Display detected Sinhala keyword clearly in the live transcript box!
+          if (_displayNames.containsKey(soundKey)) {
+            _transcriptController.add(_displayNames[soundKey]!);
+          }
+
+          simulateSoundDetection(soundKey, confidence: prob);
+        }
+      }
+    }
+    // CATEGORY B: Environmental Sound Detection (Baby Crying, Ambulance Siren, Vehicle Horns, Dog Barking)
+    else {
+      // Require acoustic peak confidence >= 0.72 and peak energy rms >= 0.028
+      if (prob >= 0.72 && rms >= 0.028) {
+        final lastTrigger = _classCooldown[soundKey];
         if (lastTrigger == null || now.difference(lastTrigger).inMilliseconds > 1200) {
-          _classCooldown[envKey] = now;
+          _classCooldown[soundKey] = now;
 
-          // DO NOT put environmental sound names into the live speech transcript stream!
-          simulateSoundDetection(envKey, confidence: envProb);
+          // Environmental sounds trigger alert banner without cluttering the live transcript line
+          simulateSoundDetection(soundKey, confidence: prob);
         }
       }
     }
