@@ -31,6 +31,7 @@ class AudioClassifierService {
   int _total16kPushed = 0;
   int _hardwareSampleRate = 44100;
   int _lastPcmTimeMs = 0;
+  int _lastMlTimeMs = 0;
 
   final Map<String, DateTime> _lastKeywordTriggerTimes = {};
   final Map<String, DateTime> _classCooldown = {};
@@ -150,11 +151,14 @@ class AudioClassifierService {
             });
             _waveformController.add(waveform);
           },
+          listenOptions: stt.SpeechListenOptions(
+            listenMode: stt.ListenMode.dictation,
+            partialResults: true,
+            cancelOnError: false,
+            pauseFor: const Duration(seconds: 10),
+            listenFor: const Duration(minutes: 30),
+          ),
           localeId: _sinhalaLocaleId,
-          listenFor: const Duration(minutes: 30),
-          pauseFor: const Duration(seconds: 10),
-          partialResults: true,
-          cancelOnError: false,
         );
       }
     } catch (e) {
@@ -164,7 +168,7 @@ class AudioClassifierService {
 
   void _restartSpeechListeningIfNeeded() {
     if (!_isListening || !_speechAvailable) return;
-    Timer(const Duration(milliseconds: 300), () {
+    Timer(const Duration(milliseconds: 200), () {
       _safeListenSpeech();
     });
   }
@@ -183,10 +187,10 @@ class AudioClassifierService {
     _rollingIdx = 0;
     _total16kPushed = 0;
 
-    // 1. High-Performance Audio Streamer for Real-Time Visualizer Waveform Line
+    // 1. High-Performance Audio Streamer for Real-Time Visualizer Waveform Line & Instant Audio Classification
     _startAudioStreamer();
 
-    // 2. Speech Recognition Engine for Live Speech Transcripts & Sinhala Voice Keyword Match
+    // 2. Speech Recognition Engine for Live Speech Transcripts & Instant Sinhala Voice Keyword Match
     _safeListenSpeech();
 
     return true;
@@ -287,9 +291,12 @@ class AudioClassifierService {
     });
     _waveformController.add(frame);
 
-    // Run acoustic inference on 1-second rolling audio buffer
-    if (_total16kPushed >= 16000 && rms > 0.015) {
-      _runOfflineNeuralInference(rms);
+    // Instant sliding-window neural inference every 150ms for ZERO-DELAY Sinhala keyword detection
+    if (_total16kPushed >= 3200 && rms > 0.008) {
+      if (nowMs - _lastMlTimeMs > 150) {
+        _lastMlTimeMs = nowMs;
+        _runOfflineNeuralInference(rms);
+      }
     }
   }
 
@@ -313,26 +320,24 @@ class AudioClassifierService {
       String rawClass = prediction.label;
       String? mappedKey = _labelToSoundKey[rawClass];
 
-      // CRITICAL FIX: Only allow Sinhala Emergency Keywords to be automatically detected from background mic audio.
-      // Ambient room noise will NEVER trigger false environmental sound popups (Baby crying, Ambulance, Horns, Barking).
+      // ONLY process Sinhala Emergency Keywords from background mic neural inference.
+      // Ambient room noise will NEVER trigger false environmental sound popups.
       if (mappedKey == null || !mappedKey.startsWith('sinhala_')) {
         return;
       }
 
-      if (prediction.probability >= 0.35) {
+      if (prediction.probability >= 0.20) {
         final lastTrigger = _classCooldown[mappedKey];
-        if (lastTrigger != null && now.difference(lastTrigger).inMilliseconds < 1500) {
-          return; // Prevent repeating spams
+        if (lastTrigger == null || now.difference(lastTrigger).inMilliseconds > 400) {
+          _classCooldown[mappedKey] = now;
+          _lastPeakDetectionTime = now;
+
+          if (_displayNames.containsKey(mappedKey)) {
+            _transcriptController.add(_displayNames[mappedKey]!);
+          }
+
+          simulateSoundDetection(mappedKey, confidence: prediction.probability);
         }
-
-        _classCooldown[mappedKey] = now;
-        _lastPeakDetectionTime = now;
-
-        if (_displayNames.containsKey(mappedKey)) {
-          _transcriptController.add(_displayNames[mappedKey]!);
-        }
-
-        simulateSoundDetection(mappedKey, confidence: prediction.probability);
       }
     }
   }
@@ -341,7 +346,7 @@ class AudioClassifierService {
     final Map<String, List<String>> keywordPatterns = {
       'sinhala_udaw_': [
         'udaw', 'udaww', 'udau', 'udawwa', 'udawwak', 'help',
-        'උදව්', 'උදව්වක්', 'උදවු', 'උදවු කරන්න'
+        'උදව්', 'උදව්වක්', 'උදවු', 'උදවු කරන්න', 'උදව් කරන්න'
       ],
       'sinhala_anathurak_': [
         'anathurak', 'anatura', 'anathurai', 'danger',
@@ -349,7 +354,7 @@ class AudioClassifierService {
       ],
       'sinhala_beraganna_': [
         'beraganna', 'beeraganna', 'bcraganna', 'bera', 'beera', 'save',
-        'බේරාගන්න', 'බේරගන්න', 'බේරා', 'බේර'
+        'බේරාගන්න', 'බේරගන්න', 'බේරා', 'බේර', 'බේරන්න'
       ],
       'sinhala_ginnak_': [
         'ginnak', 'ginna', 'ginnaki', 'fire',
@@ -379,7 +384,7 @@ class AudioClassifierService {
       bool matches = patterns.any((pattern) => text.contains(pattern));
       if (matches) {
         final lastTime = _lastKeywordTriggerTimes[key];
-        if (lastTime == null || now.difference(lastTime).inMilliseconds > 1000) {
+        if (lastTime == null || now.difference(lastTime).inMilliseconds > 400) {
           _lastKeywordTriggerTimes[key] = now;
           if (_displayNames.containsKey(key)) {
             _transcriptController.add(_displayNames[key]!);

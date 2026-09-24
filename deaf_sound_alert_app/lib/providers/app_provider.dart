@@ -89,6 +89,9 @@ class AppProvider with ChangeNotifier {
   }
 
   Future<void> removeHistoryEvent(String id) async {
+    if (_lastDetectedSound?.id == id) {
+      _lastDetectedSound = null;
+    }
     await HistoryService().removeEvent(id);
     notifyListeners();
   }
