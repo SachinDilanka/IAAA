@@ -130,11 +130,26 @@ class AudioClassifierService {
     }
   }
 
-  void _safeListenSpeech() {
-    if (!_speechAvailable || !_isListening) return;
+  void _safeListenSpeech() async {
+    if (!_isListening) return;
+    if (!_speechAvailable) {
+      try {
+        _speechAvailable = await _speech.initialize(
+          onError: (val) => _restartSpeechListeningIfNeeded(),
+          onStatus: (val) {
+            if ((val == 'done' || val == 'notListening') && _isListening) {
+              _restartSpeechListeningIfNeeded();
+            }
+          },
+        );
+      } catch (_) {}
+    }
+
+    if (!_speechAvailable) return;
+
     try {
       if (!_speech.isListening) {
-        _speech.listen(
+        await _speech.listen(
           onResult: (result) {
             if (!_isListening) return;
             _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
@@ -158,10 +173,10 @@ class AudioClassifierService {
             listenMode: stt.ListenMode.dictation,
             partialResults: true,
             cancelOnError: false,
-            pauseFor: const Duration(seconds: 10),
+            pauseFor: const Duration(seconds: 5),
             listenFor: const Duration(minutes: 30),
           ),
-          localeId: _sinhalaLocaleId,
+          localeId: _sinhalaLocaleId.isNotEmpty ? _sinhalaLocaleId : null,
         );
       }
     } catch (e) {
@@ -170,7 +185,7 @@ class AudioClassifierService {
   }
 
   void _restartSpeechListeningIfNeeded() {
-    if (!_isListening || !_speechAvailable) return;
+    if (!_isListening) return;
     Timer(const Duration(milliseconds: 200), () {
       _safeListenSpeech();
     });
@@ -190,6 +205,30 @@ class AudioClassifierService {
     _listeningStartTimeMs = DateTime.now().millisecondsSinceEpoch;
     _rollingIdx = 0;
     _total16kPushed = 0;
+
+    // Always re-initialize SpeechToText AFTER permission grant
+    try {
+      _speechAvailable = await _speech.initialize(
+        onError: (val) => _restartSpeechListeningIfNeeded(),
+        onStatus: (val) {
+          if ((val == 'done' || val == 'notListening') && _isListening) {
+            _restartSpeechListeningIfNeeded();
+          }
+        },
+      );
+
+      if (_speechAvailable) {
+        final locales = await _speech.locales();
+        for (var loc in locales) {
+          if (loc.localeId.toLowerCase().startsWith('si')) {
+            _sinhalaLocaleId = loc.localeId;
+            break;
+          }
+        }
+      }
+    } catch (e) {
+      print('Speech init error: $e');
+    }
 
     // 1. High-Performance Audio Streamer for Real-Time Visualizer Waveform Line & Environmental Sound Peaks
     _startAudioStreamer();
@@ -302,10 +341,9 @@ class AudioClassifierService {
     });
     _waveformController.add(frame);
 
-    // Acoustic Neural Peak Inference for Sinhala Keywords & Environmental Sounds (Every 150ms)
-    // Warmup check: wait 1.0s after mic enable, require full 16,000 samples, and energy RMS >= 0.012
-    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 1000) && rms > 0.012) {
-      if (nowMs - _lastMlTimeMs > 150) {
+    // Instant Acoustic Neural Inference for Environmental Sounds & Sinhala Keywords (Every 80ms)
+    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 500) && rms > 0.015) {
+      if (nowMs - _lastMlTimeMs > 80) {
         _lastMlTimeMs = nowMs;
         _runOfflineNeuralInference(rms);
       }
@@ -315,8 +353,8 @@ class AudioClassifierService {
   void _runOfflineNeuralInference(double rms) {
     final now = DateTime.now();
 
-    // Global Alert Lockout: If a sound alert was triggered within the last 4.0 seconds, lock out new popups so the user sees ONE sound at a time
-    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 4000) {
+    // 1500ms Cooldown lockout per sound burst to prevent sound spam while allowing instant response
+    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 1500) {
       return;
     }
 
@@ -329,8 +367,7 @@ class AudioClassifierService {
       if (absV > winMaxAmp) winMaxAmp = absV;
     }
 
-    // Reject distorted hardware clipping (> 0.98) or quiet ambient background noise (< 0.020)
-    if (winMaxAmp > 0.98 || winMaxAmp < 0.020) return;
+    if (winMaxAmp > 0.98 || winMaxAmp < 0.015) return;
 
     final prediction = _neuralClassifier.predict(window1s);
     if (prediction == null) return;
@@ -349,12 +386,10 @@ class AudioClassifierService {
 
     // CATEGORY A: Sinhala Voice Keyword Detection (Udaw, Beraganna, Ginnak, Anathurak, Karadarayak, Balaagena, Ehata Wenna, Parissamin)
     if (soundKey.startsWith('sinhala_')) {
-      // Spoken near or far: require clear confidence >= 0.58, margin >= 0.15, and energy rms >= 0.020
-      if (prob >= 0.58 && margin >= 0.15 && rms >= 0.020) {
+      if (prob >= 0.45 && margin >= 0.10 && rms >= 0.015) {
         _lastGlobalAlertTime = now;
         _classCooldown[soundKey] = now;
 
-        // Display detected Sinhala keyword clearly in the live transcript box
         if (_displayNames.containsKey(soundKey)) {
           _transcriptController.add(_displayNames[soundKey]!);
         }
@@ -362,14 +397,13 @@ class AudioClassifierService {
         simulateSoundDetection(soundKey, confidence: prob);
       }
     }
-    // CATEGORY B: Environmental Emergency Sound Detection (Baby Crying, Ambulance Siren, Vehicle Horns, Dog Barking)
+    // CATEGORY B: Environmental Emergency Sound Detection (Baby Crying, Dog Barking, Ambulance Siren, Vehicle Horns)
     else {
-      // Require high confidence >= 0.80, clear margin >= 0.25, and acoustic peak energy rms >= 0.035
-      if (prob >= 0.80 && margin >= 0.25 && rms >= 0.035) {
+      // Instant zero-delay threshold (prob >= 0.68, margin >= 0.12, rms >= 0.022)
+      if (prob >= 0.68 && margin >= 0.12 && rms >= 0.022) {
         _lastGlobalAlertTime = now;
         _classCooldown[soundKey] = now;
 
-        // Environmental sound triggers ONE clean alert banner without putting text into live transcript stream
         simulateSoundDetection(soundKey, confidence: prob);
       }
     }
@@ -423,8 +457,7 @@ class AudioClassifierService {
 
     final now = DateTime.now();
 
-    // Global Alert Lockout: Do not trigger speech keyword if an alert was triggered in the last 4.0 seconds
-    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 4000) {
+    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 1500) {
       return;
     }
 
