@@ -37,6 +37,43 @@ extension PriorityLevelExtension on PriorityLevel {
   }
 }
 
+extension DetectedSoundIconExtension on DetectedSound {
+  IconData get soundIcon {
+    switch (soundKey) {
+      case 'ambulance':
+        return Icons.emergency_rounded;
+      case 'baby crying':
+        return Icons.child_care_rounded;
+      case 'vehicle horns':
+        return Icons.campaign_rounded;
+      case 'dog_bark_dataset':
+        return Icons.pets_rounded;
+      case 'traffic':
+        return Icons.traffic_rounded;
+      case 'road':
+        return Icons.alt_route_rounded;
+      case 'sinhala_udaw_':
+        return Icons.sos_rounded;
+      case 'sinhala_ginnak_':
+        return Icons.local_fire_department_rounded;
+      case 'sinhala_anathurak_':
+        return Icons.warning_rounded;
+      case 'sinhala_beraganna_':
+        return Icons.health_and_safety_rounded;
+      case 'sinhala_balagena_':
+        return Icons.visibility_rounded;
+      case 'sinhala_ehata_wenna_':
+        return Icons.transfer_within_a_station_rounded;
+      case 'sinhala_karadarayak_':
+        return Icons.report_problem_rounded;
+      case 'sinhala_parissamin_':
+        return Icons.shield_rounded;
+      default:
+        return priority.icon;
+    }
+  }
+}
+
 class DetectedSound {
   final String id;
   final String soundKey;

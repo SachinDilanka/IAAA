@@ -41,7 +41,7 @@ class AlertBanner extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(sound.priority.icon, color: sound.priority.color, size: 28),
+                  Icon(sound.soundIcon, color: sound.priority.color, size: 28),
                   const SizedBox(width: 8),
                   Text(
                     sound.category.toUpperCase(),

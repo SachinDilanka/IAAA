@@ -1,31 +1,37 @@
 import 'dart:async';
-import 'dart:math';
+import 'dart:math' as math;
+import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
-import 'package:tflite_flutter/tflite_flutter.dart';
 import '../models/detected_sound.dart';
 import 'vibration_service.dart';
 import 'smartwatch_service.dart';
 import 'sound_config_service.dart';
 import 'history_service.dart';
+import 'native_neural_audio_classifier.dart';
 
 class AudioClassifierService {
   static final AudioClassifierService _instance = AudioClassifierService._internal();
   factory AudioClassifierService() => _instance;
   AudioClassifierService._internal();
 
-  Interpreter? _interpreter;
+  final NativeNeuralAudioClassifier _neuralClassifier = NativeNeuralAudioClassifier();
   AudioRecorder? _audioRecorder;
-  StreamSubscription<Amplitude>? _amplitudeSubscription;
+  StreamSubscription<Uint8List>? _audioStreamSubscription;
+
   final stt.SpeechToText _speech = stt.SpeechToText();
   bool _speechAvailable = false;
   String _sinhalaLocaleId = 'si_LK';
   Timer? _waveformTimer;
-  List<String> _labels = [];
   bool _isListening = false;
   DateTime? _lastPeakDetectionTime;
+
+  final List<double> _rollingBuf16k = List<double>.filled(16000, 0.0);
+  int _rollingIdx = 0;
+  int _totalSamplesPushed = 0;
+  final Map<String, DateTime> _lastKeywordTriggerTimes = {};
 
   final _controller = StreamController<DetectedSound>.broadcast();
   final _waveformController = StreamController<List<double>>.broadcast();
@@ -35,34 +41,60 @@ class AudioClassifierService {
   Stream<DetectedSound> get onSoundDetected => _controller.stream;
   Stream<List<double>> get onWaveformUpdated => _waveformController.stream;
   Stream<String> get onTranscriptUpdated => _transcriptController.stream;
-  List<String> get labels => _labels;
 
-  final List<String> _labelKeys = [
-    'ambulance',            // Index 0: Ambulance Siren
-    'baby crying',          // Index 1: Baby Crying
-    'dog_bark_dataset',     // Index 2: Dog Barking
-    'road',                 // Index 3: Road Sounds
-    'sinhala_anathurak_',   // Index 4: Anathurak (Danger)
-    'sinhala_balagena_',    // Index 5: Balaagena (Watch Out)
-    'sinhala_beraganna_',   // Index 6: Beraganna (Save Me)
-    'sinhala_ehata_wenna_', // Index 7: Ehata Wenna (Move Aside)
-    'sinhala_ginnak_',      // Index 8: Ginnak (Fire)
-    'sinhala_karadarayak_', // Index 9: Karadarayak (Trouble)
-    'sinhala_parissamin_',  // Index 10: Parissamin (Be Careful)
-    'sinhala_udaw_',        // Index 11: Udaw (Help)
-    'traffic',              // Index 12: Traffic Noise
-    'vehicle horns',        // Index 13: Vehicle Horns
-  ];
+  final Map<String, String> _labelToSoundKey = {
+    'ambulance_siren': 'ambulance',
+    'ambulance': 'ambulance',
+    'vehicle_horn': 'vehicle horns',
+    'vehicle horns': 'vehicle horns',
+    'baby_crying': 'baby crying',
+    'baby crying': 'baby crying',
+    'dog_barking': 'dog_bark_dataset',
+    'dog_bark_dataset': 'dog_bark_dataset',
+    'background_traffic': 'traffic',
+    'traffic': 'traffic',
+    'road': 'road',
+    'udaw': 'sinhala_udaw_',
+    'sinhala_udaw_': 'sinhala_udaw_',
+    'anathurak': 'sinhala_anathurak_',
+    'sinhala_anathurak_': 'sinhala_anathurak_',
+    'beeraganna': 'sinhala_beraganna_',
+    'sinhala_beraganna_': 'sinhala_beraganna_',
+    'ginnak': 'sinhala_ginnak_',
+    'sinhala_ginnak_': 'sinhala_ginnak_',
+    'karadarayak': 'sinhala_karadarayak_',
+    'sinhala_karadarayak_': 'sinhala_karadarayak_',
+    'balagena': 'sinhala_balagena_',
+    'sinhala_balagena_': 'sinhala_balagena_',
+    'ehata_wenna': 'sinhala_ehata_wenna_',
+    'sinhala_ehata_wenna_': 'sinhala_ehata_wenna_',
+    'parissamin': 'sinhala_parissamin_',
+    'sinhala_parissamin_': 'sinhala_parissamin_',
+  };
 
-  final List<List<double>> _spectralHistory = [];
-  final Map<String, DateTime> _lastKeywordTriggerTimes = {};
+  final Map<String, String> _displayNames = {
+    'sinhala_udaw_': 'උදව් (Udaw)',
+    'sinhala_anathurak_': 'අනතුරක් (Anathurak)',
+    'sinhala_beraganna_': 'බේරාගන්න (Beraganna)',
+    'sinhala_ginnak_': 'ගින්නක් (Ginnak)',
+    'sinhala_karadarayak_': 'කරදරයක් (Karadarayak)',
+    'sinhala_balagena_': 'බලාගෙන (Balaagena)',
+    'sinhala_ehata_wenna_': 'එහාට වෙන්න (Ehata Wenna)',
+    'sinhala_parissamin_': 'පරිස්සමින් (Parissamin)',
+    'ambulance': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
+    'baby crying': 'ළදරු හැඬීම (Baby Crying)',
+    'vehicle horns': 'වාහන හොන් (Vehicle Horns)',
+    'dog_bark_dataset': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
+    'traffic': 'වාහන තදබදය (Traffic Noise)',
+    'road': 'පාරේ ශබ්දය (Road Sounds)',
+  };
 
   Future<void> init() async {
     try {
-      _interpreter = await Interpreter.fromAsset('assets/models/sound_classifier.tflite');
-      print('TFLite Model loaded successfully!');
+      await _neuralClassifier.loadModel();
+      print('Native Neural Audio Classifier loaded successfully!');
     } catch (e) {
-      print('TFLite Model load exception: $e');
+      print('Neural Classifier load exception: $e');
     }
 
     try {
@@ -92,46 +124,7 @@ class AudioClassifierService {
     } catch (e) {
       print('SpeechToText init exception: $e');
     }
-
-    try {
-      final labelsStr = await rootBundle.loadString('assets/models/labels.txt');
-      _labels = labelsStr.split('\n').where((s) => s.trim().isNotEmpty).toList();
-    } catch (e) {
-      _labels = [
-        'Ambulance Siren',
-        'Baby Crying',
-        'Dog Barking',
-        'Road Sounds',
-        'Anathurak (Danger)',
-        'Balaagena (Watch Out)',
-        'Beraganna (Save Me)',
-        'Ehata Wenna (Move Aside)',
-        'Ginnak (Fire)',
-        'Karadarayak (Trouble)',
-        'Parissamin (Be Careful)',
-        'Udaw (Help)',
-        'Traffic Noise',
-        'Vehicle Horns'
-      ];
-    }
   }
-
-  final Map<String, String> _displayNames = {
-    'sinhala_udaw_': 'උදව් (Udaw)',
-    'sinhala_anathurak_': 'අනතුරක් (Anathurak)',
-    'sinhala_beraganna_': 'බේරාගන්න (Beraganna)',
-    'sinhala_ginnak_': 'ගින්නක් (Ginnak)',
-    'sinhala_karadarayak_': 'කරදරයක් (Karadarayak)',
-    'sinhala_balagena_': 'බලාගෙන (Balaagena)',
-    'sinhala_ehata_wenna_': 'එහාට වෙන්න (Ehata Wenna)',
-    'sinhala_parissamin_': 'පරිස්සමින් (Parissamin)',
-    'ambulance': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
-    'baby crying': 'ළදරු හැඬීම (Baby Crying)',
-    'vehicle horns': 'වාහන හොන් (Vehicle Horns)',
-    'dog_bark_dataset': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
-    'traffic': 'වාහන තදබදය (Traffic Noise)',
-    'road': 'පාරේ ශබ්දය (Road Sounds)',
-  };
 
   void _safeListenSpeech() {
     if (!_speechAvailable || !_isListening) return;
@@ -160,7 +153,7 @@ class AudioClassifierService {
 
   void _restartSpeechListeningIfNeeded() {
     if (!_isListening || !_speechAvailable) return;
-    Timer(const Duration(milliseconds: 200), () {
+    Timer(const Duration(milliseconds: 300), () {
       _safeListenSpeech();
     });
   }
@@ -177,57 +170,99 @@ class AudioClassifierService {
 
     _audioRecorder = AudioRecorder();
     _isListening = true;
+    _rollingIdx = 0;
+    _totalSamplesPushed = 0;
 
-    // 1. Mic Amplitude Listener as Secondary Backup
+    // 1. Start continuous raw 16kHz PCM Audio Stream for 100% Offline AI Neural Classification
     try {
       final hasPerm = await _audioRecorder!.hasPermission();
       if (hasPerm) {
-        _amplitudeSubscription = _audioRecorder!
-            .onAmplitudeChanged(const Duration(milliseconds: 120))
-            .listen((amp) {
+        final pcmStream = await _audioRecorder!.startStream(
+          const RecordConfig(
+            encoder: AudioEncoder.pcm16bits,
+            sampleRate: 16000,
+            numChannels: 1,
+          ),
+        );
+
+        _audioStreamSubscription = pcmStream.listen((Uint8List chunk) {
           if (!_isListening) return;
-
-          double db = amp.current; // -160 to 0 dBFS
-          double normAmp = ((db + 60.0) / 60.0).clamp(0.05, 1.0);
-
-          // Build 64-band spectral energy frame
-          final List<double> frame64 = List.generate(64, (band) {
-            double freqFactor = sin((band + 1) * pi / 65.0);
-            return (normAmp * freqFactor * (0.7 + Random().nextDouble() * 0.3)).clamp(0.0, 1.0);
-          });
-          _spectralHistory.add(frame64);
-          if (_spectralHistory.length > 32) {
-            _spectralHistory.removeAt(0);
-          }
-
-          final Random rand = Random();
-          final List<double> waveform = List.generate(40, (i) {
-            double noise = (rand.nextDouble() - 0.5) * 0.2;
-            return (normAmp + noise).clamp(0.08, 1.0);
-          });
-          _waveformController.add(waveform);
-
-          if (db > -55.0) {
-            _processEnvironmentalAudioPeak(normAmp, db);
-          }
+          _handlePcmAudioChunk(chunk);
+        }, onError: (err) {
+          print('PCM Stream exception: $err');
         });
       }
     } catch (e) {
-      print('Mic amplitude listener exception: $e');
+      print('Audio stream start exception: $e');
     }
 
-    // 2. Start Speech Recognition for Live Speech Transcript & Environmental Sound Peaks
+    // 2. Parallel Speech Recognition Stream for Live Speech Transcript
     _safeListenSpeech();
 
-    // Smooth UI visualizer backup timer
-    _waveformTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
-      if (!_isListening) return;
-      final Random rand = Random();
-      final List<double> waveform = List.generate(40, (_) => rand.nextDouble() * 0.85 + 0.15);
-      _waveformController.add(waveform);
-    });
-
     return true;
+  }
+
+  void _handlePcmAudioChunk(Uint8List chunk) {
+    if (chunk.isEmpty) return;
+
+    final ByteData byteData = ByteData.sublistView(chunk);
+    final int sampleCount = chunk.length ~/ 2;
+    double sumSquare = 0.0;
+
+    for (int i = 0; i < sampleCount; i++) {
+      int sample16 = byteData.getInt16(i * 2, Endian.little);
+      double normSample = (sample16 / 32768.0).clamp(-1.0, 1.0);
+      sumSquare += normSample * normSample;
+
+      _rollingBuf16k[_rollingIdx] = normSample;
+      _rollingIdx = (_rollingIdx + 1) % 16000;
+      _totalSamplesPushed++;
+    }
+
+    final double rms = math.sqrt(sumSquare / (sampleCount > 0 ? sampleCount : 1));
+
+    // Emit 40-band real-time visualizer waveform
+    final math.Random rand = math.Random();
+    final List<double> waveform = List.generate(40, (i) {
+      double noise = (rand.nextDouble() - 0.5) * 0.15;
+      return (rms * 4.0 + noise).clamp(0.08, 1.0);
+    });
+    _waveformController.add(waveform);
+
+    // Run 100% Offline Deep Neural Network inference when RMS volume > ambient room threshold
+    if (rms > 0.012 && _totalSamplesPushed >= 16000) {
+      _runOfflineNeuralInference(rms);
+    }
+  }
+
+  void _runOfflineNeuralInference(double rms) {
+    final now = DateTime.now();
+    if (_lastPeakDetectionTime != null &&
+        now.difference(_lastPeakDetectionTime!).inMilliseconds < 750) {
+      return;
+    }
+
+    // Reconstruct 1.0-second contiguous audio buffer
+    final List<double> audioSlice = List<double>.filled(16000, 0.0);
+    for (int i = 0; i < 16000; i++) {
+      audioSlice[i] = _rollingBuf16k[(_rollingIdx + i) % 16000];
+    }
+
+    final prediction = _neuralClassifier.predict(audioSlice);
+    if (prediction != null && prediction.probability >= 0.25) {
+      String rawClass = prediction.label;
+      String? mappedKey = _labelToSoundKey[rawClass];
+
+      if (mappedKey != null && mappedKey != 'traffic') {
+        _lastPeakDetectionTime = now;
+
+        if (_displayNames.containsKey(mappedKey)) {
+          _transcriptController.add(_displayNames[mappedKey]!);
+        }
+
+        simulateSoundDetection(mappedKey, confidence: prediction.probability);
+      }
+    }
   }
 
   void _processSpeechText(String text) {
@@ -265,74 +300,13 @@ class AudioClassifierService {
     });
   }
 
-  Future<void> _processEnvironmentalAudioPeak(double normAmp, double db) async {
-    // 800ms cooldown for responsive environmental sound recognition
-    if (_lastPeakDetectionTime != null &&
-        DateTime.now().difference(_lastPeakDetectionTime!).inMilliseconds < 800) {
-      return;
-    }
-
-    try {
-      int predictedIdx = -1;
-      double confidence = 0.0;
-
-      if (_interpreter != null) {
-        var input = List.generate(
-          1,
-          (_) => List.generate(
-            64,
-            (row) => List.generate(
-              32,
-              (col) => List.generate(1, (_) {
-                double val = 0.0;
-                if (col < _spectralHistory.length) {
-                  val = _spectralHistory[col][row];
-                } else {
-                  val = normAmp * (1.0 - (row / 64.0));
-                }
-                return val.clamp(0.0, 1.0);
-              }),
-            ),
-          ),
-        );
-
-        var output = List.filled(1 * 14, 0.0).reshape([1, 14]);
-        _interpreter!.run(input, output);
-
-        List<double> probs = List<double>.from(output[0]);
-        double maxP = -1.0;
-        for (int i = 0; i < probs.length; i++) {
-          if (probs[i] > maxP) {
-            maxP = probs[i];
-            predictedIdx = i;
-          }
-        }
-        confidence = maxP;
-      }
-
-      if (predictedIdx >= 0 && predictedIdx < _labelKeys.length) {
-        String detectedKey = _labelKeys[predictedIdx];
-        _lastPeakDetectionTime = DateTime.now();
-
-        // Update live transcript display for both online & offline sound identification
-        if (_displayNames.containsKey(detectedKey)) {
-          _transcriptController.add(_displayNames[detectedKey]!);
-        }
-
-        await simulateSoundDetection(detectedKey, confidence: 0.92);
-      }
-    } catch (e) {
-      print('Process environmental audio peak error: $e');
-    }
-  }
-
   void stopListening() {
     _isListening = false;
     if (_speech.isListening) {
       _speech.stop();
     }
-    _amplitudeSubscription?.cancel();
-    _amplitudeSubscription = null;
+    _audioStreamSubscription?.cancel();
+    _audioStreamSubscription = null;
     _waveformTimer?.cancel();
     _waveformTimer = null;
     try {
@@ -370,7 +344,6 @@ class AudioClassifierService {
 
   void dispose() {
     stopListening();
-    _interpreter?.close();
     _controller.close();
     _waveformController.close();
     _transcriptController.close();

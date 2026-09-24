@@ -132,7 +132,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               CircleAvatar(
                                 backgroundColor: item.priority.color.withOpacity(0.2),
                                 radius: 24,
-                                child: Icon(item.priority.icon, color: item.priority.color),
+                                child: Icon(item.soundIcon, color: item.priority.color),
                               ),
                               const SizedBox(width: 14),
                               Expanded(
@@ -163,22 +163,25 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                     children: [
                                       PriorityBadge(priority: item.priority),
                                       const SizedBox(width: 8),
-                                      IconButton(
-                                        padding: EdgeInsets.zero,
-                                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                        icon: Container(
-                                          padding: const EdgeInsets.all(4),
-                                          decoration: const BoxDecoration(
-                                            color: Color(0xFFFF3B30),
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: const Icon(
-                                            Icons.close_rounded,
-                                            color: Colors.white,
-                                            size: 18,
+                                      Material(
+                                        color: Colors.transparent,
+                                        child: InkWell(
+                                          onTap: () => provider.removeHistoryEvent(item.id),
+                                          borderRadius: BorderRadius.circular(20),
+                                          child: Container(
+                                            width: 36,
+                                            height: 36,
+                                            decoration: const BoxDecoration(
+                                              color: Color(0xFFFF3B30),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Icon(
+                                              Icons.close_rounded,
+                                              color: Colors.white,
+                                              size: 20,
+                                            ),
                                           ),
                                         ),
-                                        onPressed: () => provider.removeHistoryEvent(item.id),
                                       ),
                                     ],
                                   ),
