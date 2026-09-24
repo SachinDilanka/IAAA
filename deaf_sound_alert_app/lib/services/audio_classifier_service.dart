@@ -23,7 +23,6 @@ class AudioClassifierService {
   bool _speechAvailable = false;
   String _sinhalaLocaleId = 'si_LK';
   bool _isListening = false;
-  DateTime? _lastPeakDetectionTime;
 
   // 16,000 Hz circular rolling audio buffer (1 second)
   final List<double> _rollingBuf16k = List<double>.filled(16000, 0.0);
@@ -187,10 +186,10 @@ class AudioClassifierService {
     _rollingIdx = 0;
     _total16kPushed = 0;
 
-    // 1. High-Performance Audio Streamer for Real-Time Visualizer Waveform Line & Instant Audio Classification
+    // 1. High-Performance Audio Streamer for Real-Time Visualizer Waveform Line & Environmental Sound Peaks
     _startAudioStreamer();
 
-    // 2. Speech Recognition Engine for Live Speech Transcripts & Instant Sinhala Voice Keyword Match
+    // 2. Speech Recognition Engine for Live Speech Transcripts & Instant Sinhala Voice Keyword Detection
     _safeListenSpeech();
 
     return true;
@@ -298,8 +297,8 @@ class AudioClassifierService {
     });
     _waveformController.add(frame);
 
-    // Instant sliding-window neural inference every 150ms for ZERO-DELAY detection
-    if (_total16kPushed >= 3200 && rms > 0.004) {
+    // Acoustic Neural Peak Inference for Environmental Sounds (Every 150ms)
+    if (_total16kPushed >= 3200 && rms > 0.015) {
       if (nowMs - _lastMlTimeMs > 150) {
         _lastMlTimeMs = nowMs;
         _runOfflineNeuralInference(rms);
@@ -325,50 +324,11 @@ class AudioClassifierService {
     final prediction = _neuralClassifier.predict(window1s);
     if (prediction == null) return;
 
-    final Map<String, double> allProbs = prediction.allProbabilities;
-
-    // 1. FIRST PRIORITY: Check for Sinhala Emergency Keywords across ALL neural candidate probabilities
-    String? bestSinhalaKey;
-    double maxSinhalaProb = 0.0;
-
-    const Map<String, String> sinhalaClassMap = {
-      'udaw': 'sinhala_udaw_',
-      'beeraganna': 'sinhala_beraganna_',
-      'ginnak': 'sinhala_ginnak_',
-      'anathurak': 'sinhala_anathurak_',
-      'karadarayak': 'sinhala_karadarayak_',
-      'balagena': 'sinhala_balagena_',
-      'ehata_wenna': 'sinhala_ehata_wenna_',
-      'parissamin': 'sinhala_parissamin_',
-    };
-
-    sinhalaClassMap.forEach((rawLabel, soundKey) {
-      double prob = allProbs[rawLabel] ?? 0.0;
-      if (prob > maxSinhalaProb) {
-        maxSinhalaProb = prob;
-        bestSinhalaKey = soundKey;
-      }
-    });
-
-    if (bestSinhalaKey != null && maxSinhalaProb >= 0.15 && rms >= 0.004) {
-      final lastTrigger = _classCooldown[bestSinhalaKey];
-      if (lastTrigger == null || now.difference(lastTrigger).inMilliseconds > 400) {
-        _classCooldown[bestSinhalaKey!] = now;
-        _lastPeakDetectionTime = now;
-
-        if (_displayNames.containsKey(bestSinhalaKey)) {
-          _transcriptController.add(_displayNames[bestSinhalaKey]!);
-        }
-
-        simulateSoundDetection(bestSinhalaKey!, confidence: maxSinhalaProb);
-        return; // Sinhala Emergency Keyword takes top priority!
-      }
-    }
-
-    // 2. SECOND PRIORITY: Environmental Sound Classification (Only when distinct sound is heard, >=0.70 prob & >=0.025 RMS)
     String topLabel = prediction.label;
     String? envKey = _labelToSoundKey[topLabel];
 
+    // ONLY classify Environmental Sounds from acoustic peaks (Baby Crying, Ambulance, Horns, Dog Barking).
+    // Ignore Sinhala keywords here so room speech NEVER triggers automatic wrong sound popups!
     if (envKey != null &&
         !envKey.startsWith('sinhala_') &&
         envKey != 'traffic' &&
@@ -376,13 +336,7 @@ class AudioClassifierService {
         topLabel != 'background_traffic') {
 
       double envProb = prediction.probability;
-      if (envProb >= 0.70 && rms >= 0.025) {
-        // Ensure no active Sinhala keyword was triggered in the last 1.8 seconds to prevent overlap
-        if (_lastPeakDetectionTime != null &&
-            now.difference(_lastPeakDetectionTime!).inMilliseconds < 1800) {
-          return;
-        }
-
+      if (envProb >= 0.70 && rms >= 0.020) {
         final lastTrigger = _classCooldown[envKey];
         if (lastTrigger == null || now.difference(lastTrigger).inMilliseconds > 1200) {
           _classCooldown[envKey] = now;
@@ -408,7 +362,7 @@ class AudioClassifierService {
         'අනතුරක්', 'අනතුර', 'අනතුරයි'
       ],
       'sinhala_beraganna_': [
-        'beraganna', 'beeraganna', 'bcraganna', 'bera', 'beera', 'save',
+        'beraganna', 'beeraganna', 'bcraganna', 'pera', 'beera', 'save',
         'බේරාගන්න', 'බේරගන්න', 'බේරා', 'බේර', 'බේරන්න', 'බේරාගන්නකෝ'
       ],
       'sinhala_ginnak_': [
@@ -431,10 +385,6 @@ class AudioClassifierService {
         'parissamin', 'parisamin', 'parissamen', 'parisamen', 'parissam', 'parisam', 'careful',
         'පරිස්සමින්', 'පරිස්සමෙන්', 'පරිසමින්', 'පරිස්සම්'
       ],
-      'baby crying': ['baby', 'cry', 'crying', 'ළදරු'],
-      'vehicle horns': ['horn', 'horns', 'vehicle', 'වාහන'],
-      'ambulance': ['ambulance', 'siren', 'ගිලන්'],
-      'dog_bark_dataset': ['dog', 'bark', 'barking', 'බල්ලා'],
     };
 
     final now = DateTime.now();
@@ -443,7 +393,7 @@ class AudioClassifierService {
       bool matches = patterns.any((pattern) => text.contains(pattern));
       if (matches) {
         final lastTime = _lastKeywordTriggerTimes[key];
-        if (lastTime == null || now.difference(lastTime).inMilliseconds > 400) {
+        if (lastTime == null || now.difference(lastTime).inMilliseconds > 300) {
           _lastKeywordTriggerTimes[key] = now;
           if (_displayNames.containsKey(key)) {
             _transcriptController.add(_displayNames[key]!);
