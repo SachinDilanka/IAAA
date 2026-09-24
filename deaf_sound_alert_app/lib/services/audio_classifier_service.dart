@@ -341,9 +341,10 @@ class AudioClassifierService {
     });
     _waveformController.add(frame);
 
-    // Instant Acoustic Neural Inference for Environmental Sounds & Sinhala Keywords (Every 80ms)
-    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 500) && rms > 0.015) {
-      if (nowMs - _lastMlTimeMs > 80) {
+    // Instant Acoustic Neural Inference for Environmental Sounds (Every 100ms)
+    // Only run if audio has an actual acoustic peak (RMS > 0.032) to eliminate background room noise popups
+    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 500) && rms > 0.032) {
+      if (nowMs - _lastMlTimeMs > 100) {
         _lastMlTimeMs = nowMs;
         _runOfflineNeuralInference(rms);
       }
@@ -353,7 +354,7 @@ class AudioClassifierService {
   void _runOfflineNeuralInference(double rms) {
     final now = DateTime.now();
 
-    // 1500ms Cooldown lockout per sound burst to prevent sound spam while allowing instant response
+    // 1500ms Cooldown lockout per sound burst to prevent sound spam
     if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 1500) {
       return;
     }
@@ -367,7 +368,8 @@ class AudioClassifierService {
       if (absV > winMaxAmp) winMaxAmp = absV;
     }
 
-    if (winMaxAmp > 0.98 || winMaxAmp < 0.015) return;
+    // Reject distorted hardware clipping (> 0.98) or background noise (< 0.032)
+    if (winMaxAmp > 0.98 || winMaxAmp < 0.12 || rms < 0.032) return;
 
     final prediction = _neuralClassifier.predict(window1s);
     if (prediction == null) return;
@@ -375,7 +377,7 @@ class AudioClassifierService {
     String topLabel = prediction.label;
     String? soundKey = _labelToSoundKey[topLabel];
 
-    if (soundKey == null || soundKey == 'traffic' || soundKey == 'road' || topLabel == 'background_traffic') {
+    if (soundKey == null || soundKey.startsWith('sinhala_') || soundKey == 'traffic' || soundKey == 'road' || topLabel == 'background_traffic') {
       return;
     }
 
@@ -384,28 +386,12 @@ class AudioClassifierService {
     double secondBest = top5.length > 1 ? top5[1] : 0.0;
     double margin = prob - secondBest;
 
-    // CATEGORY A: Sinhala Voice Keyword Detection (Udaw, Beraganna, Ginnak, Anathurak, Karadarayak, Balaagena, Ehata Wenna, Parissamin)
-    if (soundKey.startsWith('sinhala_')) {
-      if (prob >= 0.45 && margin >= 0.10 && rms >= 0.015) {
-        _lastGlobalAlertTime = now;
-        _classCooldown[soundKey] = now;
+    // Environmental Emergency Sound Detection (Baby Crying, Dog Barking, Ambulance Siren, Vehicle Horns)
+    if (prob >= 0.72 && margin >= 0.15 && rms >= 0.032) {
+      _lastGlobalAlertTime = now;
+      _classCooldown[soundKey] = now;
 
-        if (_displayNames.containsKey(soundKey)) {
-          _transcriptController.add(_displayNames[soundKey]!);
-        }
-
-        simulateSoundDetection(soundKey, confidence: prob);
-      }
-    }
-    // CATEGORY B: Environmental Emergency Sound Detection (Baby Crying, Dog Barking, Ambulance Siren, Vehicle Horns)
-    else {
-      // Instant zero-delay threshold (prob >= 0.68, margin >= 0.12, rms >= 0.022)
-      if (prob >= 0.68 && margin >= 0.12 && rms >= 0.022) {
-        _lastGlobalAlertTime = now;
-        _classCooldown[soundKey] = now;
-
-        simulateSoundDetection(soundKey, confidence: prob);
-      }
+      simulateSoundDetection(soundKey, confidence: prob);
     }
   }
 
@@ -457,19 +443,15 @@ class AudioClassifierService {
 
     final now = DateTime.now();
 
-    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 1500) {
-      return;
-    }
-
     keywordPatterns.forEach((key, patterns) {
       bool matches = patterns.any((pattern) => sanitized.contains(pattern));
       if (matches) {
-        _lastGlobalAlertTime = now;
-        _lastKeywordTriggerTimes[key] = now;
-        if (_displayNames.containsKey(key)) {
-          _transcriptController.add(_displayNames[key]!);
+        final lastTime = _lastKeywordTriggerTimes[key];
+        if (lastTime == null || now.difference(lastTime).inMilliseconds > 1000) {
+          _lastKeywordTriggerTimes[key] = now;
+          _lastGlobalAlertTime = now;
+          simulateSoundDetection(key, confidence: 0.98);
         }
-        simulateSoundDetection(key, confidence: 0.98);
       }
     });
   }
