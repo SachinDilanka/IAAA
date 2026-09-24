@@ -116,10 +116,28 @@ class AudioClassifierService {
     }
   }
 
-  void _restartSpeechListeningIfNeeded() {
-    if (!_isListening || !_speechAvailable) return;
-    Timer(const Duration(milliseconds: 150), () {
-      if (!_isListening) return;
+  void _safeListenSpeech() {
+    if (!_speechAvailable || !_isListening) return;
+    try {
+      if (!_speech.isListening) {
+        _speech.listen(
+          onResult: (result) {
+            if (!_isListening) return;
+            String text = result.recognizedWords.toLowerCase().trim();
+            if (text.isNotEmpty) {
+              _transcriptController.add(result.recognizedWords);
+              _processSpeechText(text);
+            }
+          },
+          localeId: _sinhalaLocaleId,
+          listenFor: const Duration(minutes: 30),
+          pauseFor: const Duration(seconds: 10),
+          partialResults: true,
+          onDevice: true,
+          cancelOnError: false,
+        );
+      }
+    } catch (_) {
       try {
         if (!_speech.isListening) {
           _speech.listen(
@@ -135,32 +153,19 @@ class AudioClassifierService {
             listenFor: const Duration(minutes: 30),
             pauseFor: const Duration(seconds: 10),
             partialResults: true,
-            onDevice: true,
             cancelOnError: false,
           );
         }
       } catch (e) {
-        // Fallback without onDevice if unsupported
-        try {
-          if (!_speech.isListening) {
-            _speech.listen(
-              onResult: (result) {
-                if (!_isListening) return;
-                String text = result.recognizedWords.toLowerCase().trim();
-                if (text.isNotEmpty) {
-                  _transcriptController.add(result.recognizedWords);
-                  _processSpeechText(text);
-                }
-              },
-              localeId: _sinhalaLocaleId,
-              listenFor: const Duration(minutes: 30),
-              pauseFor: const Duration(seconds: 10),
-              partialResults: true,
-              cancelOnError: false,
-            );
-          }
-        } catch (_) {}
+        print('Speech listen error: $e');
       }
+    }
+  }
+
+  void _restartSpeechListeningIfNeeded() {
+    if (!_isListening || !_speechAvailable) return;
+    Timer(const Duration(milliseconds: 150), () {
+      _safeListenSpeech();
     });
   }
 
@@ -177,7 +182,7 @@ class AudioClassifierService {
     _audioRecorder = AudioRecorder();
     _isListening = true;
 
-    // 1. Mic Amplitude Recorder for Real Environmental Audio Peak Detection
+    // 1. Mic Amplitude Recorder for Real Environmental & Offline Acoustic Peak Detection
     try {
       final hasPerm = await _audioRecorder!.hasPermission();
       if (hasPerm) {
@@ -206,8 +211,8 @@ class AudioClassifierService {
           });
           _waveformController.add(waveform);
 
-          // Trigger acoustic environmental sound analysis when sound peak is heard (db > -52.0 dBFS)
-          if (db > -52.0) {
+          // Trigger TFLite acoustic analysis when sound peak occurs (db > -55.0 dBFS)
+          if (db > -55.0) {
             _processEnvironmentalAudioPeak(normAmp, db);
           }
         });
@@ -216,29 +221,8 @@ class AudioClassifierService {
       print('Mic amplitude recording error: $e');
     }
 
-    // 2. Start Instant Live Speech Recognition (Offline on-device mode)
-    if (_speechAvailable) {
-      try {
-        _speech.listen(
-          onResult: (result) {
-            if (!_isListening) return;
-            String text = result.recognizedWords.toLowerCase().trim();
-            if (text.isNotEmpty) {
-              _transcriptController.add(result.recognizedWords);
-              _processSpeechText(text);
-            }
-          },
-          localeId: _sinhalaLocaleId,
-          listenFor: const Duration(minutes: 30),
-          pauseFor: const Duration(seconds: 10),
-          partialResults: true,
-          onDevice: true,
-          cancelOnError: false,
-        );
-      } catch (e) {
-        print('Speech listen error: $e');
-      }
-    }
+    // 2. Start Speech Recognition safely (Online & Offline)
+    _safeListenSpeech();
 
     // Smooth UI visualizer backup timer
     _waveformTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
@@ -286,9 +270,9 @@ class AudioClassifierService {
   }
 
   Future<void> _processEnvironmentalAudioPeak(double normAmp, double db) async {
-    // 1.2 seconds cooldown for peak audio environmental detection
+    // 600ms cooldown for responsive offline classification
     if (_lastPeakDetectionTime != null &&
-        DateTime.now().difference(_lastPeakDetectionTime!).inMilliseconds < 1200) {
+        DateTime.now().difference(_lastPeakDetectionTime!).inMilliseconds < 600) {
       return;
     }
 
@@ -328,22 +312,15 @@ class AudioClassifierService {
             predictedIdx = i;
           }
         }
-        if (maxP > 0.10) {
+        if (maxP > 0.05) {
           confidence = maxP.clamp(0.82, 0.99);
         }
       }
 
-      // If TFLite prediction index is valid, select environmental sound key
       if (predictedIdx >= 0 && predictedIdx < _labelKeys.length) {
         String detectedKey = _labelKeys[predictedIdx];
         _lastPeakDetectionTime = DateTime.now();
         await simulateSoundDetection(detectedKey, confidence: confidence);
-      } else {
-        // Fallback acoustic environmental sound selector based on amplitude envelope
-        List<String> envKeys = ['baby crying', 'vehicle horns', 'ambulance', 'dog_bark_dataset', 'road', 'traffic'];
-        String fallbackKey = envKeys[rand.nextInt(envKeys.length)];
-        _lastPeakDetectionTime = DateTime.now();
-        await simulateSoundDetection(fallbackKey, confidence: 0.88);
       }
     } catch (e) {
       print('Process environmental audio peak error: $e');
