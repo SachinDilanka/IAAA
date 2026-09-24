@@ -32,7 +32,9 @@ class AudioClassifierService {
   int _total16kPushed = 0;
   int _hardwareSampleRate = 44100;
   int _lastPcmTimeMs = 0;
+
   final Map<String, DateTime> _lastKeywordTriggerTimes = {};
+  final Map<String, DateTime> _classCooldown = {};
 
   final _controller = StreamController<DetectedSound>.broadcast();
   final _waveformController = StreamController<List<double>>.broadcast();
@@ -42,6 +44,38 @@ class AudioClassifierService {
   Stream<DetectedSound> get onSoundDetected => _controller.stream;
   Stream<List<double>> get onWaveformUpdated => _waveformController.stream;
   Stream<String> get onTranscriptUpdated => _transcriptController.stream;
+
+  static const Map<String, double> _classThresholds = {
+    'baby_crying': 0.85,
+    'baby crying': 0.85,
+    'dog_barking': 0.85,
+    'dog_bark_dataset': 0.85,
+    'vehicle_horn': 0.85,
+    'vehicle horns': 0.85,
+    'ambulance_siren': 0.85,
+    'ambulance': 0.85,
+    'road': 0.95,
+    'traffic': 0.95,
+    'background_traffic': 0.95,
+
+    // Sinhala Emergency Keywords (High Sensitivity)
+    'udaw': 0.35,
+    'sinhala_udaw_': 0.35,
+    'beeraganna': 0.35,
+    'sinhala_beraganna_': 0.35,
+    'ginnak': 0.35,
+    'sinhala_ginnak_': 0.35,
+    'anathurak': 0.35,
+    'sinhala_anathurak_': 0.35,
+    'karadarayak': 0.35,
+    'sinhala_karadarayak_': 0.35,
+    'balagena': 0.35,
+    'sinhala_balagena_': 0.35,
+    'parissamin': 0.35,
+    'sinhala_parissamin_': 0.35,
+    'ehata_wenna': 0.35,
+    'sinhala_ehata_wenna_': 0.35,
+  };
 
   final Map<String, String> _labelToSoundKey = {
     'ambulance_siren': 'ambulance',
@@ -288,17 +322,13 @@ class AudioClassifierService {
     _waveformController.add(frame);
 
     // 100% Offline AI Deep Neural Network Classification on 1-second rolling audio buffer
-    if (_total16kPushed >= 16000 && rms > 0.010) {
+    if (_total16kPushed >= 16000 && rms > 0.015) {
       _runOfflineNeuralInference(rms);
     }
   }
 
   void _runOfflineNeuralInference(double rms) {
     final now = DateTime.now();
-    if (_lastPeakDetectionTime != null &&
-        now.difference(_lastPeakDetectionTime!).inMilliseconds < 700) {
-      return;
-    }
 
     final List<double> window1s = List<double>.filled(16000, 0.0);
     double winMaxAmp = 0.0;
@@ -313,11 +343,23 @@ class AudioClassifierService {
     if (winMaxAmp > 0.95) return;
 
     final prediction = _neuralClassifier.predict(window1s);
-    if (prediction != null && prediction.probability >= 0.25) {
+    if (prediction != null) {
       String rawClass = prediction.label;
       String? mappedKey = _labelToSoundKey[rawClass];
 
-      if (mappedKey != null && mappedKey != 'traffic') {
+      if (mappedKey == null || mappedKey == 'traffic' || mappedKey == 'road' || rawClass == 'background_traffic') {
+        return; // Ignore general background room noise
+      }
+
+      double requiredThreshold = _classThresholds[rawClass] ?? _classThresholds[mappedKey] ?? 0.85;
+
+      if (prediction.probability >= requiredThreshold) {
+        final lastTrigger = _classCooldown[mappedKey];
+        if (lastTrigger != null && now.difference(lastTrigger).inMilliseconds < 2500) {
+          return; // Prevent repeating alert spams within 2.5s
+        }
+
+        _classCooldown[mappedKey] = now;
         _lastPeakDetectionTime = now;
 
         if (_displayNames.containsKey(mappedKey)) {
@@ -343,8 +385,6 @@ class AudioClassifierService {
       'vehicle horns': ['horn', 'horns', 'vehicle', 'වාහන'],
       'ambulance': ['ambulance', 'siren', 'ගිලන්'],
       'dog_bark_dataset': ['dog', 'bark', 'barking', 'බල්ලා'],
-      'traffic': ['traffic', 'තදබදය'],
-      'road': ['road', 'පාරේ'],
     };
 
     final now = DateTime.now();
