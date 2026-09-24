@@ -33,6 +33,7 @@ class AudioClassifierService {
   int _lastMlTimeMs = 0;
   int _listeningStartTimeMs = 0;
   int _lastSpeechTimeMs = 0;
+  DateTime? _lastGlobalAlertTime;
 
   final Map<String, DateTime> _lastKeywordTriggerTimes = {};
   final Map<String, DateTime> _classCooldown = {};
@@ -314,6 +315,11 @@ class AudioClassifierService {
   void _runOfflineNeuralInference(double rms) {
     final now = DateTime.now();
 
+    // Global Alert Lockout: If a sound alert was triggered within the last 4.0 seconds, lock out new popups so the user sees ONE sound at a time
+    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 4000) {
+      return;
+    }
+
     final List<double> window1s = List<double>.filled(16000, 0.0);
     double winMaxAmp = 0.0;
     for (int i = 0; i < 16000; i++) {
@@ -323,8 +329,8 @@ class AudioClassifierService {
       if (absV > winMaxAmp) winMaxAmp = absV;
     }
 
-    // Reject distorted clipping (> 0.98) or silent noise (< 0.012)
-    if (winMaxAmp > 0.98 || winMaxAmp < 0.012) return;
+    // Reject distorted hardware clipping (> 0.98) or quiet ambient background noise (< 0.020)
+    if (winMaxAmp > 0.98 || winMaxAmp < 0.020) return;
 
     final prediction = _neuralClassifier.predict(window1s);
     if (prediction == null) return;
@@ -337,35 +343,34 @@ class AudioClassifierService {
     }
 
     double prob = prediction.probability;
+    final top5 = prediction.top5Probabilities.values.toList();
+    double secondBest = top5.length > 1 ? top5[1] : 0.0;
+    double margin = prob - secondBest;
 
     // CATEGORY A: Sinhala Voice Keyword Detection (Udaw, Beraganna, Ginnak, Anathurak, Karadarayak, Balaagena, Ehata Wenna, Parissamin)
     if (soundKey.startsWith('sinhala_')) {
-      // Spoken near or far: require confidence >= 0.48 and energy rms >= 0.012
-      if (prob >= 0.48 && rms >= 0.012) {
-        final lastTrigger = _classCooldown[soundKey];
-        if (lastTrigger == null || now.difference(lastTrigger).inMilliseconds > 1000) {
-          _classCooldown[soundKey] = now;
+      // Spoken near or far: require clear confidence >= 0.58, margin >= 0.15, and energy rms >= 0.020
+      if (prob >= 0.58 && margin >= 0.15 && rms >= 0.020) {
+        _lastGlobalAlertTime = now;
+        _classCooldown[soundKey] = now;
 
-          // Display detected Sinhala keyword clearly in the live transcript box!
-          if (_displayNames.containsKey(soundKey)) {
-            _transcriptController.add(_displayNames[soundKey]!);
-          }
-
-          simulateSoundDetection(soundKey, confidence: prob);
+        // Display detected Sinhala keyword clearly in the live transcript box
+        if (_displayNames.containsKey(soundKey)) {
+          _transcriptController.add(_displayNames[soundKey]!);
         }
+
+        simulateSoundDetection(soundKey, confidence: prob);
       }
     }
-    // CATEGORY B: Environmental Sound Detection (Baby Crying, Ambulance Siren, Vehicle Horns, Dog Barking)
+    // CATEGORY B: Environmental Emergency Sound Detection (Baby Crying, Ambulance Siren, Vehicle Horns, Dog Barking)
     else {
-      // Require acoustic peak confidence >= 0.72 and peak energy rms >= 0.028
-      if (prob >= 0.72 && rms >= 0.028) {
-        final lastTrigger = _classCooldown[soundKey];
-        if (lastTrigger == null || now.difference(lastTrigger).inMilliseconds > 1200) {
-          _classCooldown[soundKey] = now;
+      // Require high confidence >= 0.80, clear margin >= 0.25, and acoustic peak energy rms >= 0.035
+      if (prob >= 0.80 && margin >= 0.25 && rms >= 0.035) {
+        _lastGlobalAlertTime = now;
+        _classCooldown[soundKey] = now;
 
-          // Environmental sounds trigger alert banner without cluttering the live transcript line
-          simulateSoundDetection(soundKey, confidence: prob);
-        }
+        // Environmental sound triggers ONE clean alert banner without putting text into live transcript stream
+        simulateSoundDetection(soundKey, confidence: prob);
       }
     }
   }
@@ -418,17 +423,20 @@ class AudioClassifierService {
 
     final now = DateTime.now();
 
+    // Global Alert Lockout: Do not trigger speech keyword if an alert was triggered in the last 4.0 seconds
+    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 4000) {
+      return;
+    }
+
     keywordPatterns.forEach((key, patterns) {
       bool matches = patterns.any((pattern) => sanitized.contains(pattern));
       if (matches) {
-        final lastTime = _lastKeywordTriggerTimes[key];
-        if (lastTime == null || now.difference(lastTime).inMilliseconds > 500) {
-          _lastKeywordTriggerTimes[key] = now;
-          if (_displayNames.containsKey(key)) {
-            _transcriptController.add(_displayNames[key]!);
-          }
-          simulateSoundDetection(key, confidence: 0.98);
+        _lastGlobalAlertTime = now;
+        _lastKeywordTriggerTimes[key] = now;
+        if (_displayNames.containsKey(key)) {
+          _transcriptController.add(_displayNames[key]!);
         }
+        simulateSoundDetection(key, confidence: 0.98);
       }
     });
   }
