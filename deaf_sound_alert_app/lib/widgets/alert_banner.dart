@@ -39,22 +39,29 @@ class AlertBanner extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Icon(sound.soundIcon, color: sound.priority.color, size: 28),
-                  const SizedBox(width: 8),
-                  Text(
-                    sound.category.toUpperCase(),
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                      letterSpacing: 1.2,
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(sound.soundIcon, color: sound.priority.color, size: 26),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        sound.category.toUpperCase(),
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          letterSpacing: 1.1,
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   PriorityBadge(priority: sound.priority),
                   if (onDismiss != null) ...[

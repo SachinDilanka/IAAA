@@ -32,6 +32,7 @@ class AudioClassifierService {
   int _lastPcmTimeMs = 0;
   int _lastMlTimeMs = 0;
   int _listeningStartTimeMs = 0;
+  int _lastSpeechTimeMs = 0;
 
   final Map<String, DateTime> _lastKeywordTriggerTimes = {};
   final Map<String, DateTime> _classCooldown = {};
@@ -135,6 +136,7 @@ class AudioClassifierService {
         _speech.listen(
           onResult: (result) {
             if (!_isListening) return;
+            _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
             String text = result.recognizedWords.toLowerCase().trim();
             if (text.isNotEmpty) {
               _transcriptController.add(result.recognizedWords);
@@ -311,6 +313,10 @@ class AudioClassifierService {
 
   void _runOfflineNeuralInference(double rms) {
     final now = DateTime.now();
+    final nowMs = now.millisecondsSinceEpoch;
+
+    // Suppress environmental sound popups while user speech is active (within last 2000ms)
+    if (nowMs - _lastSpeechTimeMs < 2000) return;
 
     final List<double> window1s = List<double>.filled(16000, 0.0);
     double winMaxAmp = 0.0;
@@ -345,10 +351,7 @@ class AudioClassifierService {
         if (lastTrigger == null || now.difference(lastTrigger).inMilliseconds > 1200) {
           _classCooldown[envKey] = now;
 
-          if (_displayNames.containsKey(envKey)) {
-            _transcriptController.add(_displayNames[envKey]!);
-          }
-
+          // DO NOT put environmental sound names into the live speech transcript stream!
           simulateSoundDetection(envKey, confidence: envProb);
         }
       }
