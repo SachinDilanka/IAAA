@@ -31,6 +31,7 @@ class AudioClassifierService {
   int _hardwareSampleRate = 44100;
   int _lastPcmTimeMs = 0;
   int _lastMlTimeMs = 0;
+  int _listeningStartTimeMs = 0;
 
   final Map<String, DateTime> _lastKeywordTriggerTimes = {};
   final Map<String, DateTime> _classCooldown = {};
@@ -183,6 +184,7 @@ class AudioClassifierService {
     } catch (_) {}
 
     _isListening = true;
+    _listeningStartTimeMs = DateTime.now().millisecondsSinceEpoch;
     _rollingIdx = 0;
     _total16kPushed = 0;
 
@@ -298,7 +300,8 @@ class AudioClassifierService {
     _waveformController.add(frame);
 
     // Acoustic Neural Peak Inference for Environmental Sounds (Every 150ms)
-    if (_total16kPushed >= 3200 && rms > 0.015) {
+    // Warmup check: wait 2.5 seconds after mic enable, require full 16,000 samples, and peak energy RMS >= 0.035
+    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 2500) && rms > 0.035) {
       if (nowMs - _lastMlTimeMs > 150) {
         _lastMlTimeMs = nowMs;
         _runOfflineNeuralInference(rms);
@@ -318,8 +321,8 @@ class AudioClassifierService {
       if (absV > winMaxAmp) winMaxAmp = absV;
     }
 
-    // Reject distorted hardware clipping audio (> 0.98)
-    if (winMaxAmp > 0.98) return;
+    // Reject distorted clipping (> 0.98) or low peak amplitude (< 0.10) to prevent background noise popups
+    if (winMaxAmp > 0.98 || winMaxAmp < 0.10) return;
 
     final prediction = _neuralClassifier.predict(window1s);
     if (prediction == null) return;
@@ -336,7 +339,8 @@ class AudioClassifierService {
         topLabel != 'background_traffic') {
 
       double envProb = prediction.probability;
-      if (envProb >= 0.70 && rms >= 0.020) {
+      // High confidence threshold (0.82) and high peak energy (RMS >= 0.038) to guarantee real test audio detection without background room noise popups
+      if (envProb >= 0.82 && rms >= 0.038) {
         final lastTrigger = _classCooldown[envKey];
         if (lastTrigger == null || now.difference(lastTrigger).inMilliseconds > 1200) {
           _classCooldown[envKey] = now;
@@ -351,31 +355,41 @@ class AudioClassifierService {
     }
   }
 
-  void _processSpeechText(String text) {
+  void _processSpeechText(String rawText) {
+    // Sanitize transcript by removing zero-width spaces/joiners, punctuation, and extra whitespace
+    final String sanitized = rawText
+        .replaceAll(RegExp(r'[\u200B-\u200D\uFEFF]'), '')
+        .replaceAll(RegExp(r'[^\w\s\u0D80-\u0DFF]'), ' ')
+        .toLowerCase()
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+    if (sanitized.isEmpty) return;
+
     final Map<String, List<String>> keywordPatterns = {
       'sinhala_udaw_': [
-        'udaw', 'udaww', 'udau', 'udawwa', 'udawwak', 'help',
-        'උදව්', 'උදව්වක්', 'උදවු', 'උදවු කරන්න', 'උදව් කරන්න', 'උදව්ව'
+        'udaw', 'udaww', 'udau', 'udawwa', 'udawwak', 'udauwa', 'udav', 'udavv', 'help',
+        'උදව්', 'උදව්වක්', 'උදවු', 'උදවු කරන්න', 'උදව් කරන්න', 'උදව්ව', 'උදව්ක්'
       ],
       'sinhala_anathurak_': [
-        'anathurak', 'anatura', 'anathurai', 'danger',
+        'anathurak', 'anatura', 'anathura', 'anathurai', 'anaturak', 'danger',
         'අනතුරක්', 'අනතුර', 'අනතුරයි'
       ],
       'sinhala_beraganna_': [
-        'beraganna', 'beeraganna', 'bcraganna', 'pera', 'beera', 'save',
-        'බේරාගන්න', 'බේරගන්න', 'බේරා', 'බේර', 'බේරන්න', 'බේරාගන්නකෝ'
+        'beraganna', 'beeraganna', 'bcraganna', 'bera', 'beera', 'beragan', 'save',
+        'බේරාගන්න', 'බේරගන්න', 'බේරා', 'බේර', 'බේරන්න', 'බේරාගන්නකෝ', 'බේරගන්නකෝ'
       ],
       'sinhala_ginnak_': [
-        'ginnak', 'ginna', 'ginnaki', 'fire',
+        'ginnak', 'ginna', 'ginnaki', 'ginnac', 'fire',
         'ගින්නක්', 'ගින්න', 'ගිනි'
       ],
       'sinhala_karadarayak_': [
-        'karadarayak', 'karadara', 'karadarai', 'trouble',
-        'කරදරයක්', 'කරදර', 'කරදරයි'
+        'karadarayak', 'karadara', 'karadarai', 'karadarayac', 'trouble',
+        'කරදරයක්', 'කරදර', 'කරදරයි', 'කරදරේ'
       ],
       'sinhala_balagena_': [
         'balagena', 'balagenna', 'balaagena', 'balaganna', 'balang', 'watch', 'lookout',
-        'බලාගෙන', 'බලන්', 'බලාගෙනම'
+        'බලාගෙන', 'බලන්', 'බලාගෙනම', 'බලන්න'
       ],
       'sinhala_ehata_wenna_': [
         'ehata', 'wenna', 'ehatawenna', 'move',
@@ -390,10 +404,10 @@ class AudioClassifierService {
     final now = DateTime.now();
 
     keywordPatterns.forEach((key, patterns) {
-      bool matches = patterns.any((pattern) => text.contains(pattern));
+      bool matches = patterns.any((pattern) => sanitized.contains(pattern));
       if (matches) {
         final lastTime = _lastKeywordTriggerTimes[key];
-        if (lastTime == null || now.difference(lastTime).inMilliseconds > 300) {
+        if (lastTime == null || now.difference(lastTime).inMilliseconds > 500) {
           _lastKeywordTriggerTimes[key] = now;
           if (_displayNames.containsKey(key)) {
             _transcriptController.add(_displayNames[key]!);

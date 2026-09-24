@@ -45,6 +45,19 @@ class SoundConfigService {
     } else {
       _configs = List.from(_defaultConfigs);
     }
+
+    // Ensure all default configs exist in _configs (migrate older saved configs)
+    for (var def in _defaultConfigs) {
+      if (!_configs.any((c) => c.key == def.key)) {
+        _configs.add(SoundConfig(
+          key: def.key,
+          name: def.name,
+          category: def.category,
+          priority: def.priority,
+          isEnabled: def.isEnabled,
+        ));
+      }
+    }
   }
 
   Future<void> updatePriority(String key, PriorityLevel newPriority) async {
@@ -64,11 +77,27 @@ class SoundConfigService {
   }
 
   SoundConfig? getConfig(String key) {
-    try {
-      return _configs.firstWhere((c) => c.key == key);
-    } catch (_) {
-      return null;
+    if (_configs.isEmpty) {
+      _configs = List.from(_defaultConfigs);
     }
+    
+    // First try loaded configs
+    for (var config in _configs) {
+      if (config.key == key) return config;
+    }
+
+    // Fallback to default configs
+    for (var config in _defaultConfigs) {
+      if (config.key == key) return config;
+    }
+
+    // Dynamic fallback guaranteed non-null
+    return SoundConfig(
+      key: key,
+      name: key,
+      category: key.startsWith('sinhala_') ? 'Sinhala Keyword' : 'Environmental Sound',
+      priority: PriorityLevel.high,
+    );
   }
 
   Future<void> _save() async {
