@@ -298,8 +298,8 @@ class AudioClassifierService {
     });
     _waveformController.add(frame);
 
-    // Instant sliding-window neural inference every 150ms for ZERO-DELAY Sinhala keyword & sound detection
-    if (_total16kPushed >= 3200 && rms > 0.005) {
+    // Instant sliding-window neural inference every 150ms for ZERO-DELAY detection
+    if (_total16kPushed >= 3200 && rms > 0.004) {
       if (nowMs - _lastMlTimeMs > 150) {
         _lastMlTimeMs = nowMs;
         _runOfflineNeuralInference(rms);
@@ -323,32 +323,76 @@ class AudioClassifierService {
     if (winMaxAmp > 0.98) return;
 
     final prediction = _neuralClassifier.predict(window1s);
-    if (prediction != null) {
-      String rawClass = prediction.label;
-      String? mappedKey = _labelToSoundKey[rawClass];
+    if (prediction == null) return;
 
-      if (mappedKey == null || mappedKey == 'traffic' || mappedKey == 'road' || rawClass == 'background_traffic') {
-        return; // Ignore general background room noise
+    final Map<String, double> allProbs = prediction.allProbabilities;
+
+    // 1. FIRST PRIORITY: Check for Sinhala Emergency Keywords across ALL neural candidate probabilities
+    String? bestSinhalaKey;
+    double maxSinhalaProb = 0.0;
+
+    const Map<String, String> sinhalaClassMap = {
+      'udaw': 'sinhala_udaw_',
+      'beeraganna': 'sinhala_beraganna_',
+      'ginnak': 'sinhala_ginnak_',
+      'anathurak': 'sinhala_anathurak_',
+      'karadarayak': 'sinhala_karadarayak_',
+      'balagena': 'sinhala_balagena_',
+      'ehata_wenna': 'sinhala_ehata_wenna_',
+      'parissamin': 'sinhala_parissamin_',
+    };
+
+    sinhalaClassMap.forEach((rawLabel, soundKey) {
+      double prob = allProbs[rawLabel] ?? 0.0;
+      if (prob > maxSinhalaProb) {
+        maxSinhalaProb = prob;
+        bestSinhalaKey = soundKey;
       }
+    });
 
-      bool isSinhalaKeyword = mappedKey.startsWith('sinhala_');
-      double requiredConfidence = isSinhalaKeyword ? 0.20 : 0.70;
-      double requiredRms = isSinhalaKeyword ? 0.006 : 0.025;
-
-      if (prediction.probability >= requiredConfidence && rms >= requiredRms) {
-        final lastTrigger = _classCooldown[mappedKey];
-        if (lastTrigger != null && now.difference(lastTrigger).inMilliseconds < 1200) {
-          return; // Prevent repeating alert spams within 1.2s
-        }
-
-        _classCooldown[mappedKey] = now;
+    if (bestSinhalaKey != null && maxSinhalaProb >= 0.15 && rms >= 0.004) {
+      final lastTrigger = _classCooldown[bestSinhalaKey];
+      if (lastTrigger == null || now.difference(lastTrigger).inMilliseconds > 400) {
+        _classCooldown[bestSinhalaKey!] = now;
         _lastPeakDetectionTime = now;
 
-        if (_displayNames.containsKey(mappedKey)) {
-          _transcriptController.add(_displayNames[mappedKey]!);
+        if (_displayNames.containsKey(bestSinhalaKey)) {
+          _transcriptController.add(_displayNames[bestSinhalaKey]!);
         }
 
-        simulateSoundDetection(mappedKey, confidence: prediction.probability);
+        simulateSoundDetection(bestSinhalaKey!, confidence: maxSinhalaProb);
+        return; // Sinhala Emergency Keyword takes top priority!
+      }
+    }
+
+    // 2. SECOND PRIORITY: Environmental Sound Classification (Only when distinct sound is heard, >=0.70 prob & >=0.025 RMS)
+    String topLabel = prediction.label;
+    String? envKey = _labelToSoundKey[topLabel];
+
+    if (envKey != null &&
+        !envKey.startsWith('sinhala_') &&
+        envKey != 'traffic' &&
+        envKey != 'road' &&
+        topLabel != 'background_traffic') {
+
+      double envProb = prediction.probability;
+      if (envProb >= 0.70 && rms >= 0.025) {
+        // Ensure no active Sinhala keyword was triggered in the last 1.8 seconds to prevent overlap
+        if (_lastPeakDetectionTime != null &&
+            now.difference(_lastPeakDetectionTime!).inMilliseconds < 1800) {
+          return;
+        }
+
+        final lastTrigger = _classCooldown[envKey];
+        if (lastTrigger == null || now.difference(lastTrigger).inMilliseconds > 1200) {
+          _classCooldown[envKey] = now;
+
+          if (_displayNames.containsKey(envKey)) {
+            _transcriptController.add(_displayNames[envKey]!);
+          }
+
+          simulateSoundDetection(envKey, confidence: envProb);
+        }
       }
     }
   }
@@ -357,7 +401,7 @@ class AudioClassifierService {
     final Map<String, List<String>> keywordPatterns = {
       'sinhala_udaw_': [
         'udaw', 'udaww', 'udau', 'udawwa', 'udawwak', 'help',
-        'උදව්', 'උදව්වක්', 'උදවු', 'උදවු කරන්න', 'උදව් කරන්න'
+        'උදව්', 'උදව්වක්', 'උදවු', 'උදවු කරන්න', 'උදව් කරන්න', 'උදව්ව'
       ],
       'sinhala_anathurak_': [
         'anathurak', 'anatura', 'anathurai', 'danger',
@@ -365,7 +409,7 @@ class AudioClassifierService {
       ],
       'sinhala_beraganna_': [
         'beraganna', 'beeraganna', 'bcraganna', 'bera', 'beera', 'save',
-        'බේරාගන්න', 'බේරගන්න', 'බේරා', 'බේර', 'බේරන්න'
+        'බේරාගන්න', 'බේරගන්න', 'බේරා', 'බේර', 'බේරන්න', 'බේරාගන්නකෝ'
       ],
       'sinhala_ginnak_': [
         'ginnak', 'ginna', 'ginnaki', 'fire',
