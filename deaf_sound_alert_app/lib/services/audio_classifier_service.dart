@@ -243,9 +243,15 @@ class AudioClassifierService {
     }
     final double normScale = maxRaw > 2.0 ? (1.0 / 32768.0) : 1.0;
 
+    // Apply 3.0x software gain boost to capture quiet or distant speech & sounds
+    const double gainBoost = 3.0;
+
     List<double> packet16k;
     if (_hardwareSampleRate == 16000) {
-      packet16k = List<double>.generate(rawBuffer.length, (i) => rawBuffer[i] * normScale);
+      packet16k = List<double>.generate(
+        rawBuffer.length,
+        (i) => (rawBuffer[i] * normScale * gainBoost).clamp(-1.0, 1.0),
+      );
     } else {
       final int targetCount = ((rawBuffer.length * 16000) / _hardwareSampleRate).round();
       if (targetCount <= 0) return;
@@ -257,10 +263,11 @@ class AudioClassifierService {
         double sum = 0.0;
         int count = 0;
         for (int j = startIdx; j < endIdx; j++) {
-          sum += rawBuffer[j] * normScale;
+          sum += rawBuffer[j] * normScale * gainBoost;
           count++;
         }
-        packet16k[i] = count > 0 ? (sum / count) : (rawBuffer[startIdx.clamp(0, rawBuffer.length - 1)] * normScale);
+        double val = count > 0 ? (sum / count) : (rawBuffer[startIdx.clamp(0, rawBuffer.length - 1)] * normScale * gainBoost);
+        packet16k[i] = val.clamp(-1.0, 1.0);
       }
     }
 
@@ -291,8 +298,8 @@ class AudioClassifierService {
     });
     _waveformController.add(frame);
 
-    // Instant sliding-window neural inference every 150ms for ZERO-DELAY Sinhala keyword detection
-    if (_total16kPushed >= 3200 && rms > 0.008) {
+    // Instant sliding-window neural inference every 150ms for ZERO-DELAY Sinhala keyword & sound detection
+    if (_total16kPushed >= 3200 && rms > 0.005) {
       if (nowMs - _lastMlTimeMs > 150) {
         _lastMlTimeMs = nowMs;
         _runOfflineNeuralInference(rms);
@@ -312,32 +319,36 @@ class AudioClassifierService {
       if (absV > winMaxAmp) winMaxAmp = absV;
     }
 
-    // Reject distorted hardware clipping audio (> 0.95)
-    if (winMaxAmp > 0.95) return;
+    // Reject distorted hardware clipping audio (> 0.98)
+    if (winMaxAmp > 0.98) return;
 
     final prediction = _neuralClassifier.predict(window1s);
     if (prediction != null) {
       String rawClass = prediction.label;
       String? mappedKey = _labelToSoundKey[rawClass];
 
-      // ONLY process Sinhala Emergency Keywords from background mic neural inference.
-      // Ambient room noise will NEVER trigger false environmental sound popups.
-      if (mappedKey == null || !mappedKey.startsWith('sinhala_')) {
-        return;
+      if (mappedKey == null || mappedKey == 'traffic' || mappedKey == 'road' || rawClass == 'background_traffic') {
+        return; // Ignore general background room noise
       }
 
-      if (prediction.probability >= 0.20) {
+      bool isSinhalaKeyword = mappedKey.startsWith('sinhala_');
+      double requiredConfidence = isSinhalaKeyword ? 0.20 : 0.70;
+      double requiredRms = isSinhalaKeyword ? 0.006 : 0.025;
+
+      if (prediction.probability >= requiredConfidence && rms >= requiredRms) {
         final lastTrigger = _classCooldown[mappedKey];
-        if (lastTrigger == null || now.difference(lastTrigger).inMilliseconds > 400) {
-          _classCooldown[mappedKey] = now;
-          _lastPeakDetectionTime = now;
-
-          if (_displayNames.containsKey(mappedKey)) {
-            _transcriptController.add(_displayNames[mappedKey]!);
-          }
-
-          simulateSoundDetection(mappedKey, confidence: prediction.probability);
+        if (lastTrigger != null && now.difference(lastTrigger).inMilliseconds < 1200) {
+          return; // Prevent repeating alert spams within 1.2s
         }
+
+        _classCooldown[mappedKey] = now;
+        _lastPeakDetectionTime = now;
+
+        if (_displayNames.containsKey(mappedKey)) {
+          _transcriptController.add(_displayNames[mappedKey]!);
+        }
+
+        simulateSoundDetection(mappedKey, confidence: prediction.probability);
       }
     }
   }
@@ -376,6 +387,10 @@ class AudioClassifierService {
         'parissamin', 'parisamin', 'parissamen', 'parisamen', 'parissam', 'parisam', 'careful',
         'පරිස්සමින්', 'පරිස්සමෙන්', 'පරිසමින්', 'පරිස්සම්'
       ],
+      'baby crying': ['baby', 'cry', 'crying', 'ළදරු'],
+      'vehicle horns': ['horn', 'horns', 'vehicle', 'වාහන'],
+      'ambulance': ['ambulance', 'siren', 'ගිලන්'],
+      'dog_bark_dataset': ['dog', 'bark', 'barking', 'බල්ලා'],
     };
 
     final now = DateTime.now();
