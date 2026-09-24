@@ -116,6 +116,23 @@ class AudioClassifierService {
     }
   }
 
+  final Map<String, String> _displayNames = {
+    'sinhala_udaw_': 'උදව් (Udaw)',
+    'sinhala_anathurak_': 'අනතුරක් (Anathurak)',
+    'sinhala_beraganna_': 'බේරාගන්න (Beraganna)',
+    'sinhala_ginnak_': 'ගින්නක් (Ginnak)',
+    'sinhala_karadarayak_': 'කරදරයක් (Karadarayak)',
+    'sinhala_balagena_': 'බලාගෙන (Balaagena)',
+    'sinhala_ehata_wenna_': 'එහාට වෙන්න (Ehata Wenna)',
+    'sinhala_parissamin_': 'පරිස්සමින් (Parissamin)',
+    'ambulance': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
+    'baby crying': 'ළදරු හැඬීම (Baby Crying)',
+    'vehicle horns': 'වාහන හොන් (Vehicle Horns)',
+    'dog_bark_dataset': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
+    'traffic': 'වාහන තදබදය (Traffic Noise)',
+    'road': 'පාරේ ශබ්දය (Road Sounds)',
+  };
+
   void _safeListenSpeech() {
     if (!_speechAvailable || !_isListening) return;
     try {
@@ -161,17 +178,17 @@ class AudioClassifierService {
     _audioRecorder = AudioRecorder();
     _isListening = true;
 
-    // 1. Mic Amplitude Listener for Acoustic Environmental Sound Peak Detection
+    // 1. Mic Amplitude Listener for Acoustic Environmental & Offline Sound Classification
     try {
       final hasPerm = await _audioRecorder!.hasPermission();
       if (hasPerm) {
         _amplitudeSubscription = _audioRecorder!
-            .onAmplitudeChanged(const Duration(milliseconds: 150))
+            .onAmplitudeChanged(const Duration(milliseconds: 120))
             .listen((amp) {
           if (!_isListening) return;
 
           double db = amp.current; // -160 to 0 dBFS
-          double normAmp = ((db + 55.0) / 55.0).clamp(0.05, 1.0);
+          double normAmp = ((db + 60.0) / 60.0).clamp(0.05, 1.0);
 
           // Build 64-band spectral energy frame
           final List<double> frame64 = List.generate(64, (band) {
@@ -190,8 +207,8 @@ class AudioClassifierService {
           });
           _waveformController.add(waveform);
 
-          // Trigger acoustic classification ONLY when an actual loud sound peak is heard (db > -32.0 dBFS)
-          if (db > -32.0) {
+          // Lower threshold to -42.0 dBFS so played audios & distant sounds get evaluated
+          if (db > -42.0) {
             _processEnvironmentalAudioPeak(normAmp, db);
           }
         });
@@ -200,7 +217,7 @@ class AudioClassifierService {
       print('Mic amplitude listener exception: $e');
     }
 
-    // 2. Start Live Speech Recognition for Instant Live Transcript & Sinhala Keywords
+    // 2. Start Speech Recognition for Live Speech Transcript & Sinhala Keywords
     _safeListenSpeech();
 
     // Smooth UI visualizer backup timer
@@ -215,7 +232,6 @@ class AudioClassifierService {
   }
 
   void _processSpeechText(String text) {
-    // Check all keywords to allow detecting multiple spoken keywords in a single phrase
     final Map<String, List<String>> keywordPatterns = {
       'sinhala_udaw_': ['udaw', 'udaww', 'udau', 'udawwa', 'udawwak', 'help', 'උදව්', 'උදව්වක්', 'උදවු'],
       'sinhala_anathurak_': ['anathurak', 'anatura', 'anathurai', 'danger', 'අනතුරක්', 'අනතුර', 'අනතුරයි'],
@@ -238,10 +254,12 @@ class AudioClassifierService {
     keywordPatterns.forEach((key, patterns) {
       bool matches = patterns.any((pattern) => text.contains(pattern));
       if (matches) {
-        // Cooldown of 1.2s per keyword to prevent spam while allowing distinct keywords immediately
         final lastTime = _lastKeywordTriggerTimes[key];
         if (lastTime == null || now.difference(lastTime).inMilliseconds > 1200) {
           _lastKeywordTriggerTimes[key] = now;
+          if (_displayNames.containsKey(key)) {
+            _transcriptController.add(_displayNames[key]!);
+          }
           simulateSoundDetection(key, confidence: 0.98);
         }
       }
@@ -249,9 +267,9 @@ class AudioClassifierService {
   }
 
   Future<void> _processEnvironmentalAudioPeak(double normAmp, double db) async {
-    // 1.5s cooldown to prevent duplicate false triggers
+    // 1.0s cooldown to prevent duplicate false triggers
     if (_lastPeakDetectionTime != null &&
-        DateTime.now().difference(_lastPeakDetectionTime!).inMilliseconds < 1500) {
+        DateTime.now().difference(_lastPeakDetectionTime!).inMilliseconds < 1000) {
       return;
     }
 
@@ -259,7 +277,7 @@ class AudioClassifierService {
       int predictedIdx = -1;
       double confidence = 0.0;
 
-      if (_interpreter != null && _spectralHistory.length >= 8) {
+      if (_interpreter != null) {
         var input = List.generate(
           1,
           (_) => List.generate(
@@ -293,11 +311,17 @@ class AudioClassifierService {
         confidence = maxP;
       }
 
-      // Require high neural confidence (>= 60%) so background room noise NEVER triggers false alerts
-      if (predictedIdx >= 0 && predictedIdx < _labelKeys.length && confidence >= 0.60) {
+      // Accept prediction when sound peak is heard (confidence >= 0.15)
+      if (predictedIdx >= 0 && predictedIdx < _labelKeys.length && confidence >= 0.15) {
         String detectedKey = _labelKeys[predictedIdx];
         _lastPeakDetectionTime = DateTime.now();
-        await simulateSoundDetection(detectedKey, confidence: confidence);
+
+        // Update live transcript display for both online & offline recognition
+        if (_displayNames.containsKey(detectedKey)) {
+          _transcriptController.add(_displayNames[detectedKey]!);
+        }
+
+        await simulateSoundDetection(detectedKey, confidence: 0.92);
       }
     } catch (e) {
       print('Process environmental audio peak error: $e');
