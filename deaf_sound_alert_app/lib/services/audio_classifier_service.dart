@@ -178,7 +178,7 @@ class AudioClassifierService {
     _audioRecorder = AudioRecorder();
     _isListening = true;
 
-    // 1. Mic Amplitude Listener for Acoustic Environmental & Offline Sound Classification
+    // 1. Mic Amplitude Listener as Secondary Backup
     try {
       final hasPerm = await _audioRecorder!.hasPermission();
       if (hasPerm) {
@@ -207,8 +207,7 @@ class AudioClassifierService {
           });
           _waveformController.add(waveform);
 
-          // Lower threshold to -42.0 dBFS so played audios & distant sounds get evaluated
-          if (db > -42.0) {
+          if (db > -55.0) {
             _processEnvironmentalAudioPeak(normAmp, db);
           }
         });
@@ -217,7 +216,7 @@ class AudioClassifierService {
       print('Mic amplitude listener exception: $e');
     }
 
-    // 2. Start Speech Recognition for Live Speech Transcript & Sinhala Keywords
+    // 2. Start Speech Recognition for Live Speech Transcript & Environmental Sound Peaks
     _safeListenSpeech();
 
     // Smooth UI visualizer backup timer
@@ -267,9 +266,9 @@ class AudioClassifierService {
   }
 
   Future<void> _processEnvironmentalAudioPeak(double normAmp, double db) async {
-    // 1.0s cooldown to prevent duplicate false triggers
+    // 800ms cooldown for responsive environmental sound recognition
     if (_lastPeakDetectionTime != null &&
-        DateTime.now().difference(_lastPeakDetectionTime!).inMilliseconds < 1000) {
+        DateTime.now().difference(_lastPeakDetectionTime!).inMilliseconds < 800) {
       return;
     }
 
@@ -311,12 +310,11 @@ class AudioClassifierService {
         confidence = maxP;
       }
 
-      // Accept prediction when sound peak is heard (confidence >= 0.15)
-      if (predictedIdx >= 0 && predictedIdx < _labelKeys.length && confidence >= 0.15) {
+      if (predictedIdx >= 0 && predictedIdx < _labelKeys.length) {
         String detectedKey = _labelKeys[predictedIdx];
         _lastPeakDetectionTime = DateTime.now();
 
-        // Update live transcript display for both online & offline recognition
+        // Update live transcript display for both online & offline sound identification
         if (_displayNames.containsKey(detectedKey)) {
           _transcriptController.add(_displayNames[detectedKey]!);
         }
