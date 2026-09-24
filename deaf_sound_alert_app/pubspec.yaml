@@ -1,0 +1,39 @@
+name: deaf_sound_alert_app
+description: "Offline Sinhala Emergency Keyword & Environmental Sound Alert Mobile App for Deaf Users"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  provider: ^6.1.2
+  vibration: ^2.0.1
+  tflite_flutter: ^0.12.0
+  flutter_blue_plus: ^1.35.0
+  flutter_local_notifications: ^18.0.1
+  permission_handler: ^11.3.1
+  shared_preferences: ^2.3.2
+  intl: ^0.19.0
+  google_fonts: ^6.2.1
+  record: ^7.1.1
+  speech_to_text: ^7.5.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/models/
+    - assets/models/sound_classifier.tflite
+    - assets/models/labels.txt
+    - assets/models/sound_metadata.json
