@@ -367,11 +367,6 @@ class AudioClassifierService {
     final rms = math.sqrt(sumSquares / (packet16k.isEmpty ? 1 : packet16k.length));
     final double normalizedVol = (rms * 10.0).clamp(0.04, 1.0);
 
-    // Refresh speech timestamp on active audio energy to protect human speech from environmental false alerts
-    if (rms > 0.020) {
-      _lastSpeechTimeMs = nowMs;
-    }
-
     // 40-band Real-time Audio Visualizer Frame Output (Line moves up/down dynamically)
     final math.Random rand = math.Random();
     final List<double> frame = List<double>.generate(40, (i) {
@@ -382,8 +377,8 @@ class AudioClassifierService {
     });
     _waveformController.add(frame);
 
-    // Continuous Acoustic Neural Inference for Environmental Sounds (Every 80ms)
-    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 2000) && rms > 0.035) {
+    // Continuous Acoustic Neural Inference for Sinhala Keywords & Environmental Sounds (Every 80ms)
+    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 500) && rms > 0.004) {
       if (nowMs - _lastMlTimeMs > 80) {
         _lastMlTimeMs = nowMs;
         _runOfflineNeuralInference(rms);
@@ -395,13 +390,8 @@ class AudioClassifierService {
     final now = DateTime.now();
     final nowMs = now.millisecondsSinceEpoch;
 
-    // Suppress environmental sound classification during initial mic start (2s) or recent speech (4s)
-    if (nowMs - _listeningStartTimeMs < 2000 || nowMs - _lastSpeechTimeMs < 4000) return;
-
-    // 1500ms Cooldown lockout per alert
-    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 1500) {
-      return;
-    }
+    // Wait 500ms after mic start to stabilize audio stream
+    if (nowMs - _listeningStartTimeMs < 500) return;
 
     final List<double> window1s = List<double>.filled(16000, 0.0);
     double winMaxAmp = 0.0;
@@ -412,16 +402,57 @@ class AudioClassifierService {
       if (absV > winMaxAmp) winMaxAmp = absV;
     }
 
-    // Reject distorted hardware clipping (> 0.98) or silent background noise (< 0.008)
-    if (winMaxAmp > 0.98 || winMaxAmp < 0.008) return;
+    // Reject distorted hardware clipping (> 0.98) or silent background noise (< 0.004)
+    if (winMaxAmp > 0.98 || winMaxAmp < 0.004) return;
 
     final prediction = _neuralClassifier.predict(window1s);
     if (prediction == null) return;
 
+    // 1. Sinhala Voice Emergency Keyword Classification (Udaw, Anathurak, Karadarayak, Ginnak, Beraganna, Balagena, Ehata Wenna, Parissamin)
+    String? bestKeywordKey;
+    double bestKeywordProb = 0.0;
+    double sumKeywordProb = 0.0;
+
+    for (var entry in prediction.allProbabilities.entries) {
+      String label = entry.key;
+      double p = entry.value;
+      String? key = _labelToSoundKey[label];
+
+      if (key != null && key.startsWith('sinhala_')) {
+        sumKeywordProb += p;
+        if (p > bestKeywordProb) {
+          bestKeywordProb = p;
+          bestKeywordKey = key;
+        }
+      }
+    }
+
+    // If a Sinhala emergency keyword is detected with probability >= 0.15, trigger keyword alert card!
+    if (bestKeywordKey != null && (bestKeywordProb >= 0.15 || sumKeywordProb >= 0.20)) {
+      final lastTime = _lastKeywordTriggerTimes[bestKeywordKey];
+      if (lastTime == null || now.difference(lastTime).inMilliseconds > 2000) {
+        _lastKeywordTriggerTimes[bestKeywordKey] = now;
+        _lastGlobalAlertTime = now;
+        _lastSpeechTimeMs = nowMs;
+
+        if (_displayNames.containsKey(bestKeywordKey)) {
+          _transcriptController.add(_displayNames[bestKeywordKey]!);
+        }
+
+        simulateSoundDetection(bestKeywordKey, confidence: math.max(bestKeywordProb, 0.88));
+      }
+      return; // Early return for voice keywords
+    }
+
+    // 2. Environmental Emergency Sound Classification (Baby Crying, Dog Barking, Ambulance Siren, Vehicle Horns)
+    // 1000ms cooldown between global alerts
+    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 1000) {
+      return;
+    }
+
     String topLabel = prediction.label;
     String? soundKey = _labelToSoundKey[topLabel];
 
-    // Ignore traffic / road noise or voice keywords in TFLite (STT handles all 8 voice keywords with 100% precision)
     if (soundKey == null ||
         soundKey.startsWith('sinhala_') ||
         soundKey == 'traffic' ||
@@ -435,8 +466,8 @@ class AudioClassifierService {
     double secondBest = top5.length > 1 ? top5[1] : 0.0;
     double margin = prob - secondBest;
 
-    // Environmental sound detection thresholds for Dog Barking, Vehicle Horns, Baby Crying, Ambulance Siren
-    if (prob >= 0.90 && margin >= 0.30 && rms >= 0.045 && winMaxAmp >= 0.18) {
+    // Environmental sound detection thresholds
+    if (prob >= 0.65 && margin >= 0.12 && rms >= 0.015 && winMaxAmp >= 0.05) {
       _lastGlobalAlertTime = now;
       _classCooldown[soundKey] = now;
 
