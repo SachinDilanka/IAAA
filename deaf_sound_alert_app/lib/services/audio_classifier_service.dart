@@ -107,6 +107,7 @@ class AudioClassifierService {
       _speechAvailable = await _speech.initialize(
         onError: (val) {
           print('SpeechToText onError: $val');
+          _useLocaleFallback = true;
           _onSpeechEnded();
         },
         onStatus: (val) {
@@ -120,8 +121,10 @@ class AudioClassifierService {
       if (_speechAvailable) {
         final locales = await _speech.locales();
         for (var loc in locales) {
-          if (loc.localeId.toLowerCase().startsWith('si')) {
+          final id = loc.localeId.toLowerCase();
+          if (id.startsWith('si') || id.contains('sinhala')) {
             _selectedLocaleId = loc.localeId;
+            print('Found Sinhala locale: $_selectedLocaleId');
             break;
           }
         }
@@ -137,8 +140,13 @@ class AudioClassifierService {
     if (!_speechAvailable) {
       try {
         _speechAvailable = await _speech.initialize(
-          onError: (val) => _onSpeechEnded(),
+          onError: (val) {
+            print('SpeechToText onError: $val');
+            _useLocaleFallback = true;
+            _onSpeechEnded();
+          },
           onStatus: (val) {
+            print('SpeechToText onStatus: $val');
             if ((val == 'done' || val == 'notListening') && _isListening) {
               _onSpeechEnded();
             }
@@ -152,13 +160,18 @@ class AudioClassifierService {
     try {
       if (_speech.isListening) return;
 
+      String targetLocale = _selectedLocaleId ?? 'si_LK';
+      if (_useLocaleFallback) {
+        targetLocale = '';
+      }
+
       await _speech.listen(
         onResult: (result) {
           if (!_isListening) return;
           _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
           final String rawWords = result.recognizedWords.trim();
           if (rawWords.isNotEmpty) {
-            // Stream recognized words (sentences or single words) live into transcript box
+            // Stream recognized words live into transcript box
             _transcriptController.add(rawWords);
             _processSpeechText(rawWords.toLowerCase());
           }
@@ -178,13 +191,13 @@ class AudioClassifierService {
           _waveformController.add(waveform);
         },
         listenOptions: stt.SpeechListenOptions(
-          listenMode: stt.ListenMode.confirmation,
+          listenMode: stt.ListenMode.dictation,
           partialResults: true,
           cancelOnError: false,
-          pauseFor: const Duration(seconds: 15),
+          pauseFor: const Duration(seconds: 10),
           listenFor: const Duration(hours: 2),
         ),
-        localeId: null, // Multilingual system recognizer: streams all spoken words in Sinhala/English
+        localeId: targetLocale.isNotEmpty ? targetLocale : null,
       );
     } catch (e) {
       print('Speech listen error: $e');
@@ -194,7 +207,7 @@ class AudioClassifierService {
 
   void _onSpeechEnded() {
     if (!_isListening) return;
-    Timer(const Duration(milliseconds: 500), () {
+    Timer(const Duration(milliseconds: 300), () {
       if (_isListening && !_speech.isListening) {
         _safeListenSpeech();
       }
@@ -219,8 +232,13 @@ class AudioClassifierService {
     // Always re-initialize SpeechToText AFTER permission grant
     try {
       _speechAvailable = await _speech.initialize(
-        onError: (val) => _onSpeechEnded(),
+        onError: (val) {
+          print('SpeechToText onError: $val');
+          _useLocaleFallback = true;
+          _onSpeechEnded();
+        },
         onStatus: (val) {
+          print('SpeechToText onStatus: $val');
           if ((val == 'done' || val == 'notListening') && _isListening) {
             _onSpeechEnded();
           }
@@ -230,8 +248,10 @@ class AudioClassifierService {
       if (_speechAvailable) {
         final locales = await _speech.locales();
         for (var loc in locales) {
-          if (loc.localeId.toLowerCase().startsWith('si')) {
+          final id = loc.localeId.toLowerCase();
+          if (id.startsWith('si') || id.contains('sinhala')) {
             _selectedLocaleId = loc.localeId;
+            print('Found Sinhala locale: $_selectedLocaleId');
             break;
           }
         }
@@ -407,11 +427,11 @@ class AudioClassifierService {
       }
     }
 
-    // If any Sinhala emergency keyword is detected with probability >= 0.10, trigger keyword alert card!
-    if (bestKeywordKey != null && (bestKeywordProb >= 0.10 || sumKeywordProb >= 0.15)) {
+    // If any Sinhala emergency keyword is detected with probability >= 0.40, trigger keyword alert card!
+    if (bestKeywordKey != null && (bestKeywordProb >= 0.40 || sumKeywordProb >= 0.50)) {
       _lastSpeechTimeMs = nowMs;
 
-      if (bestKeywordProb >= 0.10 && rms >= 0.004) {
+      if (rms >= 0.004) {
         if (_lastGlobalAlertTime == null || now.difference(_lastGlobalAlertTime!).inMilliseconds > 2000) {
           final lastTime = _lastKeywordTriggerTimes[bestKeywordKey];
           if (lastTime == null || now.difference(lastTime).inMilliseconds > 2500) {
@@ -430,8 +450,8 @@ class AudioClassifierService {
     }
 
     // CATEGORY B: Environmental Emergency Sound Detection (Baby Crying, Dog Barking, Ambulance Siren, Vehicle Horns)
-    // Suppress environmental sound classification ONLY if human speech keyword was active within last 2500ms
-    if (nowMs - _lastSpeechTimeMs < 2500) return;
+    // Suppress environmental sound classification ONLY if human speech keyword was active within last 4000ms
+    if (nowMs - _lastSpeechTimeMs < 4000) return;
 
     // 1500ms Cooldown lockout per alert
     if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 1500) {
@@ -525,16 +545,14 @@ class AudioClassifierService {
     });
 
     if (matchedKey != null) {
-      if (_lastGlobalAlertTime == null || now.difference(_lastGlobalAlertTime!).inMilliseconds > 2000) {
-        final lastTime = _lastKeywordTriggerTimes[matchedKey];
-        if (lastTime == null || now.difference(lastTime).inMilliseconds > 2500) {
-          _lastKeywordTriggerTimes[matchedKey!] = now;
-          _lastGlobalAlertTime = now;
-          if (_displayNames.containsKey(matchedKey)) {
-            _transcriptController.add(_displayNames[matchedKey]!);
-          }
-          simulateSoundDetection(matchedKey!, confidence: 0.98);
+      final lastTime = _lastKeywordTriggerTimes[matchedKey];
+      if (lastTime == null || now.difference(lastTime).inMilliseconds > 1500) {
+        _lastKeywordTriggerTimes[matchedKey!] = now;
+        _lastGlobalAlertTime = now;
+        if (_displayNames.containsKey(matchedKey)) {
+          _transcriptController.add(_displayNames[matchedKey]!);
         }
+        simulateSoundDetection(matchedKey!, confidence: 0.98);
       }
     }
   }
