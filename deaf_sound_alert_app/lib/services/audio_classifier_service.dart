@@ -368,6 +368,11 @@ class AudioClassifierService {
     final now = DateTime.now();
     final nowMs = now.millisecondsSinceEpoch;
 
+    // MANDATORY SPEECH LOCKOUT: Any speech audio energy (rms >= 0.006) refreshes speech timestamp to guarantee environmental sounds NEVER trigger while talking!
+    if (rms >= 0.006) {
+      _lastSpeechTimeMs = nowMs;
+    }
+
     final List<double> window1s = List<double>.filled(16000, 0.0);
     double winMaxAmp = 0.0;
     for (int i = 0; i < 16000; i++) {
@@ -404,11 +409,11 @@ class AudioClassifierService {
     }
 
     // Voice Activity Lockout: If any Sinhala keyword probability is present or speech energy exists, mark speech active!
-    if (bestKeywordKey != null && (bestKeywordProb >= 0.05 || sumKeywordProb >= 0.08)) {
+    if (bestKeywordKey != null && (bestKeywordProb >= 0.04 || sumKeywordProb >= 0.06)) {
       _lastSpeechTimeMs = nowMs;
 
-      // Trigger Keyword Alert Card if probability >= 0.16 (sensitive for near & far mic speech!)
-      if (bestKeywordProb >= 0.16 && rms >= 0.006) {
+      // Trigger Keyword Alert Card if probability >= 0.10 (sensitive for near & far mic speech!)
+      if (bestKeywordProb >= 0.10 && rms >= 0.005) {
         if (_lastGlobalAlertTime == null || now.difference(_lastGlobalAlertTime!).inMilliseconds > 2000) {
           final lastTime = _lastKeywordTriggerTimes[bestKeywordKey];
           if (lastTime == null || now.difference(lastTime).inMilliseconds > 2500) {
@@ -428,8 +433,8 @@ class AudioClassifierService {
     }
 
     // CATEGORY B: Environmental Emergency Sound Detection (Baby Crying, Dog Barking, Ambulance Siren, Vehicle Horns)
-    // CRITICAL 4.0 Seconds Lockout: Suppress environmental sound classification if human voice / speech was active within last 4000ms!
-    if (nowMs - _lastSpeechTimeMs < 4000) return;
+    // CRITICAL 5.0 Seconds Lockout: Suppress environmental sound classification if human voice / speech was active within last 5000ms!
+    if (nowMs - _lastSpeechTimeMs < 5000) return;
 
     // 2000ms Cooldown lockout per environmental sound burst to prevent duplicate popups
     if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 2000) {
@@ -472,32 +477,32 @@ class AudioClassifierService {
 
     final Map<String, List<String>> keywordPatterns = {
       'sinhala_udaw_': [
-        'udaw', 'udaww', 'udau', 'udawwa', 'udawwak', 'udauwa', 'udav', 'udavv', 'help',
-        'උදව්', 'උදව්වක්', 'උදවු', 'උදවු කරන්න', 'උදව් කරන්න', 'උදව්ව', 'උදව්ක්'
+        'udaw', 'udaww', 'udau', 'udawwa', 'udawwak', 'udauwa', 'udav', 'udavv', 'help', 'uda', 'udaa', 'udawu', 'udauw',
+        'උදව්', 'උදව්වක්', 'උදවු', 'උදවු කරන්න', 'උදව් කරන්න', 'උදව්ව', 'උදව්ක්', 'උද'
       ],
       'sinhala_anathurak_': [
-        'anathurak', 'anatura', 'anathura', 'anathurai', 'anaturak', 'danger',
+        'anathurak', 'anatura', 'anathura', 'anathurai', 'anaturak', 'danger', 'anaturai', 'anathurac',
         'අනතුරක්', 'අනතුර', 'අනතුරයි'
       ],
       'sinhala_beraganna_': [
-        'beraganna', 'beeraganna', 'bcraganna', 'pera', 'beera', 'beragan', 'save',
+        'beraganna', 'beeraganna', 'bcraganna', 'pera', 'beera', 'beragan', 'save', 'beragannako', 'berannako',
         'බේරාගන්න', 'බේරගන්න', 'බේරා', 'බේර', 'බේරන්න', 'බේරාගන්නකෝ', 'බේරගන්නකෝ'
       ],
       'sinhala_ginnak_': [
-        'ginnak', 'ginna', 'ginnaki', 'ginnac', 'fire',
-        'ගින්නක්', 'ගින්න', 'ගිනි'
+        'ginnak', 'ginna', 'ginnaki', 'ginnac', 'fire', 'gina', 'ginak',
+        'ගින්නක්', 'ගින්න', 'ගිනි', 'ගිණි'
       ],
       'sinhala_karadarayak_': [
-        'karadarayak', 'karadara', 'karadarai', 'karadarayac', 'trouble',
+        'karadarayak', 'karadara', 'karadarai', 'karadarayac', 'trouble', 'karadarak',
         'කරදරයක්', 'කරදර', 'කරදරයි', 'කරදරේ'
       ],
       'sinhala_balagena_': [
-        'balagena', 'balagenna', 'balaagena', 'balaganna', 'balang', 'watch', 'lookout',
+        'balagena', 'balagenna', 'balaagena', 'balaganna', 'balang', 'watch', 'lookout', 'balan',
         'බලාගෙන', 'බලන්', 'බලාගෙනම', 'බලන්න'
       ],
       'sinhala_ehata_wenna_': [
-        'ehata', 'wenna', 'ehatawenna', 'move',
-        'එහාට', 'වෙන්න', 'එහාටවෙන්න'
+        'ehata', 'wenna', 'ehatawenna', 'move', 'ehata wenna',
+        'එහාට', 'වෙන්න', 'එහාටවෙන්න', 'එහාට වෙන්න'
       ],
       'sinhala_parissamin_': [
         'parissamin', 'parisamin', 'parissamen', 'parisamen', 'parissam', 'parisam', 'careful',
