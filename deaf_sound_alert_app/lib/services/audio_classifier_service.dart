@@ -362,11 +362,6 @@ class AudioClassifierService {
       _lastSpeechTimeMs = nowMs;
     }
 
-    // 1000ms Cooldown lockout per sound burst to prevent duplicate sound popups
-    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 1000) {
-      return;
-    }
-
     final List<double> window1s = List<double>.filled(16000, 0.0);
     double winMaxAmp = 0.0;
     for (int i = 0; i < 16000; i++) {
@@ -383,20 +378,22 @@ class AudioClassifierService {
     if (prediction == null) return;
 
     // CATEGORY A: Sinhala Voice Emergency Keyword Detection (Udaw, Beraganna, Ginnak, Anathurak, Karadarayak, Balaagena, Ehata Wenna, Parissamin)
-    // Scan all top predictions for Sinhala keywords with high sensitivity (prob >= 0.15 & rms >= 0.005)
+    // Scan all top predictions for Sinhala keywords with per-keyword cooldown (prob >= 0.28 & rms >= 0.008)
     for (var entry in prediction.top5Probabilities.entries) {
       String label = entry.key;
       double p = entry.value;
       String? key = _labelToSoundKey[label];
 
       if (key != null && key.startsWith('sinhala_')) {
-        // High sensitivity so faint, near, or far speech is detected instantly
-        if (p >= 0.15 && rms >= 0.005) {
-          _lastGlobalAlertTime = now;
-          _classCooldown[key] = now;
+        if (p >= 0.28 && rms >= 0.008) {
+          final lastTime = _lastKeywordTriggerTimes[key];
+          if (lastTime == null || now.difference(lastTime).inMilliseconds > 1500) {
+            _lastKeywordTriggerTimes[key] = now;
+            _lastSpeechTimeMs = nowMs;
 
-          simulateSoundDetection(key, confidence: p);
-          return; // Successfully detected keyword alert! Exit.
+            simulateSoundDetection(key, confidence: p);
+            return; // Successfully detected keyword alert! Exit.
+          }
         }
       }
     }
@@ -404,6 +401,11 @@ class AudioClassifierService {
     // CATEGORY B: Environmental Emergency Sound Detection (Baby Crying, Dog Barking, Ambulance Siren, Vehicle Horns)
     // CRITICAL: Suppress environmental sound classification if human voice / speech was active within last 4000ms!
     if (nowMs - _lastSpeechTimeMs < 4000) return;
+
+    // 1500ms Cooldown lockout per environmental sound burst
+    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 1500) {
+      return;
+    }
 
     String topLabel = prediction.label;
     String? soundKey = _labelToSoundKey[topLabel];
@@ -480,12 +482,9 @@ class AudioClassifierService {
       bool matches = patterns.any((pattern) => sanitized.contains(pattern));
       if (matches) {
         final lastTime = _lastKeywordTriggerTimes[key];
-        if (lastTime == null || now.difference(lastTime).inMilliseconds > 1000) {
+        if (lastTime == null || now.difference(lastTime).inMilliseconds > 1200) {
           _lastKeywordTriggerTimes[key] = now;
           _lastGlobalAlertTime = now;
-          if (_displayNames.containsKey(key)) {
-            _transcriptController.add(_displayNames[key]!);
-          }
           simulateSoundDetection(key, confidence: 0.98);
         }
       }
