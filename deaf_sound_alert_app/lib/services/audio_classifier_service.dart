@@ -390,29 +390,33 @@ class AudioClassifierService {
       }
     }
 
-    // Trigger ONLY the relevant highest-probability Sinhala keyword card (prob >= 0.22, rms >= 0.008) with 1.5s cooldown
-    if (bestKeywordKey != null && bestKeywordProb >= 0.22 && rms >= 0.008) {
-      final lastTime = _lastKeywordTriggerTimes[bestKeywordKey];
-      if (lastTime == null || now.difference(lastTime).inMilliseconds > 1500) {
-        _lastKeywordTriggerTimes[bestKeywordKey] = now;
-        _lastSpeechTimeMs = nowMs;
+    // If any Sinhala voice keyword is present in top predictions, ALWAYS mark speech active and NEVER fall through to environmental triggers!
+    if (bestKeywordKey != null) {
+      _lastSpeechTimeMs = nowMs;
 
-        // Display ONLY the relevant detected Sinhala keyword in the live transcript box
-        if (_displayNames.containsKey(bestKeywordKey)) {
-          _transcriptController.add(_displayNames[bestKeywordKey]!);
+      if (bestKeywordProb >= 0.22 && rms >= 0.008) {
+        final lastTime = _lastKeywordTriggerTimes[bestKeywordKey];
+        if (lastTime == null || now.difference(lastTime).inMilliseconds > 2000) {
+          _lastKeywordTriggerTimes[bestKeywordKey] = now;
+          _lastGlobalAlertTime = now;
+
+          // Stream ONLY the relevant detected Sinhala keyword into live speech transcript box
+          if (_displayNames.containsKey(bestKeywordKey)) {
+            _transcriptController.add(_displayNames[bestKeywordKey]!);
+          }
+
+          simulateSoundDetection(bestKeywordKey, confidence: bestKeywordProb);
         }
-
-        simulateSoundDetection(bestKeywordKey, confidence: bestKeywordProb);
-        return; // Successfully detected ONE relevant keyword card! Exit.
       }
+      return; // CRITICAL: ALWAYS return early when voice/keyword is active! Environmental sounds NEVER fire here.
     }
 
     // CATEGORY B: Environmental Emergency Sound Detection (Baby Crying, Dog Barking, Ambulance Siren, Vehicle Horns)
-    // Suppress environmental sound classification if human voice / speech was active within last 2500ms
-    if (nowMs - _lastSpeechTimeMs < 2500) return;
+    // CRITICAL: Suppress environmental sound classification if human voice / speech was active within last 3000ms!
+    if (nowMs - _lastSpeechTimeMs < 3000) return;
 
-    // 1200ms Cooldown lockout per environmental sound burst
-    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 1200) {
+    // 2000ms Cooldown lockout per environmental sound burst to prevent duplicate popups
+    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 2000) {
       return;
     }
 
@@ -428,8 +432,8 @@ class AudioClassifierService {
     double secondBest = top5.length > 1 ? top5[1] : 0.0;
     double margin = prob - secondBest;
 
-    // Environmental sounds require clear acoustic energy (rms >= 0.035, winMaxAmp >= 0.12) and high confidence (prob >= 0.82, margin >= 0.25)
-    if (prob >= 0.82 && margin >= 0.25 && rms >= 0.035 && winMaxAmp >= 0.12) {
+    // Environmental sounds require clear acoustic energy (rms >= 0.040, winMaxAmp >= 0.14) and high confidence (prob >= 0.84, margin >= 0.26)
+    if (prob >= 0.84 && margin >= 0.26 && rms >= 0.040 && winMaxAmp >= 0.14) {
       _lastGlobalAlertTime = now;
       _classCooldown[soundKey] = now;
 
