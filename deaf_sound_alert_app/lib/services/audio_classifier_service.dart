@@ -378,18 +378,23 @@ class AudioClassifierService {
     if (prediction == null) return;
 
     // CATEGORY A: Sinhala Voice Emergency Keyword Detection (Udaw, Beraganna, Ginnak, Anathurak, Karadarayak, Balaagena, Ehata Wenna, Parissamin)
-    // Scan all top predictions for Sinhala keywords with per-keyword cooldown (prob >= 0.28 & rms >= 0.008)
+    // Scan all top predictions for Sinhala keywords with per-keyword cooldown (prob >= 0.20 & rms >= 0.005)
     for (var entry in prediction.top5Probabilities.entries) {
       String label = entry.key;
       double p = entry.value;
       String? key = _labelToSoundKey[label];
 
       if (key != null && key.startsWith('sinhala_')) {
-        if (p >= 0.28 && rms >= 0.008) {
+        if (p >= 0.20 && rms >= 0.005) {
           final lastTime = _lastKeywordTriggerTimes[key];
-          if (lastTime == null || now.difference(lastTime).inMilliseconds > 1500) {
+          if (lastTime == null || now.difference(lastTime).inMilliseconds > 1200) {
             _lastKeywordTriggerTimes[key] = now;
             _lastSpeechTimeMs = nowMs;
+
+            // Stream detected Sinhala keyword into live transcript box
+            if (_displayNames.containsKey(key)) {
+              _transcriptController.add(_displayNames[key]!);
+            }
 
             simulateSoundDetection(key, confidence: p);
             return; // Successfully detected keyword alert! Exit.
@@ -482,9 +487,12 @@ class AudioClassifierService {
       bool matches = patterns.any((pattern) => sanitized.contains(pattern));
       if (matches) {
         final lastTime = _lastKeywordTriggerTimes[key];
-        if (lastTime == null || now.difference(lastTime).inMilliseconds > 1200) {
+        if (lastTime == null || now.difference(lastTime).inMilliseconds > 1000) {
           _lastKeywordTriggerTimes[key] = now;
           _lastGlobalAlertTime = now;
+          if (_displayNames.containsKey(key)) {
+            _transcriptController.add(_displayNames[key]!);
+          }
           simulateSoundDetection(key, confidence: 0.98);
         }
       }
