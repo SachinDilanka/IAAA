@@ -19,6 +19,7 @@ class AudioClassifierService {
   final stt.SpeechToText _speech = stt.SpeechToText();
   StreamSubscription<List<double>>? _audioStreamSubscription;
 
+  Timer? _sttWatchdogTimer;
   bool _speechAvailable = false;
   String _sinhalaLocaleId = 'si_LK';
   bool _isListening = false;
@@ -147,41 +148,43 @@ class AudioClassifierService {
     if (!_speechAvailable) return;
 
     try {
-      if (!_speech.isListening) {
-        await _speech.listen(
-          onResult: (result) {
-            if (!_isListening) return;
-            _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
-            String text = result.recognizedWords.toLowerCase().trim();
-            if (text.isNotEmpty) {
-              _transcriptController.add(result.recognizedWords);
-              _processSpeechText(text);
-            }
-          },
-          onSoundLevelChange: (level) {
-            if (!_isListening) return;
-            // Update speech time when input audio level indicates speech activity (> -35.0 dB)
-            if (level > -35.0) {
-              _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
-            }
-            double norm = ((level + 40.0) / 50.0).clamp(0.08, 1.0);
-            final math.Random rand = math.Random();
-            final List<double> waveform = List.generate(40, (i) {
-              double wave = math.sin((i * 0.3) + (DateTime.now().millisecondsSinceEpoch * 0.02)).abs() * 0.3;
-              return (norm * (0.6 + wave + (rand.nextDouble() - 0.5) * 0.1)).clamp(0.08, 1.0);
-            });
-            _waveformController.add(waveform);
-          },
-          listenOptions: stt.SpeechListenOptions(
-            listenMode: stt.ListenMode.dictation,
-            partialResults: true,
-            cancelOnError: false,
-            pauseFor: const Duration(seconds: 5),
-            listenFor: const Duration(minutes: 30),
-          ),
-          localeId: _sinhalaLocaleId.isNotEmpty ? _sinhalaLocaleId : null,
-        );
+      if (_speech.isListening) {
+        await _speech.stop();
+        await Future.delayed(const Duration(milliseconds: 100));
       }
+
+      await _speech.listen(
+        onResult: (result) {
+          if (!_isListening) return;
+          _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
+          String text = result.recognizedWords.toLowerCase().trim();
+          if (text.isNotEmpty) {
+            _transcriptController.add(result.recognizedWords);
+            _processSpeechText(text);
+          }
+        },
+        onSoundLevelChange: (level) {
+          if (!_isListening) return;
+          // Refresh speech time whenever mic audio level indicates input activity
+          _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
+          
+          double norm = ((level + 40.0) / 50.0).clamp(0.08, 1.0);
+          final math.Random rand = math.Random();
+          final List<double> waveform = List.generate(40, (i) {
+            double wave = math.sin((i * 0.3) + (DateTime.now().millisecondsSinceEpoch * 0.02)).abs() * 0.3;
+            return (norm * (0.6 + wave + (rand.nextDouble() - 0.5) * 0.1)).clamp(0.08, 1.0);
+          });
+          _waveformController.add(waveform);
+        },
+        listenOptions: stt.SpeechListenOptions(
+          listenMode: stt.ListenMode.dictation,
+          partialResults: true,
+          cancelOnError: false,
+          pauseFor: const Duration(seconds: 10),
+          listenFor: const Duration(minutes: 60),
+        ),
+        localeId: _sinhalaLocaleId.isNotEmpty ? _sinhalaLocaleId : null,
+      );
     } catch (e) {
       print('Speech listen error: $e');
     }
@@ -238,6 +241,14 @@ class AudioClassifierService {
 
     // 2. Speech Recognition Engine for Live Speech Transcripts & Instant Sinhala Voice Keyword Detection
     _safeListenSpeech();
+
+    // 3. Persistent Watchdog to ensure STT service never dies or stays idle
+    _sttWatchdogTimer?.cancel();
+    _sttWatchdogTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (_isListening && !_speech.isListening) {
+        _safeListenSpeech();
+      }
+    });
 
     return true;
   }
@@ -373,16 +384,18 @@ class AudioClassifierService {
     if (prediction == null) return;
 
     // CATEGORY A: Sinhala Voice Emergency Keyword Detection (Udaw, Beraganna, Ginnak, Anathurak, Karadarayak, Balaagena, Ehata Wenna, Parissamin)
-    // Find the SINGLE Sinhala keyword prediction with the HIGHEST probability in top 5
+    // Scan ALL output probabilities for Sinhala keywords
     String? bestKeywordKey;
     double bestKeywordProb = 0.0;
+    double sumKeywordProb = 0.0;
 
-    for (var entry in prediction.top5Probabilities.entries) {
+    for (var entry in prediction.allProbabilities.entries) {
       String label = entry.key;
       double p = entry.value;
       String? key = _labelToSoundKey[label];
 
       if (key != null && key.startsWith('sinhala_')) {
+        sumKeywordProb += p;
         if (p > bestKeywordProb) {
           bestKeywordProb = p;
           bestKeywordKey = key;
@@ -390,30 +403,33 @@ class AudioClassifierService {
       }
     }
 
-    // If any Sinhala voice keyword is present in top predictions, ALWAYS mark speech active and NEVER fall through to environmental triggers!
-    if (bestKeywordKey != null) {
+    // Voice Activity Lockout: If any Sinhala keyword probability is present or speech energy exists, mark speech active!
+    if (bestKeywordKey != null && (bestKeywordProb >= 0.05 || sumKeywordProb >= 0.08)) {
       _lastSpeechTimeMs = nowMs;
 
-      if (bestKeywordProb >= 0.22 && rms >= 0.008) {
-        final lastTime = _lastKeywordTriggerTimes[bestKeywordKey];
-        if (lastTime == null || now.difference(lastTime).inMilliseconds > 2000) {
-          _lastKeywordTriggerTimes[bestKeywordKey] = now;
-          _lastGlobalAlertTime = now;
+      // Trigger Keyword Alert Card if probability >= 0.16 (sensitive for near & far mic speech!)
+      if (bestKeywordProb >= 0.16 && rms >= 0.006) {
+        if (_lastGlobalAlertTime == null || now.difference(_lastGlobalAlertTime!).inMilliseconds > 2000) {
+          final lastTime = _lastKeywordTriggerTimes[bestKeywordKey];
+          if (lastTime == null || now.difference(lastTime).inMilliseconds > 2500) {
+            _lastKeywordTriggerTimes[bestKeywordKey] = now;
+            _lastGlobalAlertTime = now;
 
-          // Stream ONLY the relevant detected Sinhala keyword into live speech transcript box
-          if (_displayNames.containsKey(bestKeywordKey)) {
-            _transcriptController.add(_displayNames[bestKeywordKey]!);
+            // Stream ONLY the relevant detected Sinhala keyword into live speech transcript box
+            if (_displayNames.containsKey(bestKeywordKey)) {
+              _transcriptController.add(_displayNames[bestKeywordKey]!);
+            }
+
+            simulateSoundDetection(bestKeywordKey, confidence: bestKeywordProb);
           }
-
-          simulateSoundDetection(bestKeywordKey, confidence: bestKeywordProb);
         }
       }
-      return; // CRITICAL: ALWAYS return early when voice/keyword is active! Environmental sounds NEVER fire here.
+      return; // CRITICAL: ALWAYS return early when voice is present! Environmental sounds NEVER fire here.
     }
 
     // CATEGORY B: Environmental Emergency Sound Detection (Baby Crying, Dog Barking, Ambulance Siren, Vehicle Horns)
-    // CRITICAL: Suppress environmental sound classification if human voice / speech was active within last 3000ms!
-    if (nowMs - _lastSpeechTimeMs < 3000) return;
+    // CRITICAL 4.0 Seconds Lockout: Suppress environmental sound classification if human voice / speech was active within last 4000ms!
+    if (nowMs - _lastSpeechTimeMs < 4000) return;
 
     // 2000ms Cooldown lockout per environmental sound burst to prevent duplicate popups
     if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 2000) {
@@ -432,8 +448,8 @@ class AudioClassifierService {
     double secondBest = top5.length > 1 ? top5[1] : 0.0;
     double margin = prob - secondBest;
 
-    // Environmental sounds require clear acoustic energy (rms >= 0.040, winMaxAmp >= 0.14) and high confidence (prob >= 0.84, margin >= 0.26)
-    if (prob >= 0.84 && margin >= 0.26 && rms >= 0.040 && winMaxAmp >= 0.14) {
+    // Environmental sounds require clear acoustic energy (rms >= 0.050, winMaxAmp >= 0.16) and high confidence (prob >= 0.88, margin >= 0.30)
+    if (prob >= 0.88 && margin >= 0.30 && rms >= 0.050 && winMaxAmp >= 0.16) {
       _lastGlobalAlertTime = now;
       _classCooldown[soundKey] = now;
 
@@ -507,20 +523,24 @@ class AudioClassifierService {
     });
 
     if (matchedKey != null) {
-      final lastTime = _lastKeywordTriggerTimes[matchedKey];
-      if (lastTime == null || now.difference(lastTime).inMilliseconds > 2500) {
-        _lastKeywordTriggerTimes[matchedKey!] = now;
-        _lastGlobalAlertTime = now;
-        if (_displayNames.containsKey(matchedKey)) {
-          _transcriptController.add(_displayNames[matchedKey]!);
+      if (_lastGlobalAlertTime == null || now.difference(_lastGlobalAlertTime!).inMilliseconds > 2000) {
+        final lastTime = _lastKeywordTriggerTimes[matchedKey];
+        if (lastTime == null || now.difference(lastTime).inMilliseconds > 2500) {
+          _lastKeywordTriggerTimes[matchedKey!] = now;
+          _lastGlobalAlertTime = now;
+          if (_displayNames.containsKey(matchedKey)) {
+            _transcriptController.add(_displayNames[matchedKey]!);
+          }
+          simulateSoundDetection(matchedKey!, confidence: 0.98);
         }
-        simulateSoundDetection(matchedKey!, confidence: 0.98);
       }
     }
   }
 
   void stopListening() {
     _isListening = false;
+    _sttWatchdogTimer?.cancel();
+    _sttWatchdogTimer = null;
     if (_speech.isListening) {
       _speech.stop();
     }
