@@ -390,15 +390,26 @@ class AudioClassifierService {
     double margin = prob - secondBest;
 
     // CATEGORY A: Sinhala Voice Emergency Keyword Detection (Udaw, Beraganna, Ginnak, Anathurak, Karadarayak, Balaagena, Ehata Wenna, Parissamin)
-    // Speech-To-Text (STT) engine in _processSpeechText handles 100% of Sinhala speech recognition & keyword matching.
-    // Offline neural classifier bypasses sinhala_ keys to prevent raw voice audio false-positives!
     if (soundKey.startsWith('sinhala_')) {
-      return;
+      // Offline Neural Network detection for Sinhala keywords near or far (prob >= 0.35, rms >= 0.015)
+      if (prob >= 0.35 && rms >= 0.015) {
+        _lastSpeechTimeMs = nowMs;
+        _lastGlobalAlertTime = now;
+        _classCooldown[soundKey] = now;
+
+        // Display detected Sinhala keyword clearly in the live transcript box
+        if (_displayNames.containsKey(soundKey)) {
+          _transcriptController.add(_displayNames[soundKey]!);
+        }
+
+        simulateSoundDetection(soundKey, confidence: prob);
+      }
+      return; // NEVER fall through to environmental sound triggers!
     }
 
     // CATEGORY B: Environmental Emergency Sound Detection (Baby Crying, Dog Barking, Ambulance Siren, Vehicle Horns)
-    // CRITICAL: Suppress environmental sound classification if human voice / speech was active within last 3500ms!
-    if (nowMs - _lastSpeechTimeMs < 3500) return;
+    // CRITICAL: Suppress environmental sound classification if human voice / speech was active within last 3000ms!
+    if (nowMs - _lastSpeechTimeMs < 3000) return;
 
     // Environmental sounds require strong acoustic energy surge (rms >= 0.045, winMaxAmp >= 0.15) and high confidence (prob >= 0.85, margin >= 0.28)
     if (prob >= 0.85 && margin >= 0.28 && rms >= 0.045 && winMaxAmp >= 0.15) {
