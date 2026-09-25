@@ -345,7 +345,7 @@ class AudioClassifierService {
     _waveformController.add(frame);
 
     // Continuous Acoustic Neural Inference for Sinhala Keywords & Environmental Sounds (Every 80ms)
-    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 500) && rms > 0.015) {
+    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 500) && rms > 0.008) {
       if (nowMs - _lastMlTimeMs > 80) {
         _lastMlTimeMs = nowMs;
         _runOfflineNeuralInference(rms);
@@ -371,8 +371,8 @@ class AudioClassifierService {
       if (absV > winMaxAmp) winMaxAmp = absV;
     }
 
-    // Reject distorted hardware clipping (> 0.98) or silent background noise (< 0.020)
-    if (winMaxAmp > 0.98 || winMaxAmp < 0.020) return;
+    // Reject distorted hardware clipping (> 0.98) or silent background noise (< 0.008)
+    if (winMaxAmp > 0.98 || winMaxAmp < 0.008) return;
 
     final prediction = _neuralClassifier.predict(window1s);
     if (prediction == null) return;
@@ -391,8 +391,8 @@ class AudioClassifierService {
 
     // CATEGORY A: Sinhala Voice Emergency Keyword Detection (Udaw, Beraganna, Ginnak, Anathurak, Karadarayak, Balaagena, Ehata Wenna, Parissamin)
     if (soundKey.startsWith('sinhala_')) {
-      // Offline Neural Network detection for Sinhala keywords near or far (prob >= 0.35, rms >= 0.015)
-      if (prob >= 0.35 && rms >= 0.015) {
+      // Sensitive Neural Network detection for Sinhala keywords near or far (prob >= 0.30, rms >= 0.008)
+      if (prob >= 0.30 && rms >= 0.008) {
         _lastSpeechTimeMs = nowMs;
         _lastGlobalAlertTime = now;
         _classCooldown[soundKey] = now;
