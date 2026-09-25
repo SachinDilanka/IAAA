@@ -395,11 +395,6 @@ class AudioClassifierService {
           _lastGlobalAlertTime = now;
           _classCooldown[key] = now;
 
-          // Display detected Sinhala keyword clearly in the live transcript box
-          if (_displayNames.containsKey(key)) {
-            _transcriptController.add(_displayNames[key]!);
-          }
-
           simulateSoundDetection(key, confidence: p);
           return; // Successfully detected keyword alert! Exit.
         }
