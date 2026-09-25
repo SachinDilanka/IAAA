@@ -221,7 +221,9 @@ class AudioClassifierService {
     } catch (_) {}
 
     _isListening = true;
-    _listeningStartTimeMs = DateTime.now().millisecondsSinceEpoch;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    _listeningStartTimeMs = nowMs;
+    _lastSpeechTimeMs = nowMs; // Initialize to start time so mic startup noise is suppressed
     _rollingIdx = 0;
     _total16kPushed = 0;
 
@@ -376,7 +378,7 @@ class AudioClassifierService {
     _waveformController.add(frame);
 
     // Continuous Acoustic Neural Inference for Sinhala Keywords & Environmental Sounds (Every 80ms)
-    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 500) && rms > 0.004) {
+    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 2000) && rms > 0.008) {
       if (nowMs - _lastMlTimeMs > 80) {
         _lastMlTimeMs = nowMs;
         _runOfflineNeuralInference(rms);
@@ -388,8 +390,8 @@ class AudioClassifierService {
     final now = DateTime.now();
     final nowMs = now.millisecondsSinceEpoch;
 
-    // Suppress environmental sound classification IF human speech active within last 4000ms
-    if (nowMs - _lastSpeechTimeMs < 4000) return;
+    // Suppress environmental sound classification during initial mic start (2s) or recent speech (4s)
+    if (nowMs - _listeningStartTimeMs < 2000 || nowMs - _lastSpeechTimeMs < 4000) return;
 
     // 1500ms Cooldown lockout per alert
     if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 1500) {
@@ -405,8 +407,8 @@ class AudioClassifierService {
       if (absV > winMaxAmp) winMaxAmp = absV;
     }
 
-    // Reject distorted hardware clipping (> 0.98) or silent background noise (< 0.005)
-    if (winMaxAmp > 0.98 || winMaxAmp < 0.005) return;
+    // Reject distorted hardware clipping (> 0.98) or silent background noise (< 0.008)
+    if (winMaxAmp > 0.98 || winMaxAmp < 0.008) return;
 
     final prediction = _neuralClassifier.predict(window1s);
     if (prediction == null) return;
@@ -429,7 +431,7 @@ class AudioClassifierService {
     double margin = prob - secondBest;
 
     // Environmental sound detection thresholds for Dog Barking, Vehicle Horns, Baby Crying, Ambulance Siren
-    if (prob >= 0.85 && margin >= 0.25 && rms >= 0.035 && winMaxAmp >= 0.12) {
+    if (prob >= 0.90 && margin >= 0.30 && rms >= 0.045 && winMaxAmp >= 0.18) {
       _lastGlobalAlertTime = now;
       _classCooldown[soundKey] = now;
 
