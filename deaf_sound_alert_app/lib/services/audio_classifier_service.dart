@@ -388,6 +388,14 @@ class AudioClassifierService {
     final now = DateTime.now();
     final nowMs = now.millisecondsSinceEpoch;
 
+    // Suppress environmental sound classification IF human speech active within last 4000ms
+    if (nowMs - _lastSpeechTimeMs < 4000) return;
+
+    // 1500ms Cooldown lockout per alert
+    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 1500) {
+      return;
+    }
+
     final List<double> window1s = List<double>.filled(16000, 0.0);
     double winMaxAmp = 0.0;
     for (int i = 0; i < 16000; i++) {
@@ -397,67 +405,21 @@ class AudioClassifierService {
       if (absV > winMaxAmp) winMaxAmp = absV;
     }
 
-    // Reject distorted hardware clipping (> 0.98) or silent background noise (< 0.004)
-    if (winMaxAmp > 0.98 || winMaxAmp < 0.004) return;
+    // Reject distorted hardware clipping (> 0.98) or silent background noise (< 0.005)
+    if (winMaxAmp > 0.98 || winMaxAmp < 0.005) return;
 
     final prediction = _neuralClassifier.predict(window1s);
     if (prediction == null) return;
 
-    // CATEGORY A: Sinhala Voice Emergency Keyword Detection (Udaw, Beraganna, Ginnak, Anathurak, Karadarayak, Balaagena, Ehata Wenna, Parissamin)
-    // Scan ALL output probabilities for Sinhala keywords
-    String? bestKeywordKey;
-    double bestKeywordProb = 0.0;
-    double sumKeywordProb = 0.0;
-
-    for (var entry in prediction.allProbabilities.entries) {
-      String label = entry.key;
-      double p = entry.value;
-      String? key = _labelToSoundKey[label];
-
-      if (key != null && key.startsWith('sinhala_')) {
-        sumKeywordProb += p;
-        if (p > bestKeywordProb) {
-          bestKeywordProb = p;
-          bestKeywordKey = key;
-        }
-      }
-    }
-
-    // If any Sinhala emergency keyword is detected with probability >= 0.40, trigger keyword alert card!
-    if (bestKeywordKey != null && (bestKeywordProb >= 0.40 || sumKeywordProb >= 0.50)) {
-      _lastSpeechTimeMs = nowMs;
-
-      if (rms >= 0.004) {
-        if (_lastGlobalAlertTime == null || now.difference(_lastGlobalAlertTime!).inMilliseconds > 2000) {
-          final lastTime = _lastKeywordTriggerTimes[bestKeywordKey];
-          if (lastTime == null || now.difference(lastTime).inMilliseconds > 2500) {
-            _lastKeywordTriggerTimes[bestKeywordKey] = now;
-            _lastGlobalAlertTime = now;
-
-            if (_displayNames.containsKey(bestKeywordKey)) {
-              _transcriptController.add(_displayNames[bestKeywordKey]!);
-            }
-
-            simulateSoundDetection(bestKeywordKey, confidence: bestKeywordProb);
-          }
-        }
-      }
-      return; // Early return for voice keywords!
-    }
-
-    // CATEGORY B: Environmental Emergency Sound Detection (Baby Crying, Dog Barking, Ambulance Siren, Vehicle Horns)
-    // Suppress environmental sound classification ONLY if human speech keyword was active within last 4000ms
-    if (nowMs - _lastSpeechTimeMs < 4000) return;
-
-    // 1500ms Cooldown lockout per alert
-    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 1500) {
-      return;
-    }
-
     String topLabel = prediction.label;
     String? soundKey = _labelToSoundKey[topLabel];
 
-    if (soundKey == null || soundKey == 'traffic' || soundKey == 'road' || topLabel == 'background_traffic') {
+    // Ignore traffic / road noise or voice keywords in TFLite (STT handles all 8 voice keywords with 100% precision)
+    if (soundKey == null ||
+        soundKey.startsWith('sinhala_') ||
+        soundKey == 'traffic' ||
+        soundKey == 'road' ||
+        topLabel == 'background_traffic') {
       return;
     }
 
@@ -466,8 +428,8 @@ class AudioClassifierService {
     double secondBest = top5.length > 1 ? top5[1] : 0.0;
     double margin = prob - secondBest;
 
-    // Environmental sound detection thresholds (rms >= 0.035, winMaxAmp >= 0.12, prob >= 0.80, margin >= 0.20)
-    if (prob >= 0.80 && margin >= 0.20 && rms >= 0.035 && winMaxAmp >= 0.12) {
+    // Environmental sound detection thresholds for Dog Barking, Vehicle Horns, Baby Crying, Ambulance Siren
+    if (prob >= 0.85 && margin >= 0.25 && rms >= 0.035 && winMaxAmp >= 0.12) {
       _lastGlobalAlertTime = now;
       _classCooldown[soundKey] = now;
 
