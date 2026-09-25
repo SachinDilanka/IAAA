@@ -345,7 +345,7 @@ class AudioClassifierService {
     _waveformController.add(frame);
 
     // Continuous Acoustic Neural Inference for Sinhala Keywords & Environmental Sounds (Every 80ms)
-    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 500) && rms > 0.008) {
+    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 500) && rms > 0.005) {
       if (nowMs - _lastMlTimeMs > 80) {
         _lastMlTimeMs = nowMs;
         _runOfflineNeuralInference(rms);
@@ -371,22 +371,24 @@ class AudioClassifierService {
       if (absV > winMaxAmp) winMaxAmp = absV;
     }
 
-    // Reject distorted hardware clipping (> 0.98) or silent background noise (< 0.008)
-    if (winMaxAmp > 0.98 || winMaxAmp < 0.008) return;
+    // Reject distorted hardware clipping (> 0.98) or silent background noise (< 0.005)
+    if (winMaxAmp > 0.98 || winMaxAmp < 0.005) return;
 
     final prediction = _neuralClassifier.predict(window1s);
     if (prediction == null) return;
 
     // CATEGORY A: Sinhala Voice Emergency Keyword Detection (Udaw, Beraganna, Ginnak, Anathurak, Karadarayak, Balaagena, Ehata Wenna, Parissamin)
-    // Check top predictions for Sinhala keywords with high sensitivity (prob >= 0.18 & rms >= 0.008)
+    // Scan all top predictions for Sinhala keywords with high sensitivity (prob >= 0.12 & rms >= 0.005)
     for (var entry in prediction.top5Probabilities.entries) {
       String label = entry.key;
       double p = entry.value;
       String? key = _labelToSoundKey[label];
 
       if (key != null && key.startsWith('sinhala_')) {
-        if (p >= 0.18 && rms >= 0.008) {
-          _lastSpeechTimeMs = nowMs;
+        _lastSpeechTimeMs = nowMs;
+
+        // High sensitivity so faint, near, or far speech is detected instantly
+        if (p >= 0.12 && rms >= 0.005) {
           _lastGlobalAlertTime = now;
           _classCooldown[key] = now;
 
@@ -396,8 +398,8 @@ class AudioClassifierService {
           }
 
           simulateSoundDetection(key, confidence: p);
+          return; // Successfully detected keyword alert! Exit.
         }
-        return; // NEVER fall through to environmental sound triggers when voice/keyword is present!
       }
     }
 
