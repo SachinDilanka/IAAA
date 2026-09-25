@@ -168,7 +168,6 @@ class AudioClassifierService {
         },
         onSoundLevelChange: (level) {
           if (!_isListening) return;
-          _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
 
           double norm = ((level + 40.0) / 50.0).clamp(0.08, 1.0);
           final math.Random rand = math.Random();
@@ -374,11 +373,6 @@ class AudioClassifierService {
     final now = DateTime.now();
     final nowMs = now.millisecondsSinceEpoch;
 
-    // MANDATORY SPEECH LOCKOUT: Any speech audio energy (rms >= 0.005) refreshes speech timestamp to guarantee environmental sounds NEVER trigger while talking!
-    if (rms >= 0.005) {
-      _lastSpeechTimeMs = nowMs;
-    }
-
     final List<double> window1s = List<double>.filled(16000, 0.0);
     double winMaxAmp = 0.0;
     for (int i = 0; i < 16000; i++) {
@@ -414,19 +408,17 @@ class AudioClassifierService {
       }
     }
 
-    // Voice Activity Lockout: If any Sinhala keyword probability is present or speech energy exists, mark speech active!
-    if (bestKeywordKey != null && (bestKeywordProb >= 0.03 || sumKeywordProb >= 0.05)) {
+    // If any Sinhala emergency keyword is detected with probability >= 0.10, trigger keyword alert card!
+    if (bestKeywordKey != null && (bestKeywordProb >= 0.10 || sumKeywordProb >= 0.15)) {
       _lastSpeechTimeMs = nowMs;
 
-      // Sensitive Keyword Trigger: probability >= 0.08 (captures quiet or far mic speech!)
-      if (bestKeywordProb >= 0.08 && rms >= 0.004) {
+      if (bestKeywordProb >= 0.10 && rms >= 0.004) {
         if (_lastGlobalAlertTime == null || now.difference(_lastGlobalAlertTime!).inMilliseconds > 2000) {
           final lastTime = _lastKeywordTriggerTimes[bestKeywordKey];
           if (lastTime == null || now.difference(lastTime).inMilliseconds > 2500) {
             _lastKeywordTriggerTimes[bestKeywordKey] = now;
             _lastGlobalAlertTime = now;
 
-            // Stream ONLY the relevant detected Sinhala keyword into live speech transcript box
             if (_displayNames.containsKey(bestKeywordKey)) {
               _transcriptController.add(_displayNames[bestKeywordKey]!);
             }
@@ -435,15 +427,15 @@ class AudioClassifierService {
           }
         }
       }
-      return; // CRITICAL: ALWAYS return early when voice is present! Environmental sounds NEVER fire here.
+      return; // Early return for voice keywords!
     }
 
     // CATEGORY B: Environmental Emergency Sound Detection (Baby Crying, Dog Barking, Ambulance Siren, Vehicle Horns)
-    // CRITICAL 4.0 Seconds Lockout: Suppress environmental sound classification if human voice / speech was active within last 4000ms!
-    if (nowMs - _lastSpeechTimeMs < 4000) return;
+    // Suppress environmental sound classification ONLY if human speech keyword was active within last 2500ms
+    if (nowMs - _lastSpeechTimeMs < 2500) return;
 
-    // 2000ms Cooldown lockout per environmental sound burst to prevent duplicate popups
-    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 2000) {
+    // 1500ms Cooldown lockout per alert
+    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 1500) {
       return;
     }
 
@@ -459,8 +451,8 @@ class AudioClassifierService {
     double secondBest = top5.length > 1 ? top5[1] : 0.0;
     double margin = prob - secondBest;
 
-    // Environmental sounds require clear acoustic energy (rms >= 0.040, winMaxAmp >= 0.14) and high confidence (prob >= 0.84, margin >= 0.26)
-    if (prob >= 0.84 && margin >= 0.26 && rms >= 0.040 && winMaxAmp >= 0.14) {
+    // Environmental sound detection thresholds (rms >= 0.035, winMaxAmp >= 0.12, prob >= 0.80, margin >= 0.20)
+    if (prob >= 0.80 && margin >= 0.20 && rms >= 0.035 && winMaxAmp >= 0.12) {
       _lastGlobalAlertTime = now;
       _classCooldown[soundKey] = now;
 
