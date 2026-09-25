@@ -142,7 +142,7 @@ class AudioClassifierService {
         _speechAvailable = await _speech.initialize(
           onError: (val) {
             print('SpeechToText onError: $val');
-            _useLocaleFallback = true;
+            _selectedLocaleId = null; // Clear failing locale and fallback to system default
             _onSpeechEnded();
           },
           onStatus: (val) {
@@ -159,11 +159,6 @@ class AudioClassifierService {
 
     try {
       if (_speech.isListening) return;
-
-      String targetLocale = _selectedLocaleId ?? 'si_LK';
-      if (_useLocaleFallback) {
-        targetLocale = '';
-      }
 
       await _speech.listen(
         onResult: (result) {
@@ -197,10 +192,11 @@ class AudioClassifierService {
           pauseFor: const Duration(seconds: 10),
           listenFor: const Duration(hours: 2),
         ),
-        localeId: targetLocale.isNotEmpty ? targetLocale : null,
+        localeId: _selectedLocaleId, // Use Sinhala locale if available, else null system default
       );
     } catch (e) {
       print('Speech listen error: $e');
+      _selectedLocaleId = null;
       _onSpeechEnded();
     }
   }
@@ -234,7 +230,7 @@ class AudioClassifierService {
       _speechAvailable = await _speech.initialize(
         onError: (val) {
           print('SpeechToText onError: $val');
-          _useLocaleFallback = true;
+          _selectedLocaleId = null;
           _onSpeechEnded();
         },
         onStatus: (val) {
