@@ -357,11 +357,6 @@ class AudioClassifierService {
     final now = DateTime.now();
     final nowMs = now.millisecondsSinceEpoch;
 
-    // Track audio sound/speech activity timestamp continuously to block environmental false alarms
-    if (rms > 0.008) {
-      _lastSpeechTimeMs = nowMs;
-    }
-
     final List<double> window1s = List<double>.filled(16000, 0.0);
     double winMaxAmp = 0.0;
     for (int i = 0; i < 16000; i++) {
@@ -395,12 +390,11 @@ class AudioClassifierService {
       }
     }
 
-    // Trigger ONLY the relevant highest-probability Sinhala keyword card with a clean 2.5s cooldown
-    if (bestKeywordKey != null && bestKeywordProb >= 0.35 && rms >= 0.010) {
+    // Trigger ONLY the relevant highest-probability Sinhala keyword card (prob >= 0.22, rms >= 0.008) with 1.5s cooldown
+    if (bestKeywordKey != null && bestKeywordProb >= 0.22 && rms >= 0.008) {
       final lastTime = _lastKeywordTriggerTimes[bestKeywordKey];
-      if (lastTime == null || now.difference(lastTime).inMilliseconds > 2500) {
+      if (lastTime == null || now.difference(lastTime).inMilliseconds > 1500) {
         _lastKeywordTriggerTimes[bestKeywordKey] = now;
-        _lastGlobalAlertTime = now;
         _lastSpeechTimeMs = nowMs;
 
         // Display ONLY the relevant detected Sinhala keyword in the live transcript box
@@ -414,11 +408,11 @@ class AudioClassifierService {
     }
 
     // CATEGORY B: Environmental Emergency Sound Detection (Baby Crying, Dog Barking, Ambulance Siren, Vehicle Horns)
-    // CRITICAL: Suppress environmental sound classification if human voice / speech was active within last 4000ms!
-    if (nowMs - _lastSpeechTimeMs < 4000) return;
+    // Suppress environmental sound classification if human voice / speech was active within last 2500ms
+    if (nowMs - _lastSpeechTimeMs < 2500) return;
 
-    // 2500ms Cooldown lockout per environmental sound burst
-    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 2500) {
+    // 1200ms Cooldown lockout per environmental sound burst
+    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 1200) {
       return;
     }
 
@@ -434,8 +428,8 @@ class AudioClassifierService {
     double secondBest = top5.length > 1 ? top5[1] : 0.0;
     double margin = prob - secondBest;
 
-    // Environmental sounds require strong acoustic energy surge (rms >= 0.075, winMaxAmp >= 0.22) and ultra-high confidence (prob >= 0.94, margin >= 0.35)
-    if (prob >= 0.94 && margin >= 0.35 && rms >= 0.075 && winMaxAmp >= 0.22) {
+    // Environmental sounds require clear acoustic energy (rms >= 0.035, winMaxAmp >= 0.12) and high confidence (prob >= 0.82, margin >= 0.25)
+    if (prob >= 0.82 && margin >= 0.25 && rms >= 0.035 && winMaxAmp >= 0.12) {
       _lastGlobalAlertTime = now;
       _classCooldown[soundKey] = now;
 
