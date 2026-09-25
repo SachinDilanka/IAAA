@@ -150,24 +150,24 @@ class AudioClassifierService {
     if (!_speechAvailable) return;
 
     try {
-      // Do NOT interrupt if STT is already active
       if (_speech.isListening) return;
-
-      final String? activeLocale = _useLocaleFallback ? null : _selectedLocaleId;
 
       await _speech.listen(
         onResult: (result) {
           if (!_isListening) return;
           _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
-          String text = result.recognizedWords.toLowerCase().trim();
-          if (text.isNotEmpty) {
-            // Stream recognized words directly into live speech transcript box
-            _transcriptController.add(result.recognizedWords);
-            _processSpeechText(text);
+          final String rawWords = result.recognizedWords.trim();
+          if (rawWords.isNotEmpty) {
+            // Stream recognized words (sentences or single words) live into transcript box
+            _transcriptController.add(rawWords);
+            _processSpeechText(rawWords.toLowerCase());
           }
         },
         onSoundLevelChange: (level) {
           if (!_isListening) return;
+          if (level > -35.0) {
+            _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
+          }
 
           double norm = ((level + 40.0) / 50.0).clamp(0.08, 1.0);
           final math.Random rand = math.Random();
@@ -184,11 +184,10 @@ class AudioClassifierService {
           pauseFor: const Duration(seconds: 15),
           listenFor: const Duration(hours: 2),
         ),
-        localeId: activeLocale,
+        localeId: null, // Multilingual system recognizer: streams all spoken words in Sinhala/English
       );
     } catch (e) {
       print('Speech listen error: $e');
-      _useLocaleFallback = true;
       _onSpeechEnded();
     }
   }
