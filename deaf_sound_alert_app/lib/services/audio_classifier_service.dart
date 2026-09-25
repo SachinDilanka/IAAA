@@ -352,6 +352,7 @@ class AudioClassifierService {
 
   void _runOfflineNeuralInference(double rms) {
     final now = DateTime.now();
+    final nowMs = now.millisecondsSinceEpoch;
 
     // 1000ms Cooldown lockout per sound burst to prevent duplicate sound popups
     if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 1000) {
@@ -367,8 +368,8 @@ class AudioClassifierService {
       if (absV > winMaxAmp) winMaxAmp = absV;
     }
 
-    // Reject distorted hardware clipping (> 0.98) or silent noise (< 0.015)
-    if (winMaxAmp > 0.98 || winMaxAmp < 0.015) return;
+    // Reject distorted hardware clipping (> 0.98) or silent background noise (< 0.020)
+    if (winMaxAmp > 0.98 || winMaxAmp < 0.020) return;
 
     final prediction = _neuralClassifier.predict(window1s);
     if (prediction == null) return;
@@ -387,8 +388,9 @@ class AudioClassifierService {
 
     // CATEGORY A: Sinhala Voice Emergency Keyword Detection (Udaw, Beraganna, Ginnak, Anathurak, Karadarayak, Balaagena, Ehata Wenna, Parissamin)
     if (soundKey.startsWith('sinhala_')) {
-      // Require moderate confidence >= 0.45, margin >= 0.08, energy rms >= 0.015 (detects near or far!)
-      if (prob >= 0.45 && margin >= 0.08 && rms >= 0.015) {
+      // Require moderate confidence >= 0.45, margin >= 0.08, energy rms >= 0.020 (detects near or far!)
+      if (prob >= 0.45 && margin >= 0.08 && rms >= 0.020) {
+        _lastSpeechTimeMs = nowMs;
         _lastGlobalAlertTime = now;
         _classCooldown[soundKey] = now;
 
@@ -402,8 +404,11 @@ class AudioClassifierService {
     }
     // CATEGORY B: Environmental Emergency Sound Detection (Baby Crying, Dog Barking, Ambulance Siren, Vehicle Horns)
     else {
-      // Require strong confidence >= 0.72, margin >= 0.15, energy rms >= 0.028
-      if (prob >= 0.72 && margin >= 0.15 && rms >= 0.028) {
+      // CRITICAL: Suppress environmental sound classification if human voice / speech was active within last 2500ms!
+      if (nowMs - _lastSpeechTimeMs < 2500) return;
+
+      // Require strong acoustic energy surge (rms >= 0.040, winMaxAmp >= 0.14) and high confidence (prob >= 0.82, margin >= 0.25)
+      if (prob >= 0.82 && margin >= 0.25 && rms >= 0.040 && winMaxAmp >= 0.14) {
         _lastGlobalAlertTime = now;
         _classCooldown[soundKey] = now;
 
@@ -423,6 +428,8 @@ class AudioClassifierService {
 
     if (sanitized.isEmpty) return;
 
+    _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
+
     final Map<String, List<String>> keywordPatterns = {
       'sinhala_udaw_': [
         'udaw', 'udaww', 'udau', 'udawwa', 'udawwak', 'udauwa', 'udav', 'udavv', 'help',
@@ -433,7 +440,7 @@ class AudioClassifierService {
         'අනතුරක්', 'අනතුර', 'අනතුරයි'
       ],
       'sinhala_beraganna_': [
-        'beraganna', 'beeraganna', 'bcraganna', 'bera', 'beera', 'beragan', 'save',
+        'beraganna', 'beeraganna', 'bcraganna', 'pera', 'beera', 'beragan', 'save',
         'බේරාගන්න', 'බේරගන්න', 'බේරා', 'බේර', 'බේරන්න', 'බේරාගන්නකෝ', 'බේරගන්නකෝ'
       ],
       'sinhala_ginnak_': [
