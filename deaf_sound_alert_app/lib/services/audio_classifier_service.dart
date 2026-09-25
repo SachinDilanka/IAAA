@@ -368,8 +368,8 @@ class AudioClassifierService {
       if (absV > winMaxAmp) winMaxAmp = absV;
     }
 
-    // Reject distorted hardware clipping (> 0.98) or silent background noise (< 0.020)
-    if (winMaxAmp > 0.98 || winMaxAmp < 0.020) return;
+    // Reject distorted hardware clipping (> 0.98) or silent background noise (< 0.015)
+    if (winMaxAmp > 0.98 || winMaxAmp < 0.015) return;
 
     final prediction = _neuralClassifier.predict(window1s);
     if (prediction == null) return;
@@ -386,10 +386,12 @@ class AudioClassifierService {
     double secondBest = top5.length > 1 ? top5[1] : 0.0;
     double margin = prob - secondBest;
 
+    bool isSinhalaKeyword = soundKey.startsWith('sinhala_');
+
     // CATEGORY A: Sinhala Voice Emergency Keyword Detection (Udaw, Beraganna, Ginnak, Anathurak, Karadarayak, Balaagena, Ehata Wenna, Parissamin)
-    if (soundKey.startsWith('sinhala_')) {
-      // Require moderate confidence >= 0.45, margin >= 0.08, energy rms >= 0.020 (detects near or far!)
-      if (prob >= 0.45 && margin >= 0.08 && rms >= 0.020) {
+    if (isSinhalaKeyword) {
+      // Require sensitivity prob >= 0.35 and energy rms >= 0.015 (detects near or far!)
+      if (prob >= 0.35 && rms >= 0.015) {
         _lastSpeechTimeMs = nowMs;
         _lastGlobalAlertTime = now;
         _classCooldown[soundKey] = now;
@@ -401,23 +403,25 @@ class AudioClassifierService {
 
         simulateSoundDetection(soundKey, confidence: prob);
       }
+      return; // NEVER fall through to environmental sound triggers!
     }
+
     // CATEGORY B: Environmental Emergency Sound Detection (Baby Crying, Dog Barking, Ambulance Siren, Vehicle Horns)
-    else {
-      // CRITICAL: Suppress environmental sound classification if human voice / speech was active within last 2500ms!
-      if (nowMs - _lastSpeechTimeMs < 2500) return;
+    // CRITICAL: Suppress environmental sound classification if human voice / speech was active within last 3000ms!
+    if (nowMs - _lastSpeechTimeMs < 3000) return;
 
-      // Require strong acoustic energy surge (rms >= 0.040, winMaxAmp >= 0.14) and high confidence (prob >= 0.82, margin >= 0.25)
-      if (prob >= 0.82 && margin >= 0.25 && rms >= 0.040 && winMaxAmp >= 0.14) {
-        _lastGlobalAlertTime = now;
-        _classCooldown[soundKey] = now;
+    // Environmental sounds require strong acoustic energy (rms >= 0.045, winMaxAmp >= 0.15) and high confidence (prob >= 0.85)
+    if (prob >= 0.85 && margin >= 0.30 && rms >= 0.045 && winMaxAmp >= 0.15) {
+      _lastGlobalAlertTime = now;
+      _classCooldown[soundKey] = now;
 
-        simulateSoundDetection(soundKey, confidence: prob);
-      }
+      simulateSoundDetection(soundKey, confidence: prob);
     }
   }
 
   void _processSpeechText(String rawText) {
+    _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
+
     // Sanitize transcript by removing zero-width spaces/joiners, punctuation, and extra whitespace
     final String sanitized = rawText
         .replaceAll(RegExp(r'[\u200B-\u200D\uFEFF]'), '')
@@ -427,8 +431,6 @@ class AudioClassifierService {
         .trim();
 
     if (sanitized.isEmpty) return;
-
-    _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
 
     final Map<String, List<String>> keywordPatterns = {
       'sinhala_udaw_': [
@@ -471,7 +473,7 @@ class AudioClassifierService {
       bool matches = patterns.any((pattern) => sanitized.contains(pattern));
       if (matches) {
         final lastTime = _lastKeywordTriggerTimes[key];
-        if (lastTime == null || now.difference(lastTime).inMilliseconds > 1000) {
+        if (lastTime == null || now.difference(lastTime).inMilliseconds > 800) {
           _lastKeywordTriggerTimes[key] = now;
           _lastGlobalAlertTime = now;
           simulateSoundDetection(key, confidence: 0.98);
