@@ -106,12 +106,12 @@ class AudioClassifierService {
       _speechAvailable = await _speech.initialize(
         onError: (val) {
           print('SpeechToText onError: $val');
-          _restartSpeechListeningIfNeeded();
+          _onSpeechEnded();
         },
         onStatus: (val) {
           print('SpeechToText onStatus: $val');
           if ((val == 'done' || val == 'notListening') && _isListening) {
-            _restartSpeechListeningIfNeeded();
+            _onSpeechEnded();
           }
         },
       );
@@ -132,13 +132,14 @@ class AudioClassifierService {
 
   void _safeListenSpeech() async {
     if (!_isListening) return;
+
     if (!_speechAvailable) {
       try {
         _speechAvailable = await _speech.initialize(
-          onError: (val) => _restartSpeechListeningIfNeeded(),
+          onError: (val) => _onSpeechEnded(),
           onStatus: (val) {
             if ((val == 'done' || val == 'notListening') && _isListening) {
-              _restartSpeechListeningIfNeeded();
+              _onSpeechEnded();
             }
           },
         );
@@ -148,10 +149,8 @@ class AudioClassifierService {
     if (!_speechAvailable) return;
 
     try {
-      if (_speech.isListening) {
-        await _speech.stop();
-        await Future.delayed(const Duration(milliseconds: 100));
-      }
+      // Do NOT interrupt or call stop() if STT is already listening!
+      if (_speech.isListening) return;
 
       await _speech.listen(
         onResult: (result) {
@@ -159,15 +158,15 @@ class AudioClassifierService {
           _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
           String text = result.recognizedWords.toLowerCase().trim();
           if (text.isNotEmpty) {
+            // Instantly stream words into live speech transcript box in real time
             _transcriptController.add(result.recognizedWords);
             _processSpeechText(text);
           }
         },
         onSoundLevelChange: (level) {
           if (!_isListening) return;
-          // Refresh speech time whenever mic audio level indicates input activity
           _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
-          
+
           double norm = ((level + 40.0) / 50.0).clamp(0.08, 1.0);
           final math.Random rand = math.Random();
           final List<double> waveform = List.generate(40, (i) {
@@ -180,20 +179,23 @@ class AudioClassifierService {
           listenMode: stt.ListenMode.dictation,
           partialResults: true,
           cancelOnError: false,
-          pauseFor: const Duration(seconds: 10),
-          listenFor: const Duration(minutes: 60),
+          pauseFor: const Duration(seconds: 30),
+          listenFor: const Duration(hours: 2),
         ),
         localeId: _sinhalaLocaleId.isNotEmpty ? _sinhalaLocaleId : null,
       );
     } catch (e) {
       print('Speech listen error: $e');
+      _onSpeechEnded();
     }
   }
 
-  void _restartSpeechListeningIfNeeded() {
+  void _onSpeechEnded() {
     if (!_isListening) return;
-    Timer(const Duration(milliseconds: 200), () {
-      _safeListenSpeech();
+    Timer(const Duration(milliseconds: 500), () {
+      if (_isListening && !_speech.isListening) {
+        _safeListenSpeech();
+      }
     });
   }
 
@@ -215,10 +217,10 @@ class AudioClassifierService {
     // Always re-initialize SpeechToText AFTER permission grant
     try {
       _speechAvailable = await _speech.initialize(
-        onError: (val) => _restartSpeechListeningIfNeeded(),
+        onError: (val) => _onSpeechEnded(),
         onStatus: (val) {
           if ((val == 'done' || val == 'notListening') && _isListening) {
-            _restartSpeechListeningIfNeeded();
+            _onSpeechEnded();
           }
         },
       );
@@ -244,7 +246,7 @@ class AudioClassifierService {
 
     // 3. Persistent Watchdog to ensure STT service never dies or stays idle
     _sttWatchdogTimer?.cancel();
-    _sttWatchdogTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+    _sttWatchdogTimer = Timer.periodic(const Duration(seconds: 4), (_) {
       if (_isListening && !_speech.isListening) {
         _safeListenSpeech();
       }
@@ -453,8 +455,8 @@ class AudioClassifierService {
     double secondBest = top5.length > 1 ? top5[1] : 0.0;
     double margin = prob - secondBest;
 
-    // Environmental sounds require clear acoustic energy (rms >= 0.050, winMaxAmp >= 0.16) and high confidence (prob >= 0.88, margin >= 0.30)
-    if (prob >= 0.88 && margin >= 0.30 && rms >= 0.050 && winMaxAmp >= 0.16) {
+    // Environmental sounds require clear acoustic energy (rms >= 0.040, winMaxAmp >= 0.14) and high confidence (prob >= 0.84, margin >= 0.26)
+    if (prob >= 0.84 && margin >= 0.26 && rms >= 0.040 && winMaxAmp >= 0.14) {
       _lastGlobalAlertTime = now;
       _classCooldown[soundKey] = now;
 
