@@ -367,6 +367,11 @@ class AudioClassifierService {
     final rms = math.sqrt(sumSquares / (packet16k.isEmpty ? 1 : packet16k.length));
     final double normalizedVol = (rms * 10.0).clamp(0.04, 1.0);
 
+    // Refresh speech timestamp on active audio energy to protect human speech from environmental false alerts
+    if (rms > 0.020) {
+      _lastSpeechTimeMs = nowMs;
+    }
+
     // 40-band Real-time Audio Visualizer Frame Output (Line moves up/down dynamically)
     final math.Random rand = math.Random();
     final List<double> frame = List<double>.generate(40, (i) {
@@ -377,8 +382,8 @@ class AudioClassifierService {
     });
     _waveformController.add(frame);
 
-    // Continuous Acoustic Neural Inference for Sinhala Keywords & Environmental Sounds (Every 80ms)
-    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 2000) && rms > 0.008) {
+    // Continuous Acoustic Neural Inference for Environmental Sounds (Every 80ms)
+    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 2000) && rms > 0.035) {
       if (nowMs - _lastMlTimeMs > 80) {
         _lastMlTimeMs = nowMs;
         _runOfflineNeuralInference(rms);

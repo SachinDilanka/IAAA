@@ -58,10 +58,11 @@ class AppProvider with ChangeNotifier {
   }
 
   Future<void> toggleListening() async {
+    _lastDetectedSound = null;
+    _currentTranscript = "";
     if (_isListening) {
       AudioClassifierService().stopListening();
       _isListening = false;
-      _currentTranscript = "";
     } else {
       await AudioClassifierService().startListening();
       _isListening = true;
