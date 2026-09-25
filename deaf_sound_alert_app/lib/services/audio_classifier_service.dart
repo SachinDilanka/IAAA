@@ -378,28 +378,38 @@ class AudioClassifierService {
     if (prediction == null) return;
 
     // CATEGORY A: Sinhala Voice Emergency Keyword Detection (Udaw, Beraganna, Ginnak, Anathurak, Karadarayak, Balaagena, Ehata Wenna, Parissamin)
-    // Scan all top predictions for Sinhala keywords with per-keyword cooldown (prob >= 0.20 & rms >= 0.005)
+    // Find the SINGLE Sinhala keyword prediction with the HIGHEST probability in top 5
+    String? bestKeywordKey;
+    double bestKeywordProb = 0.0;
+
     for (var entry in prediction.top5Probabilities.entries) {
       String label = entry.key;
       double p = entry.value;
       String? key = _labelToSoundKey[label];
 
       if (key != null && key.startsWith('sinhala_')) {
-        if (p >= 0.20 && rms >= 0.005) {
-          final lastTime = _lastKeywordTriggerTimes[key];
-          if (lastTime == null || now.difference(lastTime).inMilliseconds > 1200) {
-            _lastKeywordTriggerTimes[key] = now;
-            _lastSpeechTimeMs = nowMs;
-
-            // Stream detected Sinhala keyword into live transcript box
-            if (_displayNames.containsKey(key)) {
-              _transcriptController.add(_displayNames[key]!);
-            }
-
-            simulateSoundDetection(key, confidence: p);
-            return; // Successfully detected keyword alert! Exit.
-          }
+        if (p > bestKeywordProb) {
+          bestKeywordProb = p;
+          bestKeywordKey = key;
         }
+      }
+    }
+
+    // Trigger ONLY the relevant highest-probability Sinhala keyword card with a clean 2.5s cooldown
+    if (bestKeywordKey != null && bestKeywordProb >= 0.35 && rms >= 0.010) {
+      final lastTime = _lastKeywordTriggerTimes[bestKeywordKey];
+      if (lastTime == null || now.difference(lastTime).inMilliseconds > 2500) {
+        _lastKeywordTriggerTimes[bestKeywordKey] = now;
+        _lastGlobalAlertTime = now;
+        _lastSpeechTimeMs = nowMs;
+
+        // Display ONLY the relevant detected Sinhala keyword in the live transcript box
+        if (_displayNames.containsKey(bestKeywordKey)) {
+          _transcriptController.add(_displayNames[bestKeywordKey]!);
+        }
+
+        simulateSoundDetection(bestKeywordKey, confidence: bestKeywordProb);
+        return; // Successfully detected ONE relevant keyword card! Exit.
       }
     }
 
@@ -407,8 +417,8 @@ class AudioClassifierService {
     // CRITICAL: Suppress environmental sound classification if human voice / speech was active within last 4000ms!
     if (nowMs - _lastSpeechTimeMs < 4000) return;
 
-    // 1500ms Cooldown lockout per environmental sound burst
-    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 1500) {
+    // 2500ms Cooldown lockout per environmental sound burst
+    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 2500) {
       return;
     }
 
@@ -483,20 +493,32 @@ class AudioClassifierService {
 
     final now = DateTime.now();
 
+    // Select ONLY the single most relevant matching keyword (longest pattern match)
+    String? matchedKey;
+    int longestPatternLen = 0;
+
     keywordPatterns.forEach((key, patterns) {
-      bool matches = patterns.any((pattern) => sanitized.contains(pattern));
-      if (matches) {
-        final lastTime = _lastKeywordTriggerTimes[key];
-        if (lastTime == null || now.difference(lastTime).inMilliseconds > 1000) {
-          _lastKeywordTriggerTimes[key] = now;
-          _lastGlobalAlertTime = now;
-          if (_displayNames.containsKey(key)) {
-            _transcriptController.add(_displayNames[key]!);
+      for (var pattern in patterns) {
+        if (sanitized.contains(pattern)) {
+          if (pattern.length > longestPatternLen) {
+            longestPatternLen = pattern.length;
+            matchedKey = key;
           }
-          simulateSoundDetection(key, confidence: 0.98);
         }
       }
     });
+
+    if (matchedKey != null) {
+      final lastTime = _lastKeywordTriggerTimes[matchedKey];
+      if (lastTime == null || now.difference(lastTime).inMilliseconds > 2500) {
+        _lastKeywordTriggerTimes[matchedKey!] = now;
+        _lastGlobalAlertTime = now;
+        if (_displayNames.containsKey(matchedKey)) {
+          _transcriptController.add(_displayNames[matchedKey]!);
+        }
+        simulateSoundDetection(matchedKey!, confidence: 0.98);
+      }
+    }
   }
 
   void stopListening() {
