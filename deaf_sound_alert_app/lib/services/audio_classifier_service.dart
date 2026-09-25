@@ -377,6 +377,34 @@ class AudioClassifierService {
     final prediction = _neuralClassifier.predict(window1s);
     if (prediction == null) return;
 
+    // CATEGORY A: Sinhala Voice Emergency Keyword Detection (Udaw, Beraganna, Ginnak, Anathurak, Karadarayak, Balaagena, Ehata Wenna, Parissamin)
+    // Check top predictions for Sinhala keywords with high sensitivity (prob >= 0.18 & rms >= 0.008)
+    for (var entry in prediction.top5Probabilities.entries) {
+      String label = entry.key;
+      double p = entry.value;
+      String? key = _labelToSoundKey[label];
+
+      if (key != null && key.startsWith('sinhala_')) {
+        if (p >= 0.18 && rms >= 0.008) {
+          _lastSpeechTimeMs = nowMs;
+          _lastGlobalAlertTime = now;
+          _classCooldown[key] = now;
+
+          // Display detected Sinhala keyword clearly in the live transcript box
+          if (_displayNames.containsKey(key)) {
+            _transcriptController.add(_displayNames[key]!);
+          }
+
+          simulateSoundDetection(key, confidence: p);
+        }
+        return; // NEVER fall through to environmental sound triggers when voice/keyword is present!
+      }
+    }
+
+    // CATEGORY B: Environmental Emergency Sound Detection (Baby Crying, Dog Barking, Ambulance Siren, Vehicle Horns)
+    // CRITICAL: Suppress environmental sound classification if human voice / speech was active within last 3000ms!
+    if (nowMs - _lastSpeechTimeMs < 3000) return;
+
     String topLabel = prediction.label;
     String? soundKey = _labelToSoundKey[topLabel];
 
@@ -388,28 +416,6 @@ class AudioClassifierService {
     final top5 = prediction.top5Probabilities.values.toList();
     double secondBest = top5.length > 1 ? top5[1] : 0.0;
     double margin = prob - secondBest;
-
-    // CATEGORY A: Sinhala Voice Emergency Keyword Detection (Udaw, Beraganna, Ginnak, Anathurak, Karadarayak, Balaagena, Ehata Wenna, Parissamin)
-    if (soundKey.startsWith('sinhala_')) {
-      // Sensitive Neural Network detection for Sinhala keywords near or far (prob >= 0.30, rms >= 0.008)
-      if (prob >= 0.30 && rms >= 0.008) {
-        _lastSpeechTimeMs = nowMs;
-        _lastGlobalAlertTime = now;
-        _classCooldown[soundKey] = now;
-
-        // Display detected Sinhala keyword clearly in the live transcript box
-        if (_displayNames.containsKey(soundKey)) {
-          _transcriptController.add(_displayNames[soundKey]!);
-        }
-
-        simulateSoundDetection(soundKey, confidence: prob);
-      }
-      return; // NEVER fall through to environmental sound triggers!
-    }
-
-    // CATEGORY B: Environmental Emergency Sound Detection (Baby Crying, Dog Barking, Ambulance Siren, Vehicle Horns)
-    // CRITICAL: Suppress environmental sound classification if human voice / speech was active within last 3000ms!
-    if (nowMs - _lastSpeechTimeMs < 3000) return;
 
     // Environmental sounds require strong acoustic energy surge (rms >= 0.045, winMaxAmp >= 0.15) and high confidence (prob >= 0.85, margin >= 0.28)
     if (prob >= 0.85 && margin >= 0.28 && rms >= 0.045 && winMaxAmp >= 0.15) {
