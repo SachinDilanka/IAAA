@@ -178,10 +178,10 @@ class AudioClassifierService {
           _waveformController.add(waveform);
         },
         listenOptions: stt.SpeechListenOptions(
-          listenMode: stt.ListenMode.dictation,
+          listenMode: stt.ListenMode.confirmation,
           partialResults: true,
           cancelOnError: false,
-          pauseFor: const Duration(seconds: 30),
+          pauseFor: const Duration(seconds: 15),
           listenFor: const Duration(hours: 2),
         ),
         localeId: activeLocale,
