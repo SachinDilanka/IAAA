@@ -21,8 +21,9 @@ class AudioClassifierService {
 
   Timer? _sttWatchdogTimer;
   bool _speechAvailable = false;
-  String _sinhalaLocaleId = 'si_LK';
+  String? _selectedLocaleId;
   bool _isListening = false;
+  bool _useLocaleFallback = false;
 
   // 16,000 Hz circular rolling audio buffer (1 second)
   final List<double> _rollingBuf16k = List<double>.filled(16000, 0.0);
@@ -120,7 +121,7 @@ class AudioClassifierService {
         final locales = await _speech.locales();
         for (var loc in locales) {
           if (loc.localeId.toLowerCase().startsWith('si')) {
-            _sinhalaLocaleId = loc.localeId;
+            _selectedLocaleId = loc.localeId;
             break;
           }
         }
@@ -149,8 +150,10 @@ class AudioClassifierService {
     if (!_speechAvailable) return;
 
     try {
-      // Do NOT interrupt or call stop() if STT is already listening!
+      // Do NOT interrupt if STT is already active
       if (_speech.isListening) return;
+
+      final String? activeLocale = _useLocaleFallback ? null : _selectedLocaleId;
 
       await _speech.listen(
         onResult: (result) {
@@ -158,7 +161,7 @@ class AudioClassifierService {
           _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
           String text = result.recognizedWords.toLowerCase().trim();
           if (text.isNotEmpty) {
-            // Instantly stream words into live speech transcript box in real time
+            // Stream recognized words directly into live speech transcript box
             _transcriptController.add(result.recognizedWords);
             _processSpeechText(text);
           }
@@ -182,10 +185,11 @@ class AudioClassifierService {
           pauseFor: const Duration(seconds: 30),
           listenFor: const Duration(hours: 2),
         ),
-        localeId: _sinhalaLocaleId.isNotEmpty ? _sinhalaLocaleId : null,
+        localeId: activeLocale,
       );
     } catch (e) {
       print('Speech listen error: $e');
+      _useLocaleFallback = true;
       _onSpeechEnded();
     }
   }
@@ -229,7 +233,7 @@ class AudioClassifierService {
         final locales = await _speech.locales();
         for (var loc in locales) {
           if (loc.localeId.toLowerCase().startsWith('si')) {
-            _sinhalaLocaleId = loc.localeId;
+            _selectedLocaleId = loc.localeId;
             break;
           }
         }
@@ -358,7 +362,7 @@ class AudioClassifierService {
     _waveformController.add(frame);
 
     // Continuous Acoustic Neural Inference for Sinhala Keywords & Environmental Sounds (Every 80ms)
-    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 500) && rms > 0.005) {
+    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 500) && rms > 0.004) {
       if (nowMs - _lastMlTimeMs > 80) {
         _lastMlTimeMs = nowMs;
         _runOfflineNeuralInference(rms);
@@ -370,8 +374,8 @@ class AudioClassifierService {
     final now = DateTime.now();
     final nowMs = now.millisecondsSinceEpoch;
 
-    // MANDATORY SPEECH LOCKOUT: Any speech audio energy (rms >= 0.006) refreshes speech timestamp to guarantee environmental sounds NEVER trigger while talking!
-    if (rms >= 0.006) {
+    // MANDATORY SPEECH LOCKOUT: Any speech audio energy (rms >= 0.005) refreshes speech timestamp to guarantee environmental sounds NEVER trigger while talking!
+    if (rms >= 0.005) {
       _lastSpeechTimeMs = nowMs;
     }
 
@@ -384,8 +388,8 @@ class AudioClassifierService {
       if (absV > winMaxAmp) winMaxAmp = absV;
     }
 
-    // Reject distorted hardware clipping (> 0.98) or silent background noise (< 0.005)
-    if (winMaxAmp > 0.98 || winMaxAmp < 0.005) return;
+    // Reject distorted hardware clipping (> 0.98) or silent background noise (< 0.004)
+    if (winMaxAmp > 0.98 || winMaxAmp < 0.004) return;
 
     final prediction = _neuralClassifier.predict(window1s);
     if (prediction == null) return;
@@ -411,11 +415,11 @@ class AudioClassifierService {
     }
 
     // Voice Activity Lockout: If any Sinhala keyword probability is present or speech energy exists, mark speech active!
-    if (bestKeywordKey != null && (bestKeywordProb >= 0.04 || sumKeywordProb >= 0.06)) {
+    if (bestKeywordKey != null && (bestKeywordProb >= 0.03 || sumKeywordProb >= 0.05)) {
       _lastSpeechTimeMs = nowMs;
 
-      // Trigger Keyword Alert Card if probability >= 0.10 (sensitive for near & far mic speech!)
-      if (bestKeywordProb >= 0.10 && rms >= 0.005) {
+      // Sensitive Keyword Trigger: probability >= 0.08 (captures quiet or far mic speech!)
+      if (bestKeywordProb >= 0.08 && rms >= 0.004) {
         if (_lastGlobalAlertTime == null || now.difference(_lastGlobalAlertTime!).inMilliseconds > 2000) {
           final lastTime = _lastKeywordTriggerTimes[bestKeywordKey];
           if (lastTime == null || now.difference(lastTime).inMilliseconds > 2500) {
@@ -435,8 +439,8 @@ class AudioClassifierService {
     }
 
     // CATEGORY B: Environmental Emergency Sound Detection (Baby Crying, Dog Barking, Ambulance Siren, Vehicle Horns)
-    // CRITICAL 5.0 Seconds Lockout: Suppress environmental sound classification if human voice / speech was active within last 5000ms!
-    if (nowMs - _lastSpeechTimeMs < 5000) return;
+    // CRITICAL 4.0 Seconds Lockout: Suppress environmental sound classification if human voice / speech was active within last 4000ms!
+    if (nowMs - _lastSpeechTimeMs < 4000) return;
 
     // 2000ms Cooldown lockout per environmental sound burst to prevent duplicate popups
     if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 2000) {
@@ -479,35 +483,35 @@ class AudioClassifierService {
 
     final Map<String, List<String>> keywordPatterns = {
       'sinhala_udaw_': [
-        'udaw', 'udaww', 'udau', 'udawwa', 'udawwak', 'udauwa', 'udav', 'udavv', 'help', 'uda', 'udaa', 'udawu', 'udauw',
+        'udaw', 'udaww', 'udau', 'udawwa', 'udawwak', 'udauwa', 'udav', 'udavv', 'help', 'uda', 'udaa', 'udawu', 'udauw', 'sos', 'emergency',
         'උදව්', 'උදව්වක්', 'උදවු', 'උදවු කරන්න', 'උදව් කරන්න', 'උදව්ව', 'උදව්ක්', 'උද'
       ],
       'sinhala_anathurak_': [
-        'anathurak', 'anatura', 'anathura', 'anathurai', 'anaturak', 'danger', 'anaturai', 'anathurac',
+        'anathurak', 'anatura', 'anathura', 'anathurai', 'anaturak', 'danger', 'anaturai', 'anathurac', 'accident', 'warning',
         'අනතුරක්', 'අනතුර', 'අනතුරයි'
       ],
       'sinhala_beraganna_': [
-        'beraganna', 'beeraganna', 'bcraganna', 'pera', 'beera', 'beragan', 'save', 'beragannako', 'berannako',
+        'beraganna', 'beeraganna', 'bcraganna', 'pera', 'beera', 'beragan', 'save', 'beragannako', 'berannako', 'save me', 'rescue',
         'බේරාගන්න', 'බේරගන්න', 'බේරා', 'බේර', 'බේරන්න', 'බේරාගන්නකෝ', 'බේරගන්නකෝ'
       ],
       'sinhala_ginnak_': [
-        'ginnak', 'ginna', 'ginnaki', 'ginnac', 'fire', 'gina', 'ginak',
+        'ginnak', 'ginna', 'ginnaki', 'ginnac', 'fire', 'gina', 'ginak', 'firefire', 'burning',
         'ගින්නක්', 'ගින්න', 'ගිනි', 'ගිණි'
       ],
       'sinhala_karadarayak_': [
-        'karadarayak', 'karadara', 'karadarai', 'karadarayac', 'trouble', 'karadarak',
+        'karadarayak', 'karadara', 'karadarai', 'karadarayac', 'trouble', 'karadarak', 'problem', 'distress',
         'කරදරයක්', 'කරදර', 'කරදරයි', 'කරදරේ'
       ],
       'sinhala_balagena_': [
-        'balagena', 'balagenna', 'balaagena', 'balaganna', 'balang', 'watch', 'lookout', 'balan',
+        'balagena', 'balagenna', 'balaagena', 'balaganna', 'balang', 'watch', 'lookout', 'balan', 'watch out', 'look out', 'caution',
         'බලාගෙන', 'බලන්', 'බලාගෙනම', 'බලන්න'
       ],
       'sinhala_ehata_wenna_': [
-        'ehata', 'wenna', 'ehatawenna', 'move', 'ehata wenna',
+        'ehata', 'wenna', 'ehatawenna', 'move', 'ehata wenna', 'move away', 'step back', 'get away',
         'එහාට', 'වෙන්න', 'එහාටවෙන්න', 'එහාට වෙන්න'
       ],
       'sinhala_parissamin_': [
-        'parissamin', 'parisamin', 'parissamen', 'parisamen', 'parissam', 'parisam', 'careful',
+        'parissamin', 'parisamin', 'parissamen', 'parisamen', 'parissam', 'parisam', 'careful', 'parissamen', 'be careful', 'safe', 'take care',
         'පරිස්සමින්', 'පරිස්සමෙන්', 'පරිසමින්', 'පරිස්සම්'
       ],
     };
