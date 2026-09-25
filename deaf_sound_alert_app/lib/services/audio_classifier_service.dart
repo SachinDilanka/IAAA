@@ -390,8 +390,8 @@ class AudioClassifierService {
     final now = DateTime.now();
     final nowMs = now.millisecondsSinceEpoch;
 
-    // Wait 500ms after mic start to stabilize audio stream
-    if (nowMs - _listeningStartTimeMs < 500) return;
+    // Wait 1000ms after mic start to stabilize audio stream
+    if (nowMs - _listeningStartTimeMs < 1000) return;
 
     final List<double> window1s = List<double>.filled(16000, 0.0);
     double winMaxAmp = 0.0;
@@ -402,8 +402,8 @@ class AudioClassifierService {
       if (absV > winMaxAmp) winMaxAmp = absV;
     }
 
-    // Reject distorted hardware clipping (> 0.98) or silent background noise (< 0.004)
-    if (winMaxAmp > 0.98 || winMaxAmp < 0.004) return;
+    // Reject distorted hardware clipping (> 0.98) or silent background noise (< 0.008)
+    if (winMaxAmp > 0.98 || winMaxAmp < 0.008) return;
 
     final prediction = _neuralClassifier.predict(window1s);
     if (prediction == null) return;
@@ -427,8 +427,8 @@ class AudioClassifierService {
       }
     }
 
-    // If a Sinhala emergency keyword is detected with probability >= 0.15, trigger keyword alert card!
-    if (bestKeywordKey != null && (bestKeywordProb >= 0.15 || sumKeywordProb >= 0.20)) {
+    // If a Sinhala emergency keyword is detected with strong acoustic confidence (prob >= 0.55), trigger keyword alert card!
+    if (bestKeywordKey != null && (bestKeywordProb >= 0.55 || sumKeywordProb >= 0.65)) {
       final lastTime = _lastKeywordTriggerTimes[bestKeywordKey];
       if (lastTime == null || now.difference(lastTime).inMilliseconds > 2000) {
         _lastKeywordTriggerTimes[bestKeywordKey] = now;
@@ -445,8 +445,8 @@ class AudioClassifierService {
     }
 
     // 2. Environmental Emergency Sound Classification (Baby Crying, Dog Barking, Ambulance Siren, Vehicle Horns)
-    // 1000ms cooldown between global alerts
-    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 1000) {
+    // 1200ms cooldown between global alerts
+    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 1200) {
       return;
     }
 
@@ -466,8 +466,8 @@ class AudioClassifierService {
     double secondBest = top5.length > 1 ? top5[1] : 0.0;
     double margin = prob - secondBest;
 
-    // Environmental sound detection thresholds
-    if (prob >= 0.65 && margin >= 0.12 && rms >= 0.015 && winMaxAmp >= 0.05) {
+    // Environmental sound detection thresholds for Dog Barking, Vehicle Horns, Baby Crying, Ambulance Siren
+    if (prob >= 0.75 && margin >= 0.20 && rms >= 0.035 && winMaxAmp >= 0.10) {
       _lastGlobalAlertTime = now;
       _classCooldown[soundKey] = now;
 
