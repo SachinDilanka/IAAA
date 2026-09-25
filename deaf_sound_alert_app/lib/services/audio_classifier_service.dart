@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:audio_streamer/audio_streamer.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
@@ -161,6 +160,10 @@ class AudioClassifierService {
           },
           onSoundLevelChange: (level) {
             if (!_isListening) return;
+            // Update speech time when input audio level indicates speech activity (> -35.0 dB)
+            if (level > -35.0) {
+              _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
+            }
             double norm = ((level + 40.0) / 50.0).clamp(0.08, 1.0);
             final math.Random rand = math.Random();
             final List<double> waveform = List.generate(40, (i) {
@@ -387,33 +390,22 @@ class AudioClassifierService {
     double margin = prob - secondBest;
 
     // CATEGORY A: Sinhala Voice Emergency Keyword Detection (Udaw, Beraganna, Ginnak, Anathurak, Karadarayak, Balaagena, Ehata Wenna, Parissamin)
+    // Speech-To-Text (STT) engine in _processSpeechText handles 100% of Sinhala speech recognition & keyword matching.
+    // Offline neural classifier bypasses sinhala_ keys to prevent raw voice audio false-positives!
     if (soundKey.startsWith('sinhala_')) {
-      // Require moderate confidence >= 0.45, margin >= 0.08, energy rms >= 0.020 (detects near or far!)
-      if (prob >= 0.45 && margin >= 0.08 && rms >= 0.020) {
-        _lastSpeechTimeMs = nowMs;
-        _lastGlobalAlertTime = now;
-        _classCooldown[soundKey] = now;
-
-        // Display detected Sinhala keyword clearly in the live transcript box
-        if (_displayNames.containsKey(soundKey)) {
-          _transcriptController.add(_displayNames[soundKey]!);
-        }
-
-        simulateSoundDetection(soundKey, confidence: prob);
-      }
+      return;
     }
+
     // CATEGORY B: Environmental Emergency Sound Detection (Baby Crying, Dog Barking, Ambulance Siren, Vehicle Horns)
-    else {
-      // CRITICAL: Suppress environmental sound classification if human voice / speech was active within last 2500ms!
-      if (nowMs - _lastSpeechTimeMs < 2500) return;
+    // CRITICAL: Suppress environmental sound classification if human voice / speech was active within last 3500ms!
+    if (nowMs - _lastSpeechTimeMs < 3500) return;
 
-      // Require strong acoustic energy surge (rms >= 0.040, winMaxAmp >= 0.14) and high confidence (prob >= 0.82, margin >= 0.25)
-      if (prob >= 0.82 && margin >= 0.25 && rms >= 0.040 && winMaxAmp >= 0.14) {
-        _lastGlobalAlertTime = now;
-        _classCooldown[soundKey] = now;
+    // Environmental sounds require strong acoustic energy surge (rms >= 0.045, winMaxAmp >= 0.15) and high confidence (prob >= 0.85, margin >= 0.28)
+    if (prob >= 0.85 && margin >= 0.28 && rms >= 0.045 && winMaxAmp >= 0.15) {
+      _lastGlobalAlertTime = now;
+      _classCooldown[soundKey] = now;
 
-        simulateSoundDetection(soundKey, confidence: prob);
-      }
+      simulateSoundDetection(soundKey, confidence: prob);
     }
   }
 
@@ -474,6 +466,9 @@ class AudioClassifierService {
         if (lastTime == null || now.difference(lastTime).inMilliseconds > 1000) {
           _lastKeywordTriggerTimes[key] = now;
           _lastGlobalAlertTime = now;
+          if (_displayNames.containsKey(key)) {
+            _transcriptController.add(_displayNames[key]!);
+          }
           simulateSoundDetection(key, confidence: 0.98);
         }
       }
