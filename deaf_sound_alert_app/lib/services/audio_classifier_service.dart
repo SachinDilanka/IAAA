@@ -357,6 +357,11 @@ class AudioClassifierService {
     final now = DateTime.now();
     final nowMs = now.millisecondsSinceEpoch;
 
+    // Track audio sound/speech activity timestamp continuously to block environmental false alarms
+    if (rms > 0.008) {
+      _lastSpeechTimeMs = nowMs;
+    }
+
     // 1000ms Cooldown lockout per sound burst to prevent duplicate sound popups
     if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 1000) {
       return;
@@ -378,17 +383,15 @@ class AudioClassifierService {
     if (prediction == null) return;
 
     // CATEGORY A: Sinhala Voice Emergency Keyword Detection (Udaw, Beraganna, Ginnak, Anathurak, Karadarayak, Balaagena, Ehata Wenna, Parissamin)
-    // Scan all top predictions for Sinhala keywords with high sensitivity (prob >= 0.12 & rms >= 0.005)
+    // Scan all top predictions for Sinhala keywords with high sensitivity (prob >= 0.15 & rms >= 0.005)
     for (var entry in prediction.top5Probabilities.entries) {
       String label = entry.key;
       double p = entry.value;
       String? key = _labelToSoundKey[label];
 
       if (key != null && key.startsWith('sinhala_')) {
-        _lastSpeechTimeMs = nowMs;
-
         // High sensitivity so faint, near, or far speech is detected instantly
-        if (p >= 0.12 && rms >= 0.005) {
+        if (p >= 0.15 && rms >= 0.005) {
           _lastGlobalAlertTime = now;
           _classCooldown[key] = now;
 
@@ -404,8 +407,8 @@ class AudioClassifierService {
     }
 
     // CATEGORY B: Environmental Emergency Sound Detection (Baby Crying, Dog Barking, Ambulance Siren, Vehicle Horns)
-    // CRITICAL: Suppress environmental sound classification if human voice / speech was active within last 3000ms!
-    if (nowMs - _lastSpeechTimeMs < 3000) return;
+    // CRITICAL: Suppress environmental sound classification if human voice / speech was active within last 4000ms!
+    if (nowMs - _lastSpeechTimeMs < 4000) return;
 
     String topLabel = prediction.label;
     String? soundKey = _labelToSoundKey[topLabel];
@@ -419,8 +422,8 @@ class AudioClassifierService {
     double secondBest = top5.length > 1 ? top5[1] : 0.0;
     double margin = prob - secondBest;
 
-    // Environmental sounds require strong acoustic energy surge (rms >= 0.045, winMaxAmp >= 0.15) and high confidence (prob >= 0.85, margin >= 0.28)
-    if (prob >= 0.85 && margin >= 0.28 && rms >= 0.045 && winMaxAmp >= 0.15) {
+    // Environmental sounds require strong acoustic energy surge (rms >= 0.075, winMaxAmp >= 0.22) and ultra-high confidence (prob >= 0.94, margin >= 0.35)
+    if (prob >= 0.94 && margin >= 0.35 && rms >= 0.075 && winMaxAmp >= 0.22) {
       _lastGlobalAlertTime = now;
       _classCooldown[soundKey] = now;
 
