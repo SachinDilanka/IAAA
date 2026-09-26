@@ -445,17 +445,15 @@ class AudioClassifierService {
       return; // Early return for voice keywords
     }
 
-    // 2. Environmental Emergency Sound Classification (Baby Crying, Dog Barking, Ambulance Siren, Vehicle Horns)
-    // Suppress environmental sound classification IF human speech/keyword occurred within last 4000ms
-    if (nowMs - _lastSpeechTimeMs < 4000) return;
+    // 2. Environmental Emergency Sound Classification (Baby Crying, Dog Barking, Ambulance Siren, Vehicle Horns, Traffic Noise)
+    // Suppress environmental sound classification IF human speech/keyword occurred within last 2500ms
+    if (nowMs - _lastSpeechTimeMs < 2500) return;
 
     String topLabel = prediction.label;
     String? soundKey = _labelToSoundKey[topLabel];
 
     if (soundKey == null ||
         soundKey.startsWith('sinhala_') ||
-        soundKey == 'traffic' ||
-        soundKey == 'road' ||
         topLabel == 'background_traffic') {
       return;
     }
@@ -465,8 +463,8 @@ class AudioClassifierService {
     double secondBest = top5.length > 1 ? top5[1] : 0.0;
     double margin = prob - secondBest;
 
-    // Environmental sound detection thresholds for Dog Barking, Vehicle Horns, Baby Crying, Ambulance Siren
-    if (prob >= 0.88 && margin >= 0.35 && rms >= 0.045 && winMaxAmp >= 0.18) {
+    // Environmental sound detection thresholds for Dog Barking, Vehicle Horns, Baby Crying, Ambulance Siren, Traffic Noise
+    if (prob >= 0.50 && margin >= 0.10 && rms >= 0.015 && winMaxAmp >= 0.05) {
       _lastGlobalAlertTime = now;
       _classCooldown[soundKey] = now;
 
