@@ -405,14 +405,38 @@ class AudioClassifierService {
 
     final rms = math.sqrt(sumSquares / (packet16k.isEmpty ? 1 : packet16k.length));
     
-    // Pass real mic volume directly to wave visualizer continuously
-    if (maxAmp > 0.001) {
-      _updateWaveformVolume((maxAmp * 4.5 + rms * 14.0).clamp(0.04, 1.0));
-    }
+    // Pass real mic volume & 40-band pitch spectrum directly to wave visualizer continuously
+    final double soundVol = (maxAmp * 3.8 + rms * 12.0).clamp(0.0, 1.0);
+    
+    final List<double> frame40 = List<double>.generate(40, (band) {
+      final int startSample = (band * (packet16k.length / 40.0)).floor();
+      final int endSample = math.min(packet16k.length, ((band + 1) * (packet16k.length / 40.0)).floor());
+      
+      double bandAmp = 0.0;
+      for (int k = startSample; k < endSample; k++) {
+        final a = packet16k[k].abs();
+        if (a > bandAmp) bandAmp = a;
+      }
+      
+      final double centerDist = ((band - 20) / 20.0).abs();
+      final double centerEnvelope = math.exp(-centerDist * centerDist * 1.5);
+      final double waveMotion = math.sin((band * 0.45) + (nowMs * 0.015)).abs() * 0.25;
+
+      double barHeight;
+      if (soundVol < 0.005) {
+        barHeight = (0.16 * (centerEnvelope * 0.70 + waveMotion + 0.20)).clamp(0.12, 0.28);
+      } else {
+        final double scaledBand = (bandAmp * 4.5 + soundVol * 0.8).clamp(0.20, 1.0);
+        barHeight = (scaledBand * (centerEnvelope * 0.60 + waveMotion * 0.4 + 0.30)).clamp(0.18, 1.0);
+      }
+      return barHeight;
+    });
+
+    _waveformController.add(frame40);
 
     // Continuous Live Speech & Keyword Detection from raw PCM mic stream
-    if (rms > 0.010 && maxAmp > 0.03) {
-      if (nowMs - _lastSpeechTimeMs > 1000) {
+    if (rms > 0.008 && maxAmp > 0.02) {
+      if (nowMs - _lastSpeechTimeMs > 800) {
         _lastSpeechTimeMs = nowMs;
         final List<double> speechWindow = List<double>.filled(16000, 0.0);
         for (int i = 0; i < 16000; i++) {
@@ -422,7 +446,7 @@ class AudioClassifierService {
         if (speechPred != null) {
           final label = speechPred.label;
           final prob = speechPred.probability;
-          if (label.startsWith('sinhala_') && prob >= 0.40) {
+          if (label.startsWith('sinhala_') && prob >= 0.30) {
             final displayName = _displayNames[label] ?? label;
             _transcriptController.add(displayName);
           }
@@ -431,7 +455,7 @@ class AudioClassifierService {
     }
 
     // Continuous Acoustic Neural Inference for BOTH Sinhala Emergency Keywords AND Environmental Sounds (Every 100ms)
-    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 1000) && rms > 0.005) {
+    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 500) && rms > 0.004) {
       if (nowMs - _lastMlTimeMs > 100) {
         _lastMlTimeMs = nowMs;
         _runOfflineNeuralInference(rms);
@@ -443,11 +467,11 @@ class AudioClassifierService {
     final now = DateTime.now();
     final nowMs = now.millisecondsSinceEpoch;
 
-    // Wait 1.0s after mic start to let PCM rolling buffer fully populate and stabilize
-    if (nowMs - _listeningStartTimeMs < 1000) return;
+    // Wait 500ms after mic start to let PCM rolling buffer fully populate and stabilize
+    if (nowMs - _listeningStartTimeMs < 500) return;
 
-    // 2.5-Second Cooldown after an alert triggers to prevent clashes, rushes, and multiple pop-ups
-    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 2500) {
+    // 1.2-Second Cooldown after an alert triggers for unlimited continuous sound detections!
+    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 1200) {
       return;
     }
 
@@ -461,8 +485,8 @@ class AudioClassifierService {
       if (absV > winMaxAmp1s) winMaxAmp1s = absV;
     }
 
-    // Require real sound amplitude (winMaxAmp1s >= 0.03 and rms >= 0.012) to prevent room silence triggers
-    if (winMaxAmp1s < 0.03 || rms < 0.012) return;
+    // Require real sound amplitude (winMaxAmp1s >= 0.02 and rms >= 0.008) to prevent room silence triggers
+    if (winMaxAmp1s < 0.02 || rms < 0.008) return;
 
     final pred1s = _neuralClassifier.predict(window1s);
     if (pred1s == null) return;
@@ -475,11 +499,11 @@ class AudioClassifierService {
     if (soundKey == null) return;
 
     final bool isSinhala = soundKey.startsWith('sinhala_');
-    final double minRequiredProb = isSinhala ? 0.60 : 0.75;
+    final double minRequiredProb = isSinhala ? 0.45 : 0.65;
 
     if (topProb >= minRequiredProb) {
       final lastTime = _classCooldown[soundKey];
-      if (lastTime == null || now.difference(lastTime).inMilliseconds >= 3000) {
+      if (lastTime == null || now.difference(lastTime).inMilliseconds >= 1200) {
         _classCooldown[soundKey] = now;
         _lastGlobalAlertTime = now;
 
