@@ -432,19 +432,15 @@ class AudioClassifierService {
       }
     }
 
-    // If a Sinhala emergency keyword is detected with strong acoustic confidence (prob >= 0.70), trigger keyword alert card!
-    if (bestKeywordKey != null && (bestKeywordProb >= 0.70 || sumKeywordProb >= 0.80)) {
+    // If a Sinhala emergency keyword is detected with strong acoustic confidence (prob >= 0.80), trigger keyword alert card!
+    if (bestKeywordKey != null && (bestKeywordProb >= 0.80 || sumKeywordProb >= 0.88)) {
       final lastTime = _lastKeywordTriggerTimes[bestKeywordKey];
       if (lastTime == null || now.difference(lastTime).inMilliseconds > 2500) {
         _lastKeywordTriggerTimes[bestKeywordKey] = now;
         _lastGlobalAlertTime = now;
         _lastSpeechTimeMs = nowMs;
 
-        if (_displayNames.containsKey(bestKeywordKey)) {
-          _transcriptController.add(_displayNames[bestKeywordKey]!);
-        }
-
-        simulateSoundDetection(bestKeywordKey, confidence: math.max(bestKeywordProb, 0.92));
+        simulateSoundDetection(bestKeywordKey, confidence: math.max(bestKeywordProb, 0.95));
       }
       return; // Early return for voice keywords
     }
@@ -470,7 +466,7 @@ class AudioClassifierService {
     double margin = prob - secondBest;
 
     // Environmental sound detection thresholds for Dog Barking, Vehicle Horns, Baby Crying, Ambulance Siren
-    if (prob >= 0.85 && margin >= 0.30 && rms >= 0.040 && winMaxAmp >= 0.15) {
+    if (prob >= 0.88 && margin >= 0.35 && rms >= 0.045 && winMaxAmp >= 0.18) {
       _lastGlobalAlertTime = now;
       _classCooldown[soundKey] = now;
 
@@ -548,9 +544,6 @@ class AudioClassifierService {
       if (lastTime == null || now.difference(lastTime).inMilliseconds > 1500) {
         _lastKeywordTriggerTimes[matchedKey!] = now;
         _lastGlobalAlertTime = now;
-        if (_displayNames.containsKey(matchedKey)) {
-          _transcriptController.add(_displayNames[matchedKey]!);
-        }
         simulateSoundDetection(matchedKey!, confidence: 0.98);
       }
     }
