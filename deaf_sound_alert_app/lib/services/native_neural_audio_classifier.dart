@@ -319,11 +319,27 @@ class NativeNeuralAudioClassifier {
     double bestP = 0.0;
     final List<MapEntry<String, double>> entries = [];
 
+    const speechClasses = {
+      'udaw', 'beeraganna', 'ginnak', 'anathurak',
+      'karadarayak', 'balagena', 'parissamin', 'ehata_wenna'
+    };
+
     for (int j = 0; j < _classes.length; j++) {
       final String cls = _classes[j];
       final double pAvg = probsAvg[cls] ?? 0.0;
       final double pPeak = probsPeak[cls] ?? 0.0;
-      final double combinedP = math.max(pAvg, pPeak);
+
+      double combinedP;
+      if (speechClasses.contains(cls)) {
+        // Speech keywords are active transient utterances: evaluate peak active energy frames!
+        combinedP = pPeak;
+      } else if (cls == 'ambulance_siren') {
+        // Ambulance siren is continuous: evaluate full window average energy
+        combinedP = pAvg;
+      } else {
+        // Other transient environmental sounds (vehicle horn, dog bark, baby cry)
+        combinedP = pPeak * 0.75 + pAvg * 0.25;
+      }
 
       finalProbs[cls] = combinedP;
       entries.add(MapEntry(cls, combinedP));
