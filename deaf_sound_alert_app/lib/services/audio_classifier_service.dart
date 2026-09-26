@@ -148,6 +148,8 @@ class AudioClassifierService {
 
   void _safeListenSpeech() async {
     if (!_isListening || _isRestartingStt) return;
+    if (_speech.isListening) return; // Keep active speech recognition session running uninterrupted!
+
     _isRestartingStt = true;
 
     try {
@@ -256,9 +258,9 @@ class AudioClassifierService {
     // 2. Continuous Audio Streamer for PCM Acoustic Neural Inference
     _startAudioStreamer();
 
-    // 4. Heartbeat Watchdog to keep STT active continuously
+    // 3. Heartbeat Watchdog to keep STT active continuously
     _sttWatchdogTimer?.cancel();
-    _sttWatchdogTimer = Timer.periodic(const Duration(milliseconds: 1000), (_) {
+    _sttWatchdogTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       if (_isListening && !_speech.isListening && !_isRestartingStt) {
         _safeListenSpeech();
       }
@@ -415,7 +417,7 @@ class AudioClassifierService {
     _waveformController.add(List<double>.from(_visualizerBars));
 
     // Throttled single-pass Neural Inference for both Live Speech & Sound Alerts (Every 300ms)
-    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 500) && (rms > 0.002 || maxAmp > 0.008)) {
+    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 500) && (rms > 0.003 || maxAmp > 0.012)) {
       if (nowMs - _lastMlTimeMs >= 300) {
         _lastMlTimeMs = nowMs;
 
@@ -430,30 +432,31 @@ class AudioClassifierService {
           final topProb = pred.probability;
           final mappedKey = _labelToSoundKey[topLabel] ?? topLabel;
 
-          // 1. Live Sinhala Speech Transcription (Immediate stream to UI box)
-          String? sinhalaKey;
-          double sinhalaProb = 0.0;
-
-          // Check top 5 prediction probabilities for any Sinhala keyword
-          pred.top5Probabilities.forEach((label, prob) {
-            final key = _labelToSoundKey[label] ?? label;
-            if (key.startsWith('sinhala_') && prob > sinhalaProb) {
-              sinhalaProb = prob;
-              sinhalaKey = key;
-            }
-          });
-
-          if (sinhalaKey != null && sinhalaProb >= 0.08) {
-            final displayName = _displayNames[sinhalaKey] ?? sinhalaKey!;
-            _transcriptController.add(displayName);
-            simulateSoundDetection(sinhalaKey!, confidence: sinhalaProb);
-          } else if (mappedKey.startsWith('sinhala_')) {
+          if (mappedKey.startsWith('sinhala_')) {
+            // Spoken Sinhala Keyword detected as #1 top prediction!
             final displayName = _displayNames[mappedKey] ?? mappedKey;
             _transcriptController.add(displayName);
             simulateSoundDetection(mappedKey, confidence: topProb);
-          } else if (topProb >= 0.55 && mappedKey != 'road') {
-            // Environmental sound alert (Vehicle Horns, Ambulance Siren, Dog Barking, Baby Crying, Traffic)
-            simulateSoundDetection(mappedKey, confidence: topProb);
+          } else {
+            // Check top 5 for strong Sinhala speech match if top prediction was neutral noise
+            String? sinhalaKey;
+            double sinhalaProb = 0.0;
+            pred.top5Probabilities.forEach((label, prob) {
+              final key = _labelToSoundKey[label] ?? label;
+              if (key.startsWith('sinhala_') && prob > sinhalaProb) {
+                sinhalaProb = prob;
+                sinhalaKey = key;
+              }
+            });
+
+            if (sinhalaKey != null && sinhalaProb >= 0.22 && sinhalaProb >= (topProb * 0.5)) {
+              final displayName = _displayNames[sinhalaKey] ?? sinhalaKey!;
+              _transcriptController.add(displayName);
+              simulateSoundDetection(sinhalaKey!, confidence: sinhalaProb);
+            } else if (topProb >= 0.65 && mappedKey != 'road' && mappedKey != 'traffic') {
+              // High-confidence Environmental sound alert (Vehicle Horns, Ambulance Siren, Dog Barking, Baby Crying)
+              simulateSoundDetection(mappedKey, confidence: topProb);
+            }
           }
         }
       }
@@ -503,7 +506,7 @@ class AudioClassifierService {
 
     for (var entry in wordToSinhala.entries) {
       if (lower.contains(entry.key)) {
-        return '${entry.value} | $rawWords';
+        return entry.value;
       }
     }
 
