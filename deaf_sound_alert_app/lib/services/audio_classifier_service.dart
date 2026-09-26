@@ -397,7 +397,7 @@ class AudioClassifierService {
 
       double targetHeight;
       if (soundVol < 0.008) {
-        // Resting baseline: lively micro-bouncing waveform (0.12 - 0.30)
+        // Resting baseline: lively micro-bouncing waveform (0.12 - 0.32)
         targetHeight = (0.14 + centerEnvelope * 0.10 + ripple1 + ripple2).clamp(0.12, 0.32);
       } else {
         // Sound / Speech active: energetic response to mic volume and pitch
@@ -407,98 +407,56 @@ class AudioClassifierService {
       return targetHeight;
     });
 
-    // Apply smooth exponential moving average across frames for fluid bouncing motion
+    // Apply smooth exponential moving average across frames for fluid bouncing motion (0 Lag)
     for (int i = 0; i < 40; i++) {
       _visualizerBars[i] = _visualizerBars[i] * 0.50 + newFrame[i] * 0.50;
     }
 
     _waveformController.add(List<double>.from(_visualizerBars));
 
-    // Real-Time Speech & Sinhala Keyword Scanner (Every 200ms when audio input present)
-    if (rms > 0.002 || maxAmp > 0.008) {
-      if (nowMs - _lastSpeechTimeMs > 200) {
-        _lastSpeechTimeMs = nowMs;
-        final List<double> speechWindow = List<double>.filled(16000, 0.0);
-        for (int i = 0; i < 16000; i++) {
-          speechWindow[i] = _rollingBuf16k[(_rollingIdx - 16000 + i + 16000) % 16000];
-        }
-        final speechPred = _neuralClassifier.predict(speechWindow);
-        if (speechPred != null) {
-          String? detectedSinhalaKey;
-          double bestSinhalaProb = 0.0;
+    // Throttled single-pass Neural Inference for both Live Speech & Sound Alerts (Every 300ms)
+    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 500) && (rms > 0.002 || maxAmp > 0.008)) {
+      if (nowMs - _lastMlTimeMs >= 300) {
+        _lastMlTimeMs = nowMs;
 
-          // Scan top 5 probabilities for any spoken Sinhala emergency word
-          speechPred.top5Probabilities.forEach((clsLabel, p) {
-            final mapped = _labelToSoundKey[clsLabel] ?? clsLabel;
-            if (mapped.startsWith('sinhala_') && p > bestSinhalaProb) {
-              bestSinhalaProb = p;
-              detectedSinhalaKey = mapped;
+        final List<double> window1s = List<double>.filled(16000, 0.0);
+        for (int i = 0; i < 16000; i++) {
+          window1s[i] = _rollingBuf16k[(_rollingIdx - 16000 + i + 16000) % 16000];
+        }
+
+        final pred = _neuralClassifier.predict(window1s);
+        if (pred != null) {
+          final topLabel = pred.label;
+          final topProb = pred.probability;
+          final mappedKey = _labelToSoundKey[topLabel] ?? topLabel;
+
+          // 1. Live Sinhala Speech Transcription (Immediate stream to UI box)
+          String? sinhalaKey;
+          double sinhalaProb = 0.0;
+
+          // Check top 5 prediction probabilities for any Sinhala keyword
+          pred.top5Probabilities.forEach((label, prob) {
+            final key = _labelToSoundKey[label] ?? label;
+            if (key.startsWith('sinhala_') && prob > sinhalaProb) {
+              sinhalaProb = prob;
+              sinhalaKey = key;
             }
           });
 
-          if (detectedSinhalaKey != null && bestSinhalaProb >= 0.15) {
-            final displayName = _displayNames[detectedSinhalaKey] ?? detectedSinhalaKey!;
+          if (sinhalaKey != null && sinhalaProb >= 0.08) {
+            final displayName = _displayNames[sinhalaKey] ?? sinhalaKey!;
             _transcriptController.add(displayName);
-            simulateSoundDetection(detectedSinhalaKey!, confidence: bestSinhalaProb);
+            simulateSoundDetection(sinhalaKey!, confidence: sinhalaProb);
+          } else if (mappedKey.startsWith('sinhala_')) {
+            final displayName = _displayNames[mappedKey] ?? mappedKey;
+            _transcriptController.add(displayName);
+            simulateSoundDetection(mappedKey, confidence: topProb);
+          } else if (topProb >= 0.55 && mappedKey != 'road') {
+            // Environmental sound alert (Vehicle Horns, Ambulance Siren, Dog Barking, Baby Crying, Traffic)
+            simulateSoundDetection(mappedKey, confidence: topProb);
           }
         }
       }
-    }
-
-    // Continuous Acoustic Neural Inference for BOTH Sinhala Emergency Keywords AND Environmental Sounds (Every 100ms)
-    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 500) && rms > 0.003) {
-      if (nowMs - _lastMlTimeMs > 100) {
-        _lastMlTimeMs = nowMs;
-        _runOfflineNeuralInference(rms);
-      }
-    }
-  }
-
-  void _runOfflineNeuralInference(double rms) {
-    final now = DateTime.now();
-    final nowMs = now.millisecondsSinceEpoch;
-
-    // Wait 500ms after mic start to let PCM rolling buffer fully populate and stabilize
-    if (nowMs - _listeningStartTimeMs < 500) return;
-
-    // 1.0-Second Cooldown after an alert triggers for unlimited continuous sound detections!
-    if (_lastGlobalAlertTime != null && now.difference(_lastGlobalAlertTime!).inMilliseconds < 1000) {
-      return;
-    }
-
-    // 1.0s window (16,000 samples)
-    final List<double> window1s = List<double>.filled(16000, 0.0);
-    double winMaxAmp1s = 0.0;
-    for (int i = 0; i < 16000; i++) {
-      final val = _rollingBuf16k[(_rollingIdx - 16000 + i + 16000) % 16000];
-      window1s[i] = val;
-      final absV = val.abs();
-      if (absV > winMaxAmp1s) winMaxAmp1s = absV;
-    }
-
-    // Require real sound amplitude (winMaxAmp1s >= 0.015 and rms >= 0.005) to prevent room silence triggers
-    if (winMaxAmp1s < 0.015 || rms < 0.005) return;
-
-    final pred1s = _neuralClassifier.predict(window1s);
-    if (pred1s == null) return;
-
-    // Evaluate ONLY the single #1 winning prediction class (NO multiple pop-ups!)
-    final topLabel = pred1s.label;
-    final topProb = pred1s.probability;
-    final soundKey = _labelToSoundKey[topLabel];
-
-    if (soundKey == null) return;
-
-    final bool isSinhala = soundKey.startsWith('sinhala_');
-    final double minRequiredProb = isSinhala ? 0.30 : 0.60;
-
-    if (topProb >= minRequiredProb) {
-      if (isSinhala) {
-        final displayName = _displayNames[soundKey] ?? soundKey;
-        _transcriptController.add(displayName);
-      }
-
-      simulateSoundDetection(soundKey, confidence: topProb);
     }
   }
 
