@@ -375,7 +375,8 @@ class AudioClassifierService {
     final rms = math.sqrt(sumSquares / (packet16k.isEmpty ? 1 : packet16k.length));
     
     // Pass real mic volume & 40-band pitch spectrum directly to wave visualizer continuously
-    final double soundVol = (maxAmp * 3.5 + rms * 10.0).clamp(0.0, 1.0);
+    final double soundVol = (maxAmp * 4.0 + rms * 12.0).clamp(0.0, 1.0);
+    final double nowSec = nowMs / 1000.0;
     
     final List<double> newFrame = List<double>.generate(40, (band) {
       final int startSample = (band * (packet16k.length / 40.0)).floor();
@@ -388,30 +389,34 @@ class AudioClassifierService {
       }
       
       final double centerDist = ((band - 20) / 20.0).abs();
-      final double centerEnvelope = math.exp(-centerDist * centerDist * 1.8);
+      final double centerEnvelope = math.exp(-centerDist * centerDist * 1.2);
+
+      // Organic dynamic micro-waves so visualizer baseline is alive and NEVER freezes into a static shape!
+      final double ripple1 = math.sin(band * 0.40 + nowSec * 4.0).abs() * 0.08;
+      final double ripple2 = math.cos(band * 0.70 - nowSec * 5.5).abs() * 0.06;
 
       double targetHeight;
       if (soundVol < 0.008) {
-        // Quiet / Resting baseline: smooth parabolic curve without artificial waving!
-        targetHeight = (0.12 + centerEnvelope * 0.08).clamp(0.12, 0.20);
+        // Resting baseline: lively micro-bouncing waveform (0.12 - 0.30)
+        targetHeight = (0.14 + centerEnvelope * 0.10 + ripple1 + ripple2).clamp(0.12, 0.32);
       } else {
-        // Sound / Speech active: scale proportionally with real pitch & volume
-        final double scaledBand = (bandAmp * 4.0 + soundVol * 0.7).clamp(0.18, 1.0);
-        targetHeight = (scaledBand * (centerEnvelope * 0.70 + 0.30)).clamp(0.18, 1.0);
+        // Sound / Speech active: energetic response to mic volume and pitch
+        final double scaledBand = (bandAmp * 5.0 + soundVol * 0.8).clamp(0.20, 1.0);
+        targetHeight = (scaledBand * (centerEnvelope * 0.65 + ripple1 * 0.5 + 0.30)).clamp(0.18, 1.0);
       }
       return targetHeight;
     });
 
-    // Apply smooth exponential moving average across frames (prevents sudden jumping/waving)
+    // Apply smooth exponential moving average across frames for fluid bouncing motion
     for (int i = 0; i < 40; i++) {
-      _visualizerBars[i] = _visualizerBars[i] * 0.60 + newFrame[i] * 0.40;
+      _visualizerBars[i] = _visualizerBars[i] * 0.50 + newFrame[i] * 0.50;
     }
 
     _waveformController.add(List<double>.from(_visualizerBars));
 
-    // Continuous Live Speech & Sinhala Keyword Detection from raw PCM mic stream
-    if (rms > 0.003 && maxAmp > 0.012) {
-      if (nowMs - _lastSpeechTimeMs > 600) {
+    // Real-Time Speech & Sinhala Keyword Scanner (Every 200ms when audio input present)
+    if (rms > 0.002 || maxAmp > 0.008) {
+      if (nowMs - _lastSpeechTimeMs > 200) {
         _lastSpeechTimeMs = nowMs;
         final List<double> speechWindow = List<double>.filled(16000, 0.0);
         for (int i = 0; i < 16000; i++) {
@@ -419,20 +424,22 @@ class AudioClassifierService {
         }
         final speechPred = _neuralClassifier.predict(speechWindow);
         if (speechPred != null) {
-          final label = speechPred.label;
-          final prob = speechPred.probability;
-          final mappedKey = _labelToSoundKey[label] ?? label;
-          if (mappedKey.startsWith('sinhala_') && prob >= 0.25) {
-            final displayName = _displayNames[mappedKey] ?? mappedKey;
-            _transcriptController.add(displayName);
+          String? detectedSinhalaKey;
+          double bestSinhalaProb = 0.0;
 
-            final lastTime = _classCooldown[mappedKey];
-            final now = DateTime.now();
-            if (lastTime == null || now.difference(lastTime).inMilliseconds >= 1000) {
-              _classCooldown[mappedKey] = now;
-              _lastGlobalAlertTime = now;
-              simulateSoundDetection(mappedKey, confidence: prob);
+          // Scan top 5 probabilities for any spoken Sinhala emergency word
+          speechPred.top5Probabilities.forEach((clsLabel, p) {
+            final mapped = _labelToSoundKey[clsLabel] ?? clsLabel;
+            if (mapped.startsWith('sinhala_') && p > bestSinhalaProb) {
+              bestSinhalaProb = p;
+              detectedSinhalaKey = mapped;
             }
+          });
+
+          if (detectedSinhalaKey != null && bestSinhalaProb >= 0.15) {
+            final displayName = _displayNames[detectedSinhalaKey] ?? detectedSinhalaKey!;
+            _transcriptController.add(displayName);
+            simulateSoundDetection(detectedSinhalaKey!, confidence: bestSinhalaProb);
           }
         }
       }
@@ -486,18 +493,12 @@ class AudioClassifierService {
     final double minRequiredProb = isSinhala ? 0.30 : 0.60;
 
     if (topProb >= minRequiredProb) {
-      final lastTime = _classCooldown[soundKey];
-      if (lastTime == null || now.difference(lastTime).inMilliseconds >= 1000) {
-        _classCooldown[soundKey] = now;
-        _lastGlobalAlertTime = now;
-
-        if (isSinhala) {
-          final displayName = _displayNames[soundKey] ?? soundKey;
-          _transcriptController.add(displayName);
-        }
-
-        simulateSoundDetection(soundKey, confidence: topProb);
+      if (isSinhala) {
+        final displayName = _displayNames[soundKey] ?? soundKey;
+        _transcriptController.add(displayName);
       }
+
+      simulateSoundDetection(soundKey, confidence: topProb);
     }
   }
 
@@ -646,18 +647,36 @@ class AudioClassifierService {
     } catch (_) {}
   }
 
+  DateTime? _lastEmittedAlertTime;
+  String? _lastEmittedSoundKey;
+
   Future<void> simulateSoundDetection(String soundKey, {double confidence = 0.92}) async {
+    final now = DateTime.now();
+
+    // 1. Strict 2.5-second global cooldown to prevent 4-5 pop-up alert cards!
+    if (_lastEmittedAlertTime != null && now.difference(_lastEmittedAlertTime!).inMilliseconds < 2500) {
+      return;
+    }
+
+    // 2. Strict 4.0-second cooldown for duplicate identical sound alerts
+    if (_lastEmittedSoundKey == soundKey && _lastEmittedAlertTime != null && now.difference(_lastEmittedAlertTime!).inMilliseconds < 4000) {
+      return;
+    }
+
     final soundConfig = SoundConfigService().getConfig(soundKey);
     if (soundConfig == null || !soundConfig.isEnabled) return;
 
+    _lastEmittedAlertTime = now;
+    _lastEmittedSoundKey = soundKey;
+
     final event = DetectedSound(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: now.millisecondsSinceEpoch.toString(),
       soundKey: soundConfig.key,
       soundName: soundConfig.name,
       category: soundConfig.category,
       priority: soundConfig.priority,
       confidence: confidence,
-      timestamp: DateTime.now(),
+      timestamp: now,
     );
 
     // Save log
@@ -669,7 +688,7 @@ class AudioClassifierService {
     // Send Alert Push Notification to Android Phone & Smartwatch Yesido IO 39
     await SmartwatchService().sendAlertToWatch(event);
 
-    // Emit event to UI
+    // Emit single event to UI
     _controller.add(event);
   }
 
