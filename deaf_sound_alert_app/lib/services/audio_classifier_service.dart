@@ -136,11 +136,11 @@ class AudioClassifierService {
   bool _isRestartingStt = false;
 
   void _updateWaveformVolume(double newVol) {
-    final double targetVol = newVol.clamp(0.04, 1.0);
+    final double targetVol = newVol.clamp(0.18, 1.0);
     if (targetVol > _latestSoundVolume) {
       _latestSoundVolume = targetVol;
     } else {
-      _latestSoundVolume = (_latestSoundVolume * 0.65 + targetVol * 0.35).clamp(0.04, 1.0);
+      _latestSoundVolume = (_latestSoundVolume * 0.65 + targetVol * 0.35).clamp(0.18, 1.0);
     }
   }
 
@@ -152,17 +152,21 @@ class AudioClassifierService {
       final nowMs = DateTime.now().millisecondsSinceEpoch;
       final math.Random rand = math.Random();
 
-      // Smooth decay when quiet so bars drop naturally, but respond INSTANTLY to any sound!
-      _latestSoundVolume = (_latestSoundVolume * 0.86 + 0.04 * 0.14).clamp(0.04, 1.0);
+      // Smooth decay towards active baseline (0.18) so bars NEVER flatten into a single line!
+      if (_latestSoundVolume > 0.18) {
+        _latestSoundVolume = (_latestSoundVolume * 0.88).clamp(0.18, 1.0);
+      } else {
+        _latestSoundVolume = (_latestSoundVolume * 0.95 + 0.18 * 0.05).clamp(0.18, 1.0);
+      }
 
       final List<double> frame = List<double>.generate(40, (i) {
         final double centerDist = ((i - 20) / 20.0).abs();
-        final double centerEnvelope = math.exp(-centerDist * centerDist * 1.8);
+        final double centerEnvelope = math.exp(-centerDist * centerDist * 1.5);
         final double waveMotion = math.sin((i * 0.45) + (nowMs * 0.018)).abs() * 0.40;
         final double barRhythm = math.cos((i * 0.75) - (nowMs * 0.025)).abs() * 0.30;
         final double noise = (rand.nextDouble() - 0.5) * 0.10;
 
-        final double height = (_latestSoundVolume * (centerEnvelope * 0.70 + waveMotion * 0.25 + barRhythm * 0.20 + noise)).clamp(0.03, 1.0);
+        final double height = (_latestSoundVolume * (centerEnvelope * 0.70 + waveMotion * 0.25 + barRhythm * 0.20 + noise)).clamp(0.12, 1.0);
         return height;
       });
 
@@ -181,31 +185,22 @@ class AudioClassifierService {
       await _speech.cancel();
     } catch (_) {}
 
-    await Future.delayed(const Duration(milliseconds: 250));
+    await Future.delayed(const Duration(milliseconds: 150));
     if (!_isListening) {
       _isRestartingStt = false;
       return;
     }
 
-    if (!_speechAvailable) {
-      try {
-        _speechAvailable = await _speech.initialize(
-          onError: (val) => _onSpeechError(val.errorMsg),
-          onStatus: (val) {
-            if ((val == 'done' || val == 'notListening') && _isListening) {
-              _onSpeechDone();
-            }
-          },
-        );
-        if (_speechAvailable) {
-          _selectedLocaleId ??= 'si_LK';
-        }
-      } catch (_) {
-        _speechAvailable = false;
-        _isRestartingStt = false;
-        return;
-      }
-    }
+    try {
+      _speechAvailable = await _speech.initialize(
+        onError: (val) => _onSpeechError(val.errorMsg),
+        onStatus: (val) {
+          if ((val == 'done' || val == 'notListening') && _isListening) {
+            _onSpeechDone();
+          }
+        },
+      );
+    } catch (_) {}
 
     try {
       final String? targetLocale = (_selectedLocaleId != null && _selectedLocaleId!.isNotEmpty) ? _selectedLocaleId : null;
@@ -222,14 +217,14 @@ class AudioClassifierService {
         },
         onSoundLevelChange: (level) {
           if (!_isListening) return;
-          double soundVol = (0.2 + (level.clamp(-2.0, 10.0) / 10.0)).clamp(0.1, 1.0);
+          double soundVol = (0.25 + (level.clamp(-2.0, 10.0) / 10.0)).clamp(0.18, 1.0);
           _updateWaveformVolume(soundVol);
         },
         listenOptions: stt.SpeechListenOptions(
           listenMode: stt.ListenMode.dictation,
           partialResults: true,
           cancelOnError: false,
-          pauseFor: const Duration(seconds: 4),
+          pauseFor: const Duration(seconds: 5),
           listenFor: const Duration(hours: 1),
         ),
         localeId: targetLocale,
