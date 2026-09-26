@@ -16,7 +16,7 @@ class ModelPrediction {
   });
 }
 
-/// Pure Dart offline Deep Neural Network Audio Classifier (identical to Web audio_recognizer.js)
+/// Pure Dart offline Deep Neural Network Audio Classifier
 class NativeNeuralAudioClassifier {
   static final NativeNeuralAudioClassifier _instance = NativeNeuralAudioClassifier._internal();
   factory NativeNeuralAudioClassifier() => _instance;
@@ -47,7 +47,6 @@ class NativeNeuralAudioClassifier {
     if (_isLoaded) return true;
 
     try {
-      // 1. Load DSP Constants (Hann, Mel Basis, DCT Basis)
       final dspString = await rootBundle.loadString('assets/models/dsp_constants.json');
       final dspJson = jsonDecode(dspString) as Map<String, dynamic>;
 
@@ -59,7 +58,6 @@ class NativeNeuralAudioClassifier {
           .map((row) => (row as List).map((e) => (e as num).toDouble()).toList())
           .toList();
 
-      // 2. Load Deep Neural Net Weights & Normalization Parameters
       final modelString = await rootBundle.loadString('assets/models/sound_model_data.json');
       final modelJson = jsonDecode(modelString) as Map<String, dynamic>;
 
@@ -99,7 +97,6 @@ class NativeNeuralAudioClassifier {
     }
   }
 
-  /// Run 2048-point RFFT matching the web audio_recognizer.js
   List<double> _rfft2048(List<double> signal) {
     const int N = 2048;
     final List<double> re = List<double>.filled(N, 0.0);
@@ -143,106 +140,7 @@ class NativeNeuralAudioClassifier {
     return spec;
   }
 
-  /// Resample arbitrary PCM audio stream to exact 16,000 Hz 1-second buffer
-  List<double> resampleTo16k(List<double> input, int sampleRate) {
-    if (sampleRate == 16000 && input.length >= 16000) {
-      return input.sublist(0, 16000);
-    }
-    final List<double> out = List<double>.filled(16000, 0.0);
-    final double step = input.length / 16000.0;
-    for (int i = 0; i < 16000; i++) {
-      final int startIdx = (i * step).floor();
-      final int endIdx = math.min(input.length, ((i + 1) * step).floor());
-      double sum = 0;
-      int count = 0;
-      for (int j = startIdx; j < endIdx; j++) {
-        sum += input[j];
-        count++;
-      }
-      out[i] = count > 0 ? (sum / count) : input[startIdx.clamp(0, input.length - 1)];
-    }
-    return out;
-  }
-
-  /// Classify 1-second 16kHz audio buffer using exact Deep Neural Net architecture
-  ModelPrediction? predict(List<double> raw16k) {
-    if (!_isLoaded || raw16k.isEmpty) return null;
-
-    List<double> sig = List<double>.from(raw16k);
-    if (sig.length > 16000) {
-      sig = sig.sublist(0, 16000);
-    } else if (sig.length < 16000) {
-      sig.addAll(List<double>.filled(16000 - sig.length, 0.0));
-    }
-
-    // Reflect-pad 1024 on each side
-    final List<double> pad = List<double>.filled(sig.length + 2048, 0.0);
-    for (int i = 0; i < 1024; i++) {
-      pad[i] = sig[1024 - i];
-    }
-    for (int i = 0; i < sig.length; i++) {
-      pad[1024 + i] = sig[i];
-    }
-    for (int i = 0; i < 1024; i++) {
-      pad[sig.length + 1024 + i] = sig[sig.length - 1 - i];
-    }
-
-    const int hop = 512;
-    final int nFrames = ((pad.length - 2048) / hop).floor() + 1;
-    final List<double> mfccSum = List<double>.filled(40, 0.0);
-
-    // 1. Calculate mel energies for all frames
-    final List<List<double>> allMels = [];
-    double globalMaxDb = -1e9;
-
-    for (int f = 0; f < nFrames; f++) {
-      final slice = pad.sublist(f * hop, f * hop + 2048);
-      final spec = _rfft2048(slice);
-
-      final List<double> mels = List<double>.filled(128, 0.0);
-      for (int m = 0; m < 128; m++) {
-        double s = 0.0;
-        final row = _melBasis[m];
-        for (int k = 0; k <= 1024; k++) {
-          s += row[k] * spec[k];
-        }
-        mels[m] = s;
-        final double db = 10.0 * (math.log(math.max(1e-10, s)) / math.ln10);
-        if (db > globalMaxDb) globalMaxDb = db;
-      }
-      allMels.add(mels);
-    }
-
-    final double minDbThreshold = globalMaxDb - 80.0;
-
-    // 2. Convert to log-mel dB and compute DCT (40 MFCCs) across frames
-    for (int f = 0; f < nFrames; f++) {
-      final mels = allMels[f];
-      final List<double> logM = List<double>.filled(128, 0.0);
-
-      for (int m = 0; m < 128; m++) {
-        final double db = 10.0 * (math.log(math.max(1e-10, mels[m])) / math.ln10);
-        logM[m] = db < minDbThreshold ? minDbThreshold : db;
-      }
-
-      // DCT (MFCC 40 coefficients)
-      for (int i = 0; i < 40; i++) {
-        double d = 0.0;
-        final row = _dctBasis[i];
-        for (int m = 0; m < 128; m++) {
-          d += row[m] * logM[m];
-        }
-        mfccSum[i] += d;
-      }
-    }
-
-    // Standardize features (mean & std)
-    final List<double> feat = List<double>.filled(40, 0.0);
-    for (int i = 0; i < 40; i++) {
-      feat[i] = (mfccSum[i] / nFrames - _mean[i]) / (_std[i] > 0 ? _std[i] : 1.0);
-    }
-
-    // 40 -> 512 -> 256 -> 128 -> 64 -> 13 Dense layers with ReLU
+  Map<String, double> _evaluateDenseNN(List<double> feat) {
     double relu(double x) => x > 0.0 ? x : 0.0;
 
     // Layer 0: 40 -> 512
@@ -304,22 +202,133 @@ class NativeNeuralAudioClassifier {
       probs[j] = math.exp(logits[j] - maxL);
       expSum += probs[j];
     }
+
+    final Map<String, double> map = {};
     for (int j = 0; j < 13; j++) {
-      probs[j] /= (expSum > 0 ? expSum : 1.0);
+      map[_classes[j]] = probs[j] / (expSum > 0 ? expSum : 1.0);
+    }
+    return map;
+  }
+
+  ModelPrediction? predict(List<double> raw16k) {
+    if (!_isLoaded || raw16k.isEmpty) return null;
+
+    List<double> sig = List<double>.from(raw16k);
+    if (sig.length > 16000) {
+      sig = sig.sublist(0, 16000);
+    } else if (sig.length < 16000) {
+      sig.addAll(List<double>.filled(16000 - sig.length, 0.0));
     }
 
+    // Reflect-pad 1024 on each side
+    final List<double> pad = List<double>.filled(sig.length + 2048, 0.0);
+    for (int i = 0; i < 1024; i++) {
+      pad[i] = sig[1024 - i];
+    }
+    for (int i = 0; i < sig.length; i++) {
+      pad[1024 + i] = sig[i];
+    }
+    for (int i = 0; i < 1024; i++) {
+      pad[sig.length + 1024 + i] = sig[sig.length - 1 - i];
+    }
+
+    const int hop = 512;
+    final int nFrames = ((pad.length - 2048) / hop).floor() + 1;
+
+    final List<List<double>> allMels = [];
+    double globalMaxDb = -1e9;
+
+    for (int f = 0; f < nFrames; f++) {
+      final slice = pad.sublist(f * hop, f * hop + 2048);
+      final spec = _rfft2048(slice);
+
+      final List<double> mels = List<double>.filled(128, 0.0);
+      for (int m = 0; m < 128; m++) {
+        double s = 0.0;
+        final row = _melBasis[m];
+        for (int k = 0; k <= 1024; k++) {
+          s += row[k] * spec[k];
+        }
+        mels[m] = s;
+        final double db = 10.0 * (math.log(math.max(1e-10, s)) / math.ln10);
+        if (db > globalMaxDb) globalMaxDb = db;
+      }
+      allMels.add(mels);
+    }
+
+    final double minDbThreshold = globalMaxDb - 80.0;
+
+    final List<List<double>> frameMfccs = [];
+    final List<double> frameEnergies = List<double>.filled(nFrames, 0.0);
+
+    for (int f = 0; f < nFrames; f++) {
+      final mels = allMels[f];
+      final List<double> logM = List<double>.filled(128, 0.0);
+      double energySum = 0.0;
+
+      for (int m = 0; m < 128; m++) {
+        final double db = 10.0 * (math.log(math.max(1e-10, mels[m])) / math.ln10);
+        final double val = db < minDbThreshold ? minDbThreshold : db;
+        logM[m] = val;
+        energySum += mels[m];
+      }
+      frameEnergies[f] = energySum;
+
+      final List<double> mfcc = List<double>.filled(40, 0.0);
+      for (int i = 0; i < 40; i++) {
+        double d = 0.0;
+        final row = _dctBasis[i];
+        for (int m = 0; m < 128; m++) {
+          d += row[m] * logM[m];
+        }
+        mfcc[i] = d;
+      }
+      frameMfccs.add(mfcc);
+    }
+
+    // Feature set 1: Average MFCCs across full window (Continuous sounds like Ambulance Siren)
+    final List<double> featAvg = List<double>.filled(40, 0.0);
+    for (int i = 0; i < 40; i++) {
+      double sum = 0.0;
+      for (int f = 0; f < nFrames; f++) {
+        sum += frameMfccs[f][i];
+      }
+      featAvg[i] = (sum / nFrames - _mean[i]) / (_std[i] > 0 ? _std[i] : 1.0);
+    }
+
+    // Feature set 2: Top-K Active Energy frames (Transient sounds like Dog Barking, Baby Crying, Vehicle Horns, Traffic, Sinhala Speech)
+    final List<int> sortedIndices = List<int>.generate(nFrames, (i) => i);
+    sortedIndices.sort((a, b) => frameEnergies[b].compareTo(frameEnergies[a]));
+    final int topK = math.max(1, (nFrames * 0.45).round());
+
+    final List<double> featPeak = List<double>.filled(40, 0.0);
+    for (int i = 0; i < 40; i++) {
+      double sum = 0.0;
+      for (int k = 0; k < topK; k++) {
+        final int f = sortedIndices[k];
+        sum += frameMfccs[f][i];
+      }
+      featPeak[i] = (sum / topK - _mean[i]) / (_std[i] > 0 ? _std[i] : 1.0);
+    }
+
+    final Map<String, double> probsAvg = _evaluateDenseNN(featAvg);
+    final Map<String, double> probsPeak = _evaluateDenseNN(featPeak);
+
+    final Map<String, double> finalProbs = {};
     int bestIdx = 0;
     double bestP = 0.0;
-    final Map<String, double> allProbs = {};
     final List<MapEntry<String, double>> entries = [];
 
-    for (int j = 0; j < 13; j++) {
+    for (int j = 0; j < _classes.length; j++) {
       final String cls = _classes[j];
-      final double p = probs[j];
-      allProbs[cls] = p;
-      entries.add(MapEntry(cls, p));
-      if (p > bestP) {
-        bestP = p;
+      final double pAvg = probsAvg[cls] ?? 0.0;
+      final double pPeak = probsPeak[cls] ?? 0.0;
+      final double combinedP = math.max(pAvg, pPeak);
+
+      finalProbs[cls] = combinedP;
+      entries.add(MapEntry(cls, combinedP));
+      if (combinedP > bestP) {
+        bestP = combinedP;
         bestIdx = j;
       }
     }
@@ -330,7 +339,7 @@ class NativeNeuralAudioClassifier {
     return ModelPrediction(
       label: _classes[bestIdx],
       probability: bestP,
-      allProbabilities: allProbs,
+      allProbabilities: finalProbs,
       top5Probabilities: top5,
     );
   }

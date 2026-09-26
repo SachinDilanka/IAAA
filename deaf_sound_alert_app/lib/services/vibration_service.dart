@@ -23,24 +23,24 @@ class VibrationService {
     try {
       switch (priority) {
         case PriorityLevel.high:
-          // Ultra-strong triple pulse for Deaf Users
+          // Strong double pulse (short 450ms pattern so mic input never clips)
           await Vibration.vibrate(
-            pattern: [0, 800, 150, 800, 150, 1200],
-            intensities: [0, 255, 0, 255, 0, 255],
-          );
-          break;
-        case PriorityLevel.medium:
-          // Strong double pulse
-          await Vibration.vibrate(
-            pattern: [0, 500, 200, 500],
+            pattern: [0, 200, 100, 150],
             intensities: [0, 255, 0, 255],
           );
           break;
-        case PriorityLevel.low:
-          // Single pulse
+        case PriorityLevel.medium:
+          // Single medium pulse (200ms)
           await Vibration.vibrate(
-            pattern: [0, 300],
+            pattern: [0, 200],
             intensities: [0, 200],
+          );
+          break;
+        case PriorityLevel.low:
+          // Single light pulse (100ms)
+          await Vibration.vibrate(
+            pattern: [0, 100],
+            intensities: [0, 150],
           );
           break;
       }
