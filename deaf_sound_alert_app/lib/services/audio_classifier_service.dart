@@ -211,27 +211,15 @@ class AudioClassifierService {
   }
 
   void _onSpeechDone() {
-    if (!_isListening) return;
-    Timer(const Duration(milliseconds: 200), () {
-      if (_isListening && !_speech.isListening && !_isRestartingStt) {
-        _safeListenSpeech();
-      }
-    });
+    // Keep AudioRecorder PCM mic stream uninterrupted
   }
 
   void _onSpeechError(String errorMsg) {
     if (!_isListening) return;
-
     final String err = errorMsg.toLowerCase();
     if (err.contains('language') || err.contains('locale') || err.contains('not_supported')) {
-      _selectedLocaleId = ""; // Fallback to system default locale
+      _selectedLocaleId = "";
     }
-
-    Timer(const Duration(milliseconds: 250), () {
-      if (_isListening && !_speech.isListening && !_isRestartingStt) {
-        _safeListenSpeech();
-      }
-    });
   }
 
   Future<bool> startListening() async {
@@ -252,19 +240,8 @@ class AudioClassifierService {
     _total16kPushed = 0;
     _latestSoundVolume = 0.25;
 
-    // 1. Real-Time Speech Recognition Engine for Live Text & Sinhala Streaming
-    _safeListenSpeech();
-
-    // 2. Continuous Audio Streamer for PCM Acoustic Neural Inference
+    // 1. Continuous Audio Streamer for PCM Acoustic Neural Inference & Live Speech
     _startAudioStreamer();
-
-    // 3. Heartbeat Watchdog to keep STT active continuously
-    _sttWatchdogTimer?.cancel();
-    _sttWatchdogTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (_isListening && !_speech.isListening && !_isRestartingStt) {
-        _safeListenSpeech();
-      }
-    });
 
     return true;
   }
@@ -417,7 +394,7 @@ class AudioClassifierService {
     _waveformController.add(List<double>.from(_visualizerBars));
 
     // Throttled single-pass Neural Inference for both Live Speech & Sound Alerts (Every 300ms)
-    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 500) && (rms > 0.003 || maxAmp > 0.012)) {
+    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 500) && rms >= 0.008 && maxAmp >= 0.025) {
       if (nowMs - _lastMlTimeMs >= 300) {
         _lastMlTimeMs = nowMs;
 
@@ -449,11 +426,11 @@ class AudioClassifierService {
               }
             });
 
-            if (sinhalaKey != null && sinhalaProb >= 0.22 && sinhalaProb >= (topProb * 0.5)) {
+            if (sinhalaKey != null && sinhalaProb >= 0.35 && sinhalaProb >= (topProb * 0.6)) {
               final displayName = _displayNames[sinhalaKey] ?? sinhalaKey!;
               _transcriptController.add(displayName);
               simulateSoundDetection(sinhalaKey!, confidence: sinhalaProb);
-            } else if (topProb >= 0.65 && mappedKey != 'road' && mappedKey != 'traffic') {
+            } else if (topProb >= 0.70 && mappedKey != 'road' && mappedKey != 'traffic') {
               // High-confidence Environmental sound alert (Vehicle Horns, Ambulance Siren, Dog Barking, Baby Crying)
               simulateSoundDetection(mappedKey, confidence: topProb);
             }
