@@ -289,8 +289,11 @@ class AudioClassifierService {
     // Start 50 FPS smooth visualizer animation ticker
     _startVisualizerTicker();
 
-    // Continuous Live Speech & Sound Listening Engine
+    // 1. Continuous Live Speech Engine for transcribing EVERY single word spoken
     _safeListenSpeech();
+
+    // 2. Continuous Audio Streamer for PCM Acoustic Neural Inference & Environmental Sound Alerts
+    _startAudioStreamer();
 
     return true;
   }
@@ -463,7 +466,7 @@ class AudioClassifierService {
           // Environmental Acoustic Sound Detection ONLY (Baby Crying, Vehicle Horns, Ambulance Siren, Dog Barking)
           // Muted during active speech to eliminate false/wrong automatic sound popups permanently!
           if (!speechActiveRecently && !mappedKey.startsWith('sinhala_') && mappedKey != 'road' && mappedKey != 'traffic') {
-            if (topProb >= 0.88 && rms >= 0.060 && maxAmp >= 0.180) {
+            if (topProb >= 0.70 && (rms >= 0.025 || maxAmp >= 0.080)) {
               simulateSoundDetection(mappedKey, confidence: topProb);
             }
           }
