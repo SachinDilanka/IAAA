@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
+import '../services/audio_classifier_service.dart';
 
 class WaveformVisualizer extends StatelessWidget {
-  final List<double> samples;
   final bool isListening;
 
   const WaveformVisualizer({
     super.key,
-    required this.samples,
     required this.isListening,
+    List<double>? samples,
   });
 
   @override
@@ -23,12 +23,18 @@ class WaveformVisualizer extends StatelessWidget {
           color: isListening ? Colors.cyanAccent.withOpacity(0.5) : Colors.grey.withOpacity(0.3),
         ),
       ),
-      child: CustomPaint(
-        painter: WaveformPainter(
-          samples: samples,
-          isListening: isListening,
-          color: isListening ? Colors.cyanAccent : Colors.grey,
-        ),
+      child: StreamBuilder<List<double>>(
+        stream: AudioClassifierService().onWaveformUpdated,
+        builder: (context, snapshot) {
+          final samples = snapshot.data ?? [];
+          return CustomPaint(
+            painter: WaveformPainter(
+              samples: samples,
+              isListening: isListening,
+              color: isListening ? Colors.cyanAccent : Colors.grey,
+            ),
+          );
+        },
       ),
     );
   }

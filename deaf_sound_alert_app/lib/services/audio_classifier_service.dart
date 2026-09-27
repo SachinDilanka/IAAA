@@ -424,11 +424,13 @@ class AudioClassifierService {
 
           if (mappedKey.startsWith('sinhala_')) {
             // Spoken Sinhala Keyword detected as #1 top prediction!
-            final displayName = _displayNames[mappedKey] ?? mappedKey;
-            _transcriptController.add(displayName);
-            simulateSoundDetection(mappedKey, confidence: topProb);
+            if (topProb >= 0.70) {
+              final displayName = _displayNames[mappedKey] ?? mappedKey;
+              _transcriptController.add(displayName);
+              simulateSoundDetection(mappedKey, confidence: topProb);
+            }
           } else {
-            // Check top 5 for strong Sinhala speech match if top prediction was neutral noise
+            // Check top 5 for high-confidence Sinhala speech match
             String? sinhalaKey;
             double sinhalaProb = 0.0;
             pred.top5Probabilities.forEach((label, prob) {
@@ -439,11 +441,11 @@ class AudioClassifierService {
               }
             });
 
-            if (sinhalaKey != null && sinhalaProb >= 0.12) {
+            if (sinhalaKey != null && sinhalaProb >= 0.70) {
               final displayName = _displayNames[sinhalaKey] ?? sinhalaKey!;
               _transcriptController.add(displayName);
               simulateSoundDetection(sinhalaKey!, confidence: sinhalaProb);
-            } else if (topProb >= 0.80 && rms > 0.035 && maxAmp > 0.120 && mappedKey != 'road' && mappedKey != 'traffic') {
+            } else if (topProb >= 0.82 && rms > 0.038 && maxAmp > 0.130 && mappedKey != 'road' && mappedKey != 'traffic') {
               // Loud Acoustic Environmental Sound Alert ONLY (Vehicle Horns, Ambulance Siren, Dog Barking, Baby Crying)
               simulateSoundDetection(mappedKey, confidence: topProb);
             }
@@ -515,51 +517,51 @@ class AudioClassifierService {
 
     final Map<String, List<String>> keywordPatterns = {
       'sinhala_udaw_': [
-        'udaw', 'udaww', 'udau', 'udawwa', 'udawwak', 'udauwa', 'udav', 'udavv', 'help', 'uda', 'udaa', 'udawu', 'udauw', 'sos', 'emergency',
-        'උදව්', 'උදව්වක්', 'උදවු', 'උදවු කරන්න', 'උදව් කරන්න', 'උදව්ව', 'උදව්ක්', 'උද'
+        'udaw', 'udaww', 'udau', 'udawwa', 'udawwak', 'udauwa', 'udav', 'udavv', 'help', 'udawu', 'udauw', 'sos', 'emergency',
+        'උදව්', 'උදව්වක්', 'උදවු', 'උදවු කරන්න', 'උදව් කරන්න', 'උදව්ව', 'උදව්ක්'
       ],
       'sinhala_anathurak_': [
-        'anathurak', 'anatura', 'anathura', 'anathurai', 'anaturak', 'danger', 'anaturai', 'anathurac', 'accident', 'warning', 'anatu', 'anatur', 'anathur',
+        'anathurak', 'anatura', 'anathura', 'anathurai', 'anaturak', 'danger', 'anaturai', 'anathurac', 'accident', 'warning', 'anatur', 'anathur',
         'අනතුරක්', 'අනතුර', 'අනතුරයි'
       ],
       'sinhala_beraganna_': [
-        'beraganna', 'beeraganna', 'bcraganna', 'pera', 'beera', 'beragan', 'save', 'beragannako', 'berannako', 'save me', 'rescue', 'bera', 'beera',
-        'බේරාගන්න', 'බේරගන්න', 'බේරා', 'බේර', 'බේරන්න', 'බේරාගන්නකෝ', 'බේරගන්නකෝ'
+        'beraganna', 'beeraganna', 'bcraganna', 'beera', 'beragan', 'save me', 'rescue', 'beragannako', 'berannako',
+        'බේරාගන්න', 'බේරගන්න', 'බේරාගන්නකෝ', 'බේරගන්නකෝ', 'බේරන්න'
       ],
       'sinhala_ginnak_': [
-        'ginnak', 'ginna', 'ginnaki', 'ginnac', 'fire', 'gina', 'ginak', 'firefire', 'burning', 'ginn',
+        'ginnak', 'ginna', 'ginnaki', 'ginnac', 'fire', 'ginak', 'firefire', 'burning',
         'ගින්නක්', 'ගින්න', 'ගිනි', 'ගිණි'
       ],
       'sinhala_karadarayak_': [
-        'karadarayak', 'karadara', 'karadarai', 'karadarayac', 'trouble', 'karadarak', 'problem', 'distress', 'karadar',
+        'karadarayak', 'karadara', 'karadarai', 'karadarayac', 'trouble', 'karadarak', 'problem', 'distress',
         'කරදරයක්', 'කරදර', 'කරදරයි', 'කරදරේ'
       ],
       'sinhala_balagena_': [
-        'balagena', 'balagenna', 'balaagena', 'balaganna', 'balang', 'watch', 'lookout', 'balan', 'watch out', 'look out', 'caution', 'balag',
-        'බලාගෙන', 'බලන්', 'බලාගෙනම', 'බලන්න'
+        'balagena', 'balagenna', 'balaagena', 'balaganna', 'balang', 'watch out', 'look out', 'caution',
+        'බලාගෙන', 'බලන්', 'බලාගෙනම'
       ],
       'sinhala_ehata_wenna_': [
-        'ehata', 'wenna', 'ehatawenna', 'move', 'ehata wenna', 'move away', 'step back', 'get away',
-        'එහාට', 'වෙන්න', 'එහාටවෙන්න', 'එහාට වෙන්න'
+        'ehata wenna', 'ehatawenna', 'ehata', 'move aside', 'move away', 'step back', 'get away',
+        'එහාට වෙන්න', 'එහාටවෙන්න', 'එහාට'
       ],
       'sinhala_parissamin_': [
-        'parissamin', 'parisamin', 'parissamen', 'parisamen', 'parissam', 'parisam', 'careful', 'parissamen', 'be careful', 'safe', 'take care', 'pariss', 'paris',
+        'parissamin', 'parisamin', 'parissamen', 'parisamen', 'parissam', 'parisam', 'be careful', 'take care',
         'පරිස්සමින්', 'පරිස්සමෙන්', 'පරිසමින්', 'පරිස්සම්'
       ],
       'dog_bark_dataset': [
-        'bark', 'barking', 'dog barking', 'dog bark', 'woof', 'woof woof', 'barks', 'yap', 'yapping', 'ruff', 'bow', 'bow bow', 'bau', 'bau bau', 'dog', 'dogs', 'බල්ලා', 'බුරන', 'බුරනවා'
+        'barking', 'dog barking', 'woof woof', 'yap', 'yapping', 'bow bow', 'bau bau', 'බල්ලා බුරන', 'බුරනවා'
       ],
       'baby crying': [
-        'crying', 'cry', 'baby crying', 'baby cry', 'waa', 'waaa', 'wee', 'weeping', 'baby', 'cries', 'හැඬීම', 'ළදරු', 'අඬනවා'
+        'crying', 'baby crying', 'baby cry', 'weeping', 'ළදරු හැඬීම', 'අඬනවා'
       ],
       'ambulance': [
-        'siren', 'ambulance', 'ambulance siren', 'alarm', 'wee oo', 'weeoo', 'wail', 'sirens', 'සයිරන්', 'ගිලන්'
+        'siren', 'ambulance siren', 'wee oo', 'weeoo', 'සයිරන්', 'ගිලන් ratha'
       ],
       'vehicle horns': [
-        'horn', 'car horn', 'vehicle horn', 'honk', 'honking', 'beep', 'beeping', 'toot', 'pip', 'piip', 'beep beep', 'horn sound', 'honks', 'හොන්', 'හොන් එක', 'පීප්'
+        'car horn', 'vehicle horn', 'honking', 'beep beep', 'horn sound', 'වාහන හොන්'
       ],
       'traffic': [
-        'traffic', 'traffic noise', 'road noise', 'car noise', 'vroom', 'rumble', 'street noise', 'තදබදය', 'වාහන'
+        'traffic noise', 'road noise', 'street noise', 'වාහන තදබදය'
       ],
     };
 
@@ -570,9 +572,11 @@ class AudioClassifierService {
       for (var pattern in entry.value) {
         if (sanitized.contains(pattern)) {
           final lastTime = _lastKeywordTriggerTimes[key];
-          if (lastTime == null || now.difference(lastTime).inMilliseconds > 200) {
+          if (lastTime == null || now.difference(lastTime).inMilliseconds > 300) {
             _lastKeywordTriggerTimes[key] = now;
             _lastGlobalAlertTime = now;
+            final String displayName = _displayNames[key] ?? key;
+            _transcriptController.add(displayName);
             simulateSoundDetection(key, confidence: 0.99);
           }
           return;

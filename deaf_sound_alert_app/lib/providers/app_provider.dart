@@ -45,7 +45,6 @@ class AppProvider with ChangeNotifier {
 
     _waveSub = AudioClassifierService().onWaveformUpdated.listen((waveform) {
       _currentWaveform = waveform;
-      notifyListeners();
     });
 
     _transcriptSub = AudioClassifierService().onTranscriptUpdated.listen((transcript) {

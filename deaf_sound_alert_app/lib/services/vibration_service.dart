@@ -23,30 +23,30 @@ class VibrationService {
     try {
       switch (priority) {
         case PriorityLevel.high:
-          // Strong double pulse (short 450ms pattern so mic input never clips)
+          // Heavy SOS Triple Burst Pattern for Deaf Users (Emergency: Udaw, Fire, Siren, Save Me)
           await Vibration.vibrate(
-            pattern: [0, 200, 100, 150],
-            intensities: [0, 255, 0, 255],
+            pattern: [0, 450, 120, 450, 120, 700],
+            intensities: [0, 255, 0, 255, 0, 255],
           );
           break;
         case PriorityLevel.medium:
-          // Single medium pulse (200ms)
+          // Heavy Double Pulse Pattern for Deaf Users (Warning: Balaagena, Ehata Wenna, Horn, Barking)
           await Vibration.vibrate(
-            pattern: [0, 200],
-            intensities: [0, 200],
+            pattern: [0, 350, 150, 350],
+            intensities: [0, 240, 0, 240],
           );
           break;
         case PriorityLevel.low:
-          // Single light pulse (100ms)
+          // Single Distinct Pulse Pattern for Deaf Users (Traffic, Road)
           await Vibration.vibrate(
-            pattern: [0, 100],
-            intensities: [0, 150],
+            pattern: [0, 250],
+            intensities: [0, 180],
           );
           break;
       }
     } catch (e) {
       try {
-        await Vibration.vibrate(duration: 500);
+        await Vibration.vibrate(duration: 600);
       } catch (_) {}
     }
   }
