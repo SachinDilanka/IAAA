@@ -211,7 +211,12 @@ class AudioClassifierService {
   }
 
   void _onSpeechDone() {
-    // Keep AudioRecorder PCM mic stream uninterrupted
+    if (!_isListening) return;
+    Timer(const Duration(milliseconds: 1500), () {
+      if (_isListening && !_speech.isListening && !_isRestartingStt) {
+        _safeListenSpeech();
+      }
+    });
   }
 
   void _onSpeechError(String errorMsg) {
@@ -220,6 +225,11 @@ class AudioClassifierService {
     if (err.contains('language') || err.contains('locale') || err.contains('not_supported')) {
       _selectedLocaleId = "";
     }
+    Timer(const Duration(milliseconds: 2000), () {
+      if (_isListening && !_speech.isListening && !_isRestartingStt) {
+        _safeListenSpeech();
+      }
+    });
   }
 
   Future<bool> startListening() async {
@@ -240,7 +250,10 @@ class AudioClassifierService {
     _total16kPushed = 0;
     _latestSoundVolume = 0.25;
 
-    // 1. Continuous Audio Streamer for PCM Acoustic Neural Inference & Live Speech
+    // 1. Continuous Live Speech Engine for transcribing EVERY single word spoken
+    _safeListenSpeech();
+
+    // 2. Continuous Audio Streamer for PCM Acoustic Neural Inference & Sound Alerts
     _startAudioStreamer();
 
     return true;
@@ -586,18 +599,19 @@ class AudioClassifierService {
   }
 
   DateTime? _lastEmittedAlertTime;
-  String? _lastEmittedSoundKey;
+  final Map<String, DateTime> _lastSoundAlertTimes = {};
 
   Future<void> simulateSoundDetection(String soundKey, {double confidence = 0.92}) async {
     final now = DateTime.now();
 
-    // 1. Fast 800ms global cooldown for instant single-attempt alert card pop-ups!
-    if (_lastEmittedAlertTime != null && now.difference(_lastEmittedAlertTime!).inMilliseconds < 800) {
+    // 1. Global 1.5-second cooldown between ANY sound alert cards
+    if (_lastEmittedAlertTime != null && now.difference(_lastEmittedAlertTime!).inMilliseconds < 1500) {
       return;
     }
 
-    // 2. 1.2-second cooldown for duplicate identical sound alerts
-    if (_lastEmittedSoundKey == soundKey && _lastEmittedAlertTime != null && now.difference(_lastEmittedAlertTime!).inMilliseconds < 1200) {
+    // 2. Strict 5.0-second cooldown for the SAME sound alert key to prevent pop-up repeat loops!
+    final lastTimeForThisSound = _lastSoundAlertTimes[soundKey];
+    if (lastTimeForThisSound != null && now.difference(lastTimeForThisSound).inMilliseconds < 5000) {
       return;
     }
 
@@ -605,7 +619,7 @@ class AudioClassifierService {
     if (soundConfig == null || !soundConfig.isEnabled) return;
 
     _lastEmittedAlertTime = now;
-    _lastEmittedSoundKey = soundKey;
+    _lastSoundAlertTimes[soundKey] = now;
 
     final event = DetectedSound(
       id: now.millisecondsSinceEpoch.toString(),
