@@ -572,12 +572,12 @@ class AudioClassifierService {
       for (var pattern in entry.value) {
         if (sanitized.contains(pattern)) {
           final lastTime = _lastKeywordTriggerTimes[key];
-          if (lastTime == null || now.difference(lastTime).inMilliseconds > 300) {
+          if (lastTime == null || now.difference(lastTime).inMilliseconds > 200) {
             _lastKeywordTriggerTimes[key] = now;
             _lastGlobalAlertTime = now;
             final String displayName = _displayNames[key] ?? key;
             _transcriptController.add(displayName);
-            simulateSoundDetection(key, confidence: 0.99);
+            simulateSoundDetection(key, confidence: 0.99, overrideCooldown: true);
           }
           return;
         }
@@ -605,18 +605,20 @@ class AudioClassifierService {
   DateTime? _lastEmittedAlertTime;
   final Map<String, DateTime> _lastSoundAlertTimes = {};
 
-  Future<void> simulateSoundDetection(String soundKey, {double confidence = 0.92}) async {
+  Future<void> simulateSoundDetection(String soundKey, {double confidence = 0.92, bool overrideCooldown = false}) async {
     final now = DateTime.now();
 
-    // 1. Global 1.5-second cooldown between ANY sound alert cards
-    if (_lastEmittedAlertTime != null && now.difference(_lastEmittedAlertTime!).inMilliseconds < 1500) {
-      return;
-    }
+    if (!overrideCooldown) {
+      // 1. Fast 200ms global cooldown between sound alerts
+      if (_lastEmittedAlertTime != null && now.difference(_lastEmittedAlertTime!).inMilliseconds < 200) {
+        return;
+      }
 
-    // 2. Strict 5.0-second cooldown for the SAME sound alert key to prevent pop-up repeat loops!
-    final lastTimeForThisSound = _lastSoundAlertTimes[soundKey];
-    if (lastTimeForThisSound != null && now.difference(lastTimeForThisSound).inMilliseconds < 5000) {
-      return;
+      // 2. 1.5-second cooldown for the SAME sound key to prevent pop-up repeat loops
+      final lastTimeForThisSound = _lastSoundAlertTimes[soundKey];
+      if (lastTimeForThisSound != null && now.difference(lastTimeForThisSound).inMilliseconds < 1500) {
+        return;
+      }
     }
 
     final soundConfig = SoundConfigService().getConfig(soundKey);
@@ -635,17 +637,15 @@ class AudioClassifierService {
       timestamp: now,
     );
 
-    // Save log
-    await HistoryService().addEvent(event);
-
-    // Trigger Phone Vibration
-    await VibrationService().triggerVibration(event.priority);
-
-    // Send Alert Push Notification to Android Phone & Smartwatch Yesido IO 39
-    await SmartwatchService().sendAlertToWatch(event);
-
-    // Emit single event to UI
+    // 1. Emit event to UI IMMEDIATELY (0ms Latency for instant alert card popup!)
     _controller.add(event);
+
+    // 2. Trigger Phone Vibration instantly
+    VibrationService().triggerVibration(event.priority);
+
+    // 3. Save log to history & sync to Yesido IO 39 smartwatch asynchronously in background
+    unawaited(HistoryService().addEvent(event));
+    unawaited(SmartwatchService().sendAlertToWatch(event));
   }
 
   void dispose() {
