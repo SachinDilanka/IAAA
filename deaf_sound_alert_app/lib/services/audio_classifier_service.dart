@@ -574,20 +574,20 @@ class AudioClassifierService {
         'parissamin', 'parisamin', 'parissamen', 'parisamen', 'parissam', 'parisam', 'be careful', 'take care',
         'පරිස්සමින්', 'පරිස්සමෙන්', 'පරිසමින්', 'පරිස්සම්'
       ],
+      'ambulance': [
+        'wee-ow', 'weeow', 'wee ow', 'nee-naw', 'neenaw', 'nee naw', 'siren', 'ambulance', 'ambulance siren', 'wee oo', 'weeoo', 'wail', 'sirens', 'සයිරන්', 'ගිලන්'
+      ],
       'dog_bark_dataset': [
-        'barking', 'dog barking', 'woof woof', 'yap', 'yapping', 'bow bow', 'bau bau', 'බල්ලා බුරන', 'බුරනවා'
+        'woof-woof', 'woofwoof', 'woof woof', 'arf-arf', 'arf arf', 'ruff-ruff', 'ruff ruff', 'woof', 'arf', 'ruff', 'bark', 'barking', 'dog barking', 'dog bark', 'yap', 'yapping', 'bow bow', 'bau bau', 'බල්ලා', 'බුරනවා'
       ],
       'baby crying': [
-        'crying', 'baby crying', 'baby cry', 'weeping', 'ළදරු හැඬීම', 'අඬනවා'
-      ],
-      'ambulance': [
-        'siren', 'ambulance siren', 'wee oo', 'weeoo', 'සයිරන්', 'ගිලන් ratha'
+        'waa-waa', 'waawaa', 'waa waa', 'wah-wah', 'wahwah', 'wah wah', 'waa', 'wah', 'cry', 'crying', 'baby crying', 'baby cry', 'weeping', 'cries', 'ළදරු', 'අඬනවා'
       ],
       'vehicle horns': [
-        'car horn', 'vehicle horn', 'honking', 'beep beep', 'horn sound', 'වාහන හොන්'
+        'beep-beep', 'beepbeep', 'beep beep', 'honk-honk', 'honkhonk', 'honk honk', 'honk', 'honking', 'beep', 'beeping', 'toot', 'pip', 'piip', 'car horn', 'vehicle horn', 'horn sound', 'honks', 'හොන්', 'පීප්'
       ],
       'traffic': [
-        'traffic noise', 'road noise', 'street noise', 'වාහන තදබදය'
+        'traffic', 'traffic noise', 'road noise', 'car noise', 'vroom', 'rumble', 'street noise', 'තදබදය', 'වාහන'
       ],
     };
 
