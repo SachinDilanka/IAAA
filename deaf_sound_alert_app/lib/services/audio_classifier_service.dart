@@ -289,8 +289,11 @@ class AudioClassifierService {
     // Start 50 FPS smooth visualizer animation ticker
     _startVisualizerTicker();
 
-    // Continuous Live Speech & Sound Listening Engine
+    // 1. Continuous Live Speech Engine for transcribing EVERY single word spoken
     _safeListenSpeech();
+
+    // 2. Continuous Audio Streamer for PCM Acoustic Neural Inference & Environmental Sound Alerts
+    _startAudioStreamer();
 
     return true;
   }
