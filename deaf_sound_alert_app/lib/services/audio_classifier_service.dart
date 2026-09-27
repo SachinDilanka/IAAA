@@ -134,6 +134,7 @@ class AudioClassifierService {
   }
 
   bool _isRestartingStt = false;
+  Timer? _visualizerTicker;
 
   void _updateWaveformVolume(double newVol) {
     final double targetVol = newVol.clamp(0.18, 1.0);
@@ -144,7 +145,41 @@ class AudioClassifierService {
     }
   }
 
+  void _startVisualizerTicker() {
+    _visualizerTicker?.cancel();
+    _visualizerTicker = Timer.periodic(const Duration(milliseconds: 20), (timer) {
+      if (!_isListening) {
+        timer.cancel();
+        return;
+      }
 
+      final double nowSec = DateTime.now().millisecondsSinceEpoch / 1000.0;
+      final List<double> newFrame = List<double>.generate(40, (band) {
+        final double centerDist = ((band - 20) / 20.0).abs();
+        final double centerEnvelope = math.exp(-centerDist * centerDist * 1.2);
+
+        final double ripple1 = math.sin(band * 0.40 + nowSec * 6.0).abs() * 0.10;
+        final double ripple2 = math.cos(band * 0.70 - nowSec * 7.5).abs() * 0.08;
+
+        double targetHeight;
+        if (_latestSoundVolume < 0.06) {
+          targetHeight = (0.15 + centerEnvelope * 0.12 + ripple1 + ripple2).clamp(0.12, 0.35);
+        } else {
+          targetHeight = (_latestSoundVolume * (centerEnvelope * 0.70 + ripple1 * 0.6 + 0.35)).clamp(0.18, 1.0);
+        }
+        return targetHeight;
+      });
+
+      for (int i = 0; i < 40; i++) {
+        _visualizerBars[i] = _visualizerBars[i] * 0.55 + newFrame[i] * 0.45;
+      }
+
+      _waveformController.add(List<double>.from(_visualizerBars));
+
+      // Smooth decay back to baseline volume
+      _latestSoundVolume = (_latestSoundVolume * 0.88).clamp(0.04, 1.0);
+    });
+  }
 
   void _safeListenSpeech() async {
     if (!_isListening || _isRestartingStt) return;
@@ -184,6 +219,7 @@ class AudioClassifierService {
           if (!_isListening) return;
           final String rawWords = result.recognizedWords.trim();
           if (rawWords.isNotEmpty) {
+            _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
             final String formattedDisplay = _formatTranscriptWithSinhala(rawWords);
             _transcriptController.add(formattedDisplay);
             _processSpeechText(rawWords.toLowerCase());
@@ -249,6 +285,9 @@ class AudioClassifierService {
     _rollingIdx = 0;
     _total16kPushed = 0;
     _latestSoundVolume = 0.25;
+
+    // Start 50 FPS smooth visualizer animation ticker
+    _startVisualizerTicker();
 
     // 1. Continuous Live Speech Engine for transcribing EVERY single word spoken
     _safeListenSpeech();
@@ -422,9 +461,11 @@ class AudioClassifierService {
           final topProb = pred.probability;
           final mappedKey = _labelToSoundKey[topLabel] ?? topLabel;
 
+          final bool speechActiveRecently = (nowMs - _lastSpeechTimeMs < 2500);
+
           if (mappedKey.startsWith('sinhala_')) {
             // Spoken Sinhala Keyword detected as #1 top prediction!
-            if (topProb >= 0.70) {
+            if (topProb >= 0.75) {
               final displayName = _displayNames[mappedKey] ?? mappedKey;
               _transcriptController.add(displayName);
               simulateSoundDetection(mappedKey, confidence: topProb);
@@ -441,12 +482,12 @@ class AudioClassifierService {
               }
             });
 
-            if (sinhalaKey != null && sinhalaProb >= 0.70) {
+            if (sinhalaKey != null && sinhalaProb >= 0.75) {
               final displayName = _displayNames[sinhalaKey] ?? sinhalaKey!;
               _transcriptController.add(displayName);
               simulateSoundDetection(sinhalaKey!, confidence: sinhalaProb);
-            } else if (topProb >= 0.82 && rms > 0.038 && maxAmp > 0.130 && mappedKey != 'road' && mappedKey != 'traffic') {
-              // Loud Acoustic Environmental Sound Alert ONLY (Vehicle Horns, Ambulance Siren, Dog Barking, Baby Crying)
+            } else if (!speechActiveRecently && topProb >= 0.90 && rms >= 0.055 && maxAmp >= 0.160 && mappedKey != 'road' && mappedKey != 'traffic') {
+              // Loud Acoustic Environmental Sound Alert ONLY when no human speech is active!
               simulateSoundDetection(mappedKey, confidence: topProb);
             }
           }
@@ -462,38 +503,47 @@ class AudioClassifierService {
       'udaw': 'උදව් (Udaw - Help)',
       'udau': 'උදව් (Udaw - Help)',
       'udaww': 'උදව් (Udaw - Help)',
-      'help': 'උදව් (Help - Help)',
-      'uda': 'උදව් (Udaw - Help)',
+      'help': 'උදව් (Udaw - Help)',
+      'sos': 'උදව් (Udaw - Help)',
+      'emergency': 'උදව් (Udaw - Help)',
       'උදව්': 'උදව් (Udaw - Help)',
       'උදවු': 'උදව් (Udaw - Help)',
       'anathurak': 'අනතුරක් (Anathurak - Danger)',
       'anatura': 'අනතුරක් (Anathurak - Danger)',
-      'danger': 'අනතුරක් (Danger - Danger)',
+      'danger': 'අනතුරක් (Anathurak - Danger)',
+      'accident': 'අනතුරක් (Anathurak - Danger)',
+      'warning': 'අනතුරක් (Anathurak - Danger)',
       'අනතුරක්': 'අනතුරක් (Anathurak - Danger)',
       'beraganna': 'බේරාගන්න (Beraganna - Save Me)',
       'beeraganna': 'බේරාගන්න (Beraganna - Save Me)',
-      'save': 'බේරාගන්න (Save Me)',
+      'save': 'බේරාගන්න (Beraganna - Save Me)',
+      'rescue': 'බේරාගන්න (Beraganna - Save Me)',
       'බේරාගන්න': 'බේරාගන්න (Beraganna - Save Me)',
       'ginnak': 'ගින්නක් (Ginnak - Fire)',
       'ginna': 'ගින්නක් (Ginnak - Fire)',
-      'fire': 'ගින්නක් (Fire)',
+      'fire': 'ගින්නක් (Ginnak - Fire)',
+      'burning': 'ගින්නක් (Ginnak - Fire)',
       'ගින්නක්': 'ගින්නක් (Ginnak - Fire)',
       'karadarayak': 'කරදරයක් (Karadarayak - Trouble)',
       'karadara': 'කරදරයක් (Karadarayak - Trouble)',
-      'trouble': 'කරදරයක් (Trouble)',
+      'trouble': 'කරදරයක් (Karadarayak - Trouble)',
+      'problem': 'කරදරයක් (Karadarayak - Trouble)',
       'කරදරයක්': 'කරදරයක් (Karadarayak - Trouble)',
       'balagena': 'බලාගෙන (Balaagena - Watch Out)',
-      'balang': 'බලාගෙන (Balaagena - Watch Out)',
-      'watch': 'බලාගෙන (Watch Out)',
+      'balaagena': 'බලාගෙන (Balaagena - Watch Out)',
+      'watch out': 'බලාගෙන (Balaagena - Watch Out)',
+      'look out': 'බලාගෙන (Balaagena - Watch Out)',
       'බලාගෙන': 'බලාගෙන (Balaagena - Watch Out)',
       'ehata wenna': 'එහාට වෙන්න (Ehata Wenna - Move Aside)',
+      'ehatawenna': 'එහාට වෙන්න (Ehata Wenna - Move Aside)',
       'ehata': 'එහාට වෙන්න (Ehata Wenna - Move Aside)',
-      'move': 'එහාට වෙන්න (Move Aside)',
+      'move aside': 'එහාට වෙන්න (Ehata Wenna - Move Aside)',
       'එහාට': 'එහාට වෙන්න (Ehata Wenna - Move Aside)',
       'parissamin': 'පරිස්සමින් (Parissamin - Be Careful)',
       'parisamin': 'පරිස්සමින් (Parissamin - Be Careful)',
-      'careful': 'පරිස්සමින් (Be Careful)',
-      'පරිස්සමින්': 'පරිස්සමින් (Be Careful)',
+      'parissamen': 'පරිස්සමින් (Parissamin - Be Careful)',
+      'careful': 'පරිස්සමින් (Parissamin - Be Careful)',
+      'take care': 'පරිස්සමින් (Parissamin - Be Careful)',
     };
 
     for (var entry in wordToSinhala.entries) {
