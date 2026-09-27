@@ -463,31 +463,10 @@ class AudioClassifierService {
 
           final bool speechActiveRecently = (nowMs - _lastSpeechTimeMs < 2500);
 
-          if (mappedKey.startsWith('sinhala_')) {
-            // Spoken Sinhala Keyword detected as #1 top prediction!
-            if (topProb >= 0.75) {
-              final displayName = _displayNames[mappedKey] ?? mappedKey;
-              _transcriptController.add(displayName);
-              simulateSoundDetection(mappedKey, confidence: topProb);
-            }
-          } else {
-            // Check top 5 for high-confidence Sinhala speech match
-            String? sinhalaKey;
-            double sinhalaProb = 0.0;
-            pred.top5Probabilities.forEach((label, prob) {
-              final key = _labelToSoundKey[label] ?? label;
-              if (key.startsWith('sinhala_') && prob > sinhalaProb) {
-                sinhalaProb = prob;
-                sinhalaKey = key;
-              }
-            });
-
-            if (sinhalaKey != null && sinhalaProb >= 0.75) {
-              final displayName = _displayNames[sinhalaKey] ?? sinhalaKey!;
-              _transcriptController.add(displayName);
-              simulateSoundDetection(sinhalaKey!, confidence: sinhalaProb);
-            } else if (!speechActiveRecently && topProb >= 0.90 && rms >= 0.055 && maxAmp >= 0.160 && mappedKey != 'road' && mappedKey != 'traffic') {
-              // Loud Acoustic Environmental Sound Alert ONLY when no human speech is active!
+          // Environmental Acoustic Sound Detection ONLY (Baby Crying, Vehicle Horns, Ambulance Siren, Dog Barking)
+          // Muted during active speech to eliminate false/wrong automatic sound popups permanently!
+          if (!speechActiveRecently && !mappedKey.startsWith('sinhala_') && mappedKey != 'road' && mappedKey != 'traffic') {
+            if (topProb >= 0.88 && rms >= 0.060 && maxAmp >= 0.180) {
               simulateSoundDetection(mappedKey, confidence: topProb);
             }
           }
