@@ -443,8 +443,8 @@ class AudioClassifierService {
               final displayName = _displayNames[sinhalaKey] ?? sinhalaKey!;
               _transcriptController.add(displayName);
               simulateSoundDetection(sinhalaKey!, confidence: sinhalaProb);
-            } else if (topProb >= 0.60 && mappedKey != 'road' && mappedKey != 'traffic') {
-              // High-confidence Environmental sound alert (Vehicle Horns, Ambulance Siren, Dog Barking, Baby Crying)
+            } else if (topProb >= 0.80 && rms > 0.035 && maxAmp > 0.120 && mappedKey != 'road' && mappedKey != 'traffic') {
+              // Loud Acoustic Environmental Sound Alert ONLY (Vehicle Horns, Ambulance Siren, Dog Barking, Baby Crying)
               simulateSoundDetection(mappedKey, confidence: topProb);
             }
           }
