@@ -534,10 +534,12 @@ class AudioClassifierService {
   void _processSpeechText(String rawText) {
     final String sanitized = rawText
         .replaceAll(RegExp(r'[\u200B-\u200D\uFEFF]'), '')
-        .replaceAll(RegExp(r'[^\w\s\u0D80-\u0DFF]'), ' ')
+        .replaceAll(RegExp(r'[^\w\s\u0D80-\u0DFF-]'), ' ')
         .toLowerCase()
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
+
+    final String sanitizedNoHyphen = sanitized.replaceAll('-', ' ');
 
     if (sanitized.isEmpty) return;
 
@@ -596,7 +598,7 @@ class AudioClassifierService {
     for (var entry in keywordPatterns.entries) {
       final key = entry.key;
       for (var pattern in entry.value) {
-        if (sanitized.contains(pattern)) {
+        if (sanitized.contains(pattern) || sanitizedNoHyphen.contains(pattern)) {
           final lastTime = _lastKeywordTriggerTimes[key];
           if (lastTime == null || now.difference(lastTime).inMilliseconds > 200) {
             _lastKeywordTriggerTimes[key] = now;
