@@ -393,9 +393,9 @@ class AudioClassifierService {
 
     _waveformController.add(List<double>.from(_visualizerBars));
 
-    // Throttled single-pass Neural Inference for both Live Speech & Sound Alerts (Every 300ms)
-    if (_total16kPushed >= 16000 && (nowMs - _listeningStartTimeMs >= 500) && rms >= 0.008 && maxAmp >= 0.025) {
-      if (nowMs - _lastMlTimeMs >= 300) {
+    // Fast 100ms Neural Inference for Instant 1st-Attempt Speech & Sound Alert Detections!
+    if (_total16kPushed >= 2000 && (nowMs - _listeningStartTimeMs >= 200) && (rms >= 0.003 || maxAmp >= 0.008)) {
+      if (nowMs - _lastMlTimeMs >= 100) {
         _lastMlTimeMs = nowMs;
 
         final List<double> window1s = List<double>.filled(16000, 0.0);
@@ -426,11 +426,11 @@ class AudioClassifierService {
               }
             });
 
-            if (sinhalaKey != null && sinhalaProb >= 0.35 && sinhalaProb >= (topProb * 0.6)) {
+            if (sinhalaKey != null && sinhalaProb >= 0.12) {
               final displayName = _displayNames[sinhalaKey] ?? sinhalaKey!;
               _transcriptController.add(displayName);
               simulateSoundDetection(sinhalaKey!, confidence: sinhalaProb);
-            } else if (topProb >= 0.70 && mappedKey != 'road' && mappedKey != 'traffic') {
+            } else if (topProb >= 0.60 && mappedKey != 'road' && mappedKey != 'traffic') {
               // High-confidence Environmental sound alert (Vehicle Horns, Ambulance Siren, Dog Barking, Baby Crying)
               simulateSoundDetection(mappedKey, confidence: topProb);
             }
@@ -591,13 +591,13 @@ class AudioClassifierService {
   Future<void> simulateSoundDetection(String soundKey, {double confidence = 0.92}) async {
     final now = DateTime.now();
 
-    // 1. Strict 2.5-second global cooldown to prevent 4-5 pop-up alert cards!
-    if (_lastEmittedAlertTime != null && now.difference(_lastEmittedAlertTime!).inMilliseconds < 2500) {
+    // 1. Fast 800ms global cooldown for instant single-attempt alert card pop-ups!
+    if (_lastEmittedAlertTime != null && now.difference(_lastEmittedAlertTime!).inMilliseconds < 800) {
       return;
     }
 
-    // 2. Strict 4.0-second cooldown for duplicate identical sound alerts
-    if (_lastEmittedSoundKey == soundKey && _lastEmittedAlertTime != null && now.difference(_lastEmittedAlertTime!).inMilliseconds < 4000) {
+    // 2. 1.2-second cooldown for duplicate identical sound alerts
+    if (_lastEmittedSoundKey == soundKey && _lastEmittedAlertTime != null && now.difference(_lastEmittedAlertTime!).inMilliseconds < 1200) {
       return;
     }
 
