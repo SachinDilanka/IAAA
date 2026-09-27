@@ -577,16 +577,20 @@ class AudioClassifierService {
         'පරිස්සමින්', 'පරිස්සමෙන්', 'පරිසමින්', 'පරිස්සම්'
       ],
       'ambulance': [
-        'wee-ow', 'weeow', 'wee ow', 'nee-naw', 'neenaw', 'nee naw', 'siren', 'ambulance', 'ambulance siren', 'wee oo', 'weeoo', 'wail', 'sirens', 'සයිරන්', 'ගිලන්'
+        'wee-ow', 'weeow', 'wee ow', 'nee-naw', 'neenaw', 'nee naw', 'siren', 'ambulance', 'ambulance siren', 'wee oo', 'weeoo', 'wail', 'sirens',
+        'සයිරන්', 'ගිලන්', 'වී ඕ', 'වීඕ', 'නි නෝ', 'නිනෝ', 'වී'
       ],
       'dog_bark_dataset': [
-        'woof-woof', 'woofwoof', 'woof woof', 'arf-arf', 'arf arf', 'ruff-ruff', 'ruff ruff', 'woof', 'arf', 'ruff', 'bark', 'barking', 'dog barking', 'dog bark', 'yap', 'yapping', 'bow bow', 'bau bau', 'බල්ලා', 'බුරනවා'
+        'woof-woof', 'woofwoof', 'woof woof', 'arf-arf', 'arfarf', 'arf arf', 'ruff-ruff', 'ruffruff', 'ruff ruff', 'woof', 'arf', 'ruff', 'bark', 'barking', 'dog barking', 'dog bark', 'yap', 'yapping', 'bow bow', 'bau bau',
+        'බල්ලා', 'බුරනවා', 'බුරන', 'වුෆ්', 'වුෆ් වුෆ්', 'බෝ', 'බෝ බෝ'
       ],
       'baby crying': [
-        'waa-waa', 'waawaa', 'waa waa', 'wah-wah', 'wahwah', 'wah wah', 'waa', 'wah', 'cry', 'crying', 'baby crying', 'baby cry', 'weeping', 'cries', 'ළදරු', 'අඬනවා'
+        'waa-waa', 'waawaa', 'waa waa', 'wah-wah', 'wahwah', 'wah wah', 'waa', 'wah', 'cry', 'crying', 'baby crying', 'baby cry', 'weeping', 'cries',
+        'ළදරු', 'හැඬීම', 'අඬනවා', 'අඬන', 'වා', 'වා වා', 'වහ්'
       ],
       'vehicle horns': [
-        'beep-beep', 'beepbeep', 'beep beep', 'honk-honk', 'honkhonk', 'honk honk', 'honk', 'honking', 'beep', 'beeping', 'toot', 'pip', 'piip', 'car horn', 'vehicle horn', 'horn sound', 'honks', 'හොන්', 'පීප්'
+        'beep-beep', 'beepbeep', 'beep beep', 'honk-honk', 'honkhonk', 'honk honk', 'honk', 'honking', 'beep', 'beeping', 'toot', 'pip', 'piip', 'car horn', 'vehicle horn', 'horn sound', 'honks',
+        'හොන්', 'පීප්', 'බීප්', 'බීප් බීප්', 'හොන් එක'
       ],
       'traffic': [
         'traffic', 'traffic noise', 'road noise', 'car noise', 'vroom', 'rumble', 'street noise', 'තදබදය', 'වාහන'
