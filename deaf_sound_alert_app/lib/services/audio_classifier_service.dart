@@ -319,9 +319,22 @@ class AudioClassifierService {
             final topProb = pred.probability;
             final mappedKey = _labelToSoundKey[topLabel] ?? topLabel;
 
+            final double dogProb = pred.allProbabilities['dog_barking'] ?? 0.0;
+            final double babyProb = pred.allProbabilities['baby_crying'] ?? 0.0;
+
+            if (dogProb >= 0.28) {
+              simulateSoundDetection('dog_bark_dataset', confidence: dogProb, overrideCooldown: true);
+              return;
+            }
+
+            if (babyProb >= 0.28) {
+              simulateSoundDetection('baby crying', confidence: babyProb, overrideCooldown: true);
+              return;
+            }
+
             if (!mappedKey.startsWith('sinhala_') && mappedKey != 'road' && mappedKey != 'traffic') {
-              if (topProb >= 0.45) {
-                simulateSoundDetection(mappedKey, confidence: topProb);
+              if (topProb >= 0.35) {
+                simulateSoundDetection(mappedKey, confidence: topProb, overrideCooldown: true);
               }
             }
           }
@@ -761,9 +774,11 @@ class AudioClassifierService {
   Future<void> simulateSoundDetection(String soundKey, {double confidence = 0.92, bool overrideCooldown = false}) async {
     final now = DateTime.now();
 
-    // Enforce 2.5-second global cooldown between ANY sound alert card popups
-    if (_lastEmittedAlertTime != null && now.difference(_lastEmittedAlertTime!).inMilliseconds < 2500) {
-      return;
+    if (!overrideCooldown) {
+      // 1-second global cooldown for non-override sound detections
+      if (_lastEmittedAlertTime != null && now.difference(_lastEmittedAlertTime!).inMilliseconds < 1000) {
+        return;
+      }
     }
 
     final soundConfig = SoundConfigService().getConfig(soundKey);
