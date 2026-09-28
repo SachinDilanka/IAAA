@@ -207,6 +207,7 @@ class AudioClassifierService {
       await _speech.listen(
         onResult: (result) {
           if (!_isListening) return;
+          _highVolumeStartTimeMs = 0; // Reset acoustic timer immediately when speech is detected
           final String rawWords = result.recognizedWords.trim();
           if (rawWords.isNotEmpty) {
             _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
@@ -245,12 +246,12 @@ class AudioClassifierService {
 
     final nowMs = DateTime.now().millisecondsSinceEpoch;
 
-    // High acoustic sound level detected (> 0.35)
-    // Only sample environmental sounds if no speech was detected in the last 3.0 seconds!
-    if (soundVol >= 0.35) {
+    // High acoustic sound level detected (> 0.38)
+    // Only sample environmental sounds if non-speech sound is continuous for > 1.2s and no speech in last 3.0s!
+    if (soundVol >= 0.38) {
       if (_highVolumeStartTimeMs == 0) {
         _highVolumeStartTimeMs = nowMs;
-      } else if (nowMs - _highVolumeStartTimeMs >= 400 && nowMs - _lastSpeechTimeMs >= 3000) {
+      } else if (nowMs - _highVolumeStartTimeMs >= 1200 && nowMs - _lastSpeechTimeMs >= 3000) {
         _triggerAcousticNeuralSample();
       }
     } else {
