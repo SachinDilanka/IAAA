@@ -334,11 +334,11 @@ class NativeNeuralAudioClassifier {
         // Speech keywords are active transient utterances: evaluate peak active energy frames!
         combinedP = pPeak;
       } else if (cls == 'ambulance_siren') {
-        // Ambulance siren is continuous: evaluate full window average energy
-        combinedP = pAvg;
+        // Ambulance siren: evaluate max of average and peak energy
+        combinedP = math.max(pAvg, pPeak);
       } else {
-        // Other transient environmental sounds (vehicle horn, dog bark, baby cry)
-        combinedP = pPeak * 0.75 + pAvg * 0.25;
+        // Other environmental sounds (vehicle_horn, dog_barking, baby_crying, background_traffic)
+        combinedP = math.max(pPeak, pAvg * 0.50 + pPeak * 0.50);
       }
 
       finalProbs[cls] = combinedP;

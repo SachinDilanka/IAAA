@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:audio_streamer/audio_streamer.dart';
 import '../models/detected_sound.dart';
 import 'vibration_service.dart';
 import 'smartwatch_service.dart';
@@ -18,7 +19,7 @@ class AudioClassifierService {
 
   final NativeNeuralAudioClassifier _neuralClassifier = NativeNeuralAudioClassifier();
   final stt.SpeechToText _speech = stt.SpeechToText();
-  final AudioRecorder _pcmRecorder = AudioRecorder();
+  AudioStreamer? _audioStreamer;
   StreamSubscription? _pcmStreamSubscription;
 
   Timer? _sttWatchdogTimer;
@@ -281,6 +282,9 @@ class AudioClassifierService {
     // 1. Continuous Live Speech Engine for transcribing EVERY single word spoken & environmental sound imitations
     _safeListenSpeech();
 
+    // 2. Continuous Audio Streamer for PCM Acoustic Neural Inference & Environmental Sound Alerts
+    _startAudioStreamer();
+
     return true;
   }
 
@@ -288,36 +292,20 @@ class AudioClassifierService {
     try {
       _pcmStreamSubscription?.cancel();
       _pcmStreamSubscription = null;
+      _audioStreamer = AudioStreamer();
 
-      if (await _pcmRecorder.hasPermission()) {
-        final stream = await _pcmRecorder.startStream(
-          const RecordConfig(
-            encoder: AudioEncoder.pcm16bits,
-            numChannels: 1,
-            sampleRate: 16000,
-          ),
-        );
-
-        _pcmStreamSubscription = stream.listen(
-          (bytes) {
-            if (!_isListening || bytes.isEmpty) return;
-            final samples = List<double>.generate(bytes.length ~/ 2, (i) {
-              int byte0 = bytes[i * 2];
-              int byte1 = bytes[i * 2 + 1];
-              int val = (byte1 << 8) | byte0;
-              if (val >= 32768) val -= 65536;
-              return val / 32768.0;
-            });
-            _processPcmBuffer(samples);
-          },
-          onError: (error) {
-            print('PCM Recorder error: $error');
-          },
-          cancelOnError: false,
-        );
-      }
+      _pcmStreamSubscription = _audioStreamer!.audioStream.listen(
+        (buffer) {
+          if (!_isListening || buffer.isEmpty) return;
+          _processPcmBuffer(buffer);
+        },
+        onError: (error) {
+          print('AudioStreamer error: $error');
+        },
+        cancelOnError: false,
+      );
     } catch (e) {
-      print('PCM Recorder init error: $e');
+      print('AudioStreamer init error: $e');
     }
   }
 
@@ -447,12 +435,11 @@ class AudioClassifierService {
           final topProb = pred.probability;
           final mappedKey = _labelToSoundKey[topLabel] ?? topLabel;
 
-          final bool speechActiveRecently = (nowMs - _lastSpeechTimeMs < 2500);
+          final bool speechActiveRecently = (nowMs - _lastSpeechTimeMs < 800);
 
-          // Environmental Acoustic Sound Detection ONLY (Baby Crying, Vehicle Horns, Ambulance Siren, Dog Barking)
-          // Muted during active speech to eliminate false/wrong automatic sound popups permanently!
-          if (!speechActiveRecently && !mappedKey.startsWith('sinhala_') && mappedKey != 'road' && mappedKey != 'traffic') {
-            if (topProb >= 0.70 && (rms >= 0.025 || maxAmp >= 0.080)) {
+          // Environmental Acoustic Sound Detection (Baby Crying, Vehicle Horns, Ambulance Siren, Dog Barking, Traffic)
+          if (!mappedKey.startsWith('sinhala_') && mappedKey != 'road' && mappedKey != 'traffic') {
+            if (topProb >= 0.40 && (rms >= 0.005 || maxAmp >= 0.015)) {
               simulateSoundDetection(mappedKey, confidence: topProb);
             }
           }
@@ -667,9 +654,7 @@ class AudioClassifierService {
     }
     _pcmStreamSubscription?.cancel();
     _pcmStreamSubscription = null;
-    try {
-      _pcmRecorder.stop();
-    } catch (_) {}
+    _audioStreamer = null;
   }
 
   DateTime? _lastEmittedAlertTime;
