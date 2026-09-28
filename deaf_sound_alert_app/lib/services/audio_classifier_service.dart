@@ -219,6 +219,7 @@ class AudioClassifierService {
           if (!_isListening) return;
           double soundVol = (0.25 + (level.clamp(-2.0, 10.0) / 10.0)).clamp(0.18, 1.0);
           _updateWaveformVolume(soundVol);
+          _checkAcousticAudioSampleNeeded(soundVol);
         },
         listenOptions: stt.SpeechListenOptions(
           listenMode: stt.ListenMode.dictation,
@@ -233,6 +234,106 @@ class AudioClassifierService {
       _onSpeechError(e.toString());
     } finally {
       _isRestartingStt = false;
+    }
+  }
+
+  bool _isSamplingAcousticPCM = false;
+  int _highVolumeStartTimeMs = 0;
+
+  void _checkAcousticAudioSampleNeeded(double soundVol) {
+    if (!_isListening || _isSamplingAcousticPCM) return;
+
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+
+    // High acoustic sound level detected (> 0.35)
+    if (soundVol >= 0.35) {
+      if (_highVolumeStartTimeMs == 0) {
+        _highVolumeStartTimeMs = nowMs;
+      } else if (nowMs - _highVolumeStartTimeMs >= 400 && nowMs - _lastSpeechTimeMs >= 400) {
+        _triggerAcousticNeuralSample();
+      }
+    } else {
+      _highVolumeStartTimeMs = 0;
+    }
+  }
+
+  Future<void> _triggerAcousticNeuralSample() async {
+    if (_isSamplingAcousticPCM || !_isListening) return;
+    _isSamplingAcousticPCM = true;
+    _highVolumeStartTimeMs = 0;
+
+    try {
+      if (_speech.isListening) {
+        await _speech.stop();
+      }
+
+      final AudioRecorder sampleRecorder = AudioRecorder();
+      if (await sampleRecorder.hasPermission()) {
+        final stream = await sampleRecorder.startStream(
+          const RecordConfig(
+            encoder: AudioEncoder.pcm16bits,
+            numChannels: 1,
+            sampleRate: 16000,
+          ),
+        );
+
+        final List<double> sampledPcm = [];
+        Completer<void> sampleCompleter = Completer<void>();
+
+        StreamSubscription? sub;
+        sub = stream.listen((bytes) {
+          final samples = List<double>.generate(bytes.length ~/ 2, (i) {
+            int byte0 = bytes[i * 2];
+            int byte1 = bytes[i * 2 + 1];
+            int val = (byte1 << 8) | byte0;
+            if (val >= 32768) val -= 65536;
+            return val / 32768.0;
+          });
+          sampledPcm.addAll(samples);
+          if (sampledPcm.length >= 16000) {
+            if (!sampleCompleter.isCompleted) sampleCompleter.complete();
+          }
+        }, onError: (_) {
+          if (!sampleCompleter.isCompleted) sampleCompleter.complete();
+        });
+
+        await sampleCompleter.future.timeout(
+          const Duration(milliseconds: 900),
+          onTimeout: () {},
+        );
+
+        await sub.cancel();
+        try {
+          await sampleRecorder.stop();
+        } catch (_) {}
+
+        if (sampledPcm.isNotEmpty) {
+          final window1s = List<double>.filled(16000, 0.0);
+          for (int i = 0; i < math.min(16000, sampledPcm.length); i++) {
+            window1s[i] = sampledPcm[i];
+          }
+
+          final pred = _neuralClassifier.predict(window1s);
+          if (pred != null) {
+            final topLabel = pred.label;
+            final topProb = pred.probability;
+            final mappedKey = _labelToSoundKey[topLabel] ?? topLabel;
+
+            if (!mappedKey.startsWith('sinhala_') && mappedKey != 'road' && mappedKey != 'traffic') {
+              if (topProb >= 0.45) {
+                simulateSoundDetection(mappedKey, confidence: topProb);
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Acoustic neural sampling error: $e');
+    } finally {
+      _isSamplingAcousticPCM = false;
+      if (_isListening && !_speech.isListening && !_isRestartingStt) {
+        _safeListenSpeech();
+      }
     }
   }
 
