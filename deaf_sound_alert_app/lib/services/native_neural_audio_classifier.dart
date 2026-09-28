@@ -333,11 +333,11 @@ class NativeNeuralAudioClassifier {
       if (speechClasses.contains(cls)) {
         // Speech keywords are active transient utterances: evaluate peak active energy frames!
         combinedP = pPeak;
-      } else if (cls == 'ambulance_siren' || cls == 'dog_barking' || cls == 'baby_crying') {
-        // Acoustic sounds (ambulance_siren, dog_barking, baby_crying): evaluate max of average and peak energy
+      } else if (cls == 'ambulance_siren') {
+        // Ambulance siren: evaluate max of average and peak energy
         combinedP = math.max(pAvg, pPeak);
       } else {
-        // Other environmental sounds (vehicle_horn, background_traffic)
+        // Other environmental sounds (vehicle_horn, dog_barking, baby_crying, background_traffic)
         combinedP = math.max(pPeak, pAvg * 0.50 + pPeak * 0.50);
       }
 
