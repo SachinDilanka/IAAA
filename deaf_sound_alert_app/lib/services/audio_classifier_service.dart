@@ -237,7 +237,7 @@ class AudioClassifierService {
 
   void _onSpeechDone() {
     if (!_isListening) return;
-    Timer(const Duration(milliseconds: 1000), () {
+    Timer(const Duration(milliseconds: 300), () {
       if (_isListening && !_speech.isListening && !_isRestartingStt) {
         _safeListenSpeech();
       }
@@ -250,7 +250,7 @@ class AudioClassifierService {
     if (err.contains('language') || err.contains('locale') || err.contains('not_supported')) {
       _selectedLocaleId = "";
     }
-    Timer(const Duration(milliseconds: 1500), () {
+    Timer(const Duration(milliseconds: 500), () {
       if (_isListening && !_speech.isListening && !_isRestartingStt) {
         _safeListenSpeech();
       }
@@ -278,11 +278,8 @@ class AudioClassifierService {
     // Start 50 FPS smooth visualizer animation ticker
     _startVisualizerTicker();
 
-    // 1. Continuous Live Speech Engine for transcribing EVERY single word spoken
+    // 1. Continuous Live Speech Engine for transcribing EVERY single word spoken & environmental sound imitations
     _safeListenSpeech();
-
-    // 2. Continuous Audio Streamer for PCM Acoustic Neural Inference & Environmental Sound Alerts
-    _startAudioStreamer();
 
     return true;
   }
@@ -618,23 +615,23 @@ class AudioClassifierService {
         'පරිස්සමින්', 'පරිස්සමෙන්', 'පරිසමින්', 'පරිස්සම්'
       ],
       'ambulance': [
-        'wee-ow', 'weeow', 'wee ow', 'nee-naw', 'neenaw', 'nee naw', 'siren', 'ambulance', 'ambulance siren', 'wee oo', 'weeoo', 'wail', 'sirens',
-        'සයිරන්', 'ගිලන්', 'වී ඕ', 'වීඕ', 'නි නෝ', 'නිනෝ', 'වී'
+        'wee-ow', 'weeow', 'wee ow', 'nee-naw', 'neenaw', 'nee naw', 'siren', 'sirens', 'ambulance', 'ambulance siren', 'wee oo', 'weeoo', 'wail', 'wailing', 'wee', 'ow', 'naw',
+        'සයිරන්', 'ගිලන්', 'වී ඕ', 'වීඕ', 'නි නෝ', 'නිනෝ', 'සයිරන් එක', 'ගිලන් රථ'
       ],
       'dog_bark_dataset': [
-        'woof-woof', 'woofwoof', 'woof woof', 'arf-arf', 'arfarf', 'arf arf', 'ruff-ruff', 'ruffruff', 'ruff ruff', 'woof', 'arf', 'ruff', 'bark', 'barking', 'dog barking', 'dog bark', 'yap', 'yapping', 'bow bow', 'bau bau',
-        'බල්ලා', 'බුරනවා', 'බුරන', 'වුෆ්', 'වුෆ් වුෆ්', 'බෝ', 'බෝ බෝ'
+        'woof-woof', 'woofwoof', 'woof woof', 'arf-arf', 'arfarf', 'arf arf', 'ruff-ruff', 'ruffruff', 'ruff ruff', 'woof', 'woofs', 'arf', 'ruff', 'bark', 'barks', 'barking', 'dog', 'dogs', 'dog barking', 'dog bark', 'yap', 'yapping', 'bow bow', 'bau bau', 'bow', 'bau',
+        'බල්ලා', 'බුරනවා', 'බුරන', 'වුෆ්', 'වුෆ් වුෆ්', 'බෝ', 'බෝ බෝ', 'බල්ලන්', 'බල්ලා බුරනවා'
       ],
       'baby crying': [
-        'waa-waa', 'waawaa', 'waa waa', 'wah-wah', 'wahwah', 'wah wah', 'waa', 'wah', 'cry', 'crying', 'baby crying', 'baby cry', 'weeping', 'cries',
-        'ළදරු', 'හැඬීම', 'අඬනවා', 'අඬන', 'වා', 'වා වා', 'වහ්'
+        'waa-waa', 'waawaa', 'waa waa', 'wah-wah', 'wahwah', 'wah wah', 'waa', 'wah', 'cry', 'crying', 'cries', 'baby', 'babies', 'baby crying', 'baby cry', 'weeping', 'screaming', 'whine', 'whining',
+        'ළදරු', 'හැඬීම', 'අඬනවා', 'අඬන', 'වා', 'වා වා', 'වහ්', 'බබා', 'ළමයා', 'ළදරු හැඬීම'
       ],
       'vehicle horns': [
-        'beep-beep', 'beepbeep', 'beep beep', 'honk-honk', 'honkhonk', 'honk honk', 'honk', 'honking', 'beep', 'beeping', 'toot', 'pip', 'piip', 'car horn', 'vehicle horn', 'horn sound', 'honks',
-        'හොන්', 'පීප්', 'බීප්', 'බීප් බීප්', 'හොන් එක'
+        'beep-beep', 'beepbeep', 'beep beep', 'honk-honk', 'honkhonk', 'honk honk', 'honk', 'honks', 'honking', 'beep', 'beeps', 'beeping', 'toot', 'pip', 'piip', 'car horn', 'vehicle horn', 'horn sound', 'horn', 'horns',
+        'හොන්', 'පීප්', 'බීප්', 'බීප් බීප්', 'හොන් එක', 'නාලාව', 'වාහන හොන්'
       ],
       'traffic': [
-        'traffic', 'traffic noise', 'road noise', 'car noise', 'vroom', 'rumble', 'street noise', 'තදබදය', 'වාහන'
+        'traffic', 'traffic noise', 'road noise', 'car noise', 'vroom', 'rumble', 'street noise', 'highway', 'vehicles', 'තදබදය', 'වාහන', 'පාරේ'
       ],
     };
 
