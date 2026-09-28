@@ -279,11 +279,8 @@ class AudioClassifierService {
     // Start 50 FPS smooth visualizer animation ticker
     _startVisualizerTicker();
 
-    // 1. Continuous Live Speech Engine for transcribing EVERY single word spoken & environmental sound imitations
+    // 1. Continuous Live Speech Engine for transcribing EVERY single word spoken & sound alerts
     _safeListenSpeech();
-
-    // 2. Continuous Audio Streamer for PCM Acoustic Neural Inference & Environmental Sound Alerts
-    _startAudioStreamer();
 
     return true;
   }
@@ -663,17 +660,9 @@ class AudioClassifierService {
   Future<void> simulateSoundDetection(String soundKey, {double confidence = 0.92, bool overrideCooldown = false}) async {
     final now = DateTime.now();
 
-    if (!overrideCooldown) {
-      // 1. Fast 200ms global cooldown between sound alerts
-      if (_lastEmittedAlertTime != null && now.difference(_lastEmittedAlertTime!).inMilliseconds < 200) {
-        return;
-      }
-
-      // 2. 1.5-second cooldown for the SAME sound key to prevent pop-up repeat loops
-      final lastTimeForThisSound = _lastSoundAlertTimes[soundKey];
-      if (lastTimeForThisSound != null && now.difference(lastTimeForThisSound).inMilliseconds < 1500) {
-        return;
-      }
+    // Enforce 2.5-second global cooldown between ANY sound alert card popups
+    if (_lastEmittedAlertTime != null && now.difference(_lastEmittedAlertTime!).inMilliseconds < 2500) {
+      return;
     }
 
     final soundConfig = SoundConfigService().getConfig(soundKey);
