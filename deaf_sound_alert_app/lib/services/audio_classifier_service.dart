@@ -188,27 +188,16 @@ class AudioClassifierService {
     _isRestartingStt = true;
 
     try {
-      if (_speech.isListening) {
-        await _speech.stop();
+      if (!_speechAvailable) {
+        _speechAvailable = await _speech.initialize(
+          onError: (val) => _onSpeechError(val.errorMsg),
+          onStatus: (val) {
+            if ((val == 'done' || val == 'notListening') && _isListening) {
+              _onSpeechDone();
+            }
+          },
+        );
       }
-      await _speech.cancel();
-    } catch (_) {}
-
-    await Future.delayed(const Duration(milliseconds: 150));
-    if (!_isListening) {
-      _isRestartingStt = false;
-      return;
-    }
-
-    try {
-      _speechAvailable = await _speech.initialize(
-        onError: (val) => _onSpeechError(val.errorMsg),
-        onStatus: (val) {
-          if ((val == 'done' || val == 'notListening') && _isListening) {
-            _onSpeechDone();
-          }
-        },
-      );
     } catch (_) {}
 
     try {
@@ -248,7 +237,7 @@ class AudioClassifierService {
 
   void _onSpeechDone() {
     if (!_isListening) return;
-    Timer(const Duration(milliseconds: 1500), () {
+    Timer(const Duration(milliseconds: 1000), () {
       if (_isListening && !_speech.isListening && !_isRestartingStt) {
         _safeListenSpeech();
       }
@@ -261,7 +250,7 @@ class AudioClassifierService {
     if (err.contains('language') || err.contains('locale') || err.contains('not_supported')) {
       _selectedLocaleId = "";
     }
-    Timer(const Duration(milliseconds: 2000), () {
+    Timer(const Duration(milliseconds: 1500), () {
       if (_isListening && !_speech.isListening && !_isRestartingStt) {
         _safeListenSpeech();
       }
@@ -289,8 +278,11 @@ class AudioClassifierService {
     // Start 50 FPS smooth visualizer animation ticker
     _startVisualizerTicker();
 
-    // Continuous Live Speech & Sound Listening Engine
+    // 1. Continuous Live Speech Engine for transcribing EVERY single word spoken
     _safeListenSpeech();
+
+    // 2. Continuous Audio Streamer for PCM Acoustic Neural Inference & Environmental Sound Alerts
+    _startAudioStreamer();
 
     return true;
   }
