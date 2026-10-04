@@ -201,6 +201,11 @@ class AudioClassifierService {
       }
     } catch (_) {}
 
+    if (!_speechAvailable) {
+      _isRestartingStt = false;
+      return;
+    }
+
     try {
       final String? targetLocale = (_selectedLocaleId != null && _selectedLocaleId!.isNotEmpty) ? _selectedLocaleId : null;
 
@@ -246,12 +251,12 @@ class AudioClassifierService {
 
     final nowMs = DateTime.now().millisecondsSinceEpoch;
 
-    // High acoustic sound level detected (> 0.35)
-    // Only sample if non-speech acoustic sound has played for >400ms and NO speech in last 1.8s
-    if (soundVol >= 0.35) {
+    // High acoustic sound level detected (> 0.30)
+    // Only sample if non-speech acoustic sound has played for >300ms and NO speech in last 1.2s
+    if (soundVol >= 0.30) {
       if (_highVolumeStartTimeMs == 0) {
         _highVolumeStartTimeMs = nowMs;
-      } else if (nowMs - _highVolumeStartTimeMs >= 400 && nowMs - _lastSpeechTimeMs >= 1800) {
+      } else if (nowMs - _highVolumeStartTimeMs >= 300 && nowMs - _lastSpeechTimeMs >= 1200) {
         _triggerAcousticNeuralSample();
       }
     } else {
@@ -267,6 +272,7 @@ class AudioClassifierService {
     try {
       if (_speech.isListening) {
         await _speech.stop();
+        await Future.delayed(const Duration(milliseconds: 100));
       }
 
       final AudioRecorder sampleRecorder = AudioRecorder();
@@ -292,7 +298,7 @@ class AudioClassifierService {
             return val / 32768.0;
           });
           sampledPcm.addAll(samples);
-          if (sampledPcm.length >= 16000) {
+          if (sampledPcm.length >= 12000) {
             if (!sampleCompleter.isCompleted) sampleCompleter.complete();
           }
         }, onError: (_) {
@@ -300,7 +306,7 @@ class AudioClassifierService {
         });
 
         await sampleCompleter.future.timeout(
-          const Duration(milliseconds: 900),
+          const Duration(milliseconds: 800),
           onTimeout: () {},
         );
 
@@ -323,14 +329,26 @@ class AudioClassifierService {
 
             final double dogProb = pred.allProbabilities['dog_barking'] ?? 0.0;
             final double babyProb = pred.allProbabilities['baby_crying'] ?? 0.0;
+            final double sirenProb = pred.allProbabilities['ambulance_siren'] ?? 0.0;
+            final double hornProb = pred.allProbabilities['vehicle_horn'] ?? 0.0;
 
-            if (topLabel == 'dog_barking' || dogProb >= 0.22) {
+            if (topLabel == 'dog_barking' || dogProb >= 0.20) {
               simulateSoundDetection('dog_bark_dataset', confidence: math.max(topProb, dogProb), overrideCooldown: true);
               return;
             }
 
-            if (topLabel == 'baby_crying' || babyProb >= 0.22) {
+            if (topLabel == 'baby_crying' || babyProb >= 0.20) {
               simulateSoundDetection('baby crying', confidence: math.max(topProb, babyProb), overrideCooldown: true);
+              return;
+            }
+
+            if (topLabel == 'ambulance_siren' || sirenProb >= 0.20) {
+              simulateSoundDetection('ambulance', confidence: math.max(topProb, sirenProb), overrideCooldown: true);
+              return;
+            }
+
+            if (topLabel == 'vehicle_horn' || hornProb >= 0.20) {
+              simulateSoundDetection('vehicle horns', confidence: math.max(topProb, hornProb), overrideCooldown: true);
               return;
             }
 
@@ -403,7 +421,6 @@ class AudioClassifierService {
 
     _isListening = true;
     _isRestartingStt = false;
-    _speechAvailable = false; // Force clean initialization after mic permissions confirmed
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     _listeningStartTimeMs = nowMs;
     _rollingIdx = 0;
@@ -736,16 +753,16 @@ class AudioClassifierService {
         'පරිස්සමින්', 'පරිස්සමෙන්', 'පරිසමින්', 'පරිස්සම්'
       ],
       'ambulance': [
-        'wee-ow', 'weeow', 'wee ow', 'nee-naw', 'neenaw', 'nee naw', 'siren', 'sirens', 'ambulance', 'ambulance siren', 'wee oo', 'weeoo', 'wail', 'wailing', 'wee', 'ow', 'naw',
+        'wee-ow', 'weeow', 'wee ow', 'nee-naw', 'neenaw', 'nee naw', 'siren', 'sirens', 'ambulance', 'ambulance siren', 'wee oo', 'weeoo', 'wail', 'wailing',
         'සයිරන්', 'ගිලන්', 'වී ඕ', 'වීඕ', 'නි නෝ', 'නිනෝ', 'සයිරන් එක', 'ගිලන් රථ'
       ],
       'dog_bark_dataset': [
-        'woof-woof', 'woofwoof', 'woof woof', 'arf-arf', 'arfarf', 'arf arf', 'ruff-ruff', 'ruffruff', 'ruff ruff', 'woof', 'woofs', 'arf', 'ruff', 'bark', 'barks', 'barking', 'dog', 'dogs', 'dog barking', 'dog bark', 'yap', 'yapping', 'bow bow', 'bau bau', 'bow', 'bau',
-        'බල්ලා', 'බුරනවා', 'බුරන', 'වුෆ්', 'වුෆ් වුෆ්', 'බෝ', 'බෝ බෝ', 'බල්ලන්', 'බල්ලා බුරනවා'
+        'woof-woof', 'woofwoof', 'woof woof', 'arf-arf', 'arfarf', 'arf arf', 'ruff-ruff', 'ruffruff', 'ruff ruff', 'woof', 'woofs', 'arf', 'ruff', 'bark', 'barks', 'barking', 'dog', 'dogs', 'dog barking', 'dog bark', 'yap', 'yapping', 'bow bow', 'bau bau',
+        'බල්ලා', 'බුරනවා', 'බුරන', 'වුෆ්', 'වුෆ් වුෆ්', 'බෝ බෝ', 'බල්ලන්', 'බල්ලා බුරනවා'
       ],
       'baby crying': [
         'waa-waa', 'waawaa', 'waa waa', 'wah-wah', 'wahwah', 'wah wah', 'waa', 'wah', 'cry', 'crying', 'cries', 'baby', 'babies', 'baby crying', 'baby cry', 'weeping', 'screaming', 'whine', 'whining',
-        'ළදරු', 'හැඬීම', 'අඬනවා', 'අඬන', 'වා', 'වා වා', 'වහ්', 'බබා', 'ළමයා', 'ළදරු හැඬීම'
+        'ළදරු', 'හැඬීම', 'අඬනවා', 'අඬන', 'වා වා', 'වහ්', 'බබා', 'ළමයා', 'ළදරු හැඬීම'
       ],
       'vehicle horns': [
         'beep-beep', 'beepbeep', 'beep beep', 'honk-honk', 'honkhonk', 'honk honk', 'honk', 'honks', 'honking', 'beep', 'beeps', 'beeping', 'toot', 'pip', 'piip', 'car horn', 'vehicle horn', 'horn sound', 'horn', 'horns',
