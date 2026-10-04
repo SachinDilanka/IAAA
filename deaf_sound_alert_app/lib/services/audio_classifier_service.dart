@@ -251,12 +251,12 @@ class AudioClassifierService {
 
     final nowMs = DateTime.now().millisecondsSinceEpoch;
 
-    // High acoustic sound level detected (> 0.30)
-    // Only sample if non-speech acoustic sound has played for >300ms and NO speech in last 1.2s
-    if (soundVol >= 0.30) {
+    // High acoustic sound level detected (> 0.35)
+    // Only sample if non-speech acoustic sound has played for >400ms and NO speech in last 1.8s
+    if (soundVol >= 0.35) {
       if (_highVolumeStartTimeMs == 0) {
         _highVolumeStartTimeMs = nowMs;
-      } else if (nowMs - _highVolumeStartTimeMs >= 300 && nowMs - _lastSpeechTimeMs >= 1200) {
+      } else if (nowMs - _highVolumeStartTimeMs >= 400 && nowMs - _lastSpeechTimeMs >= 1800) {
         _triggerAcousticNeuralSample();
       }
     } else {
@@ -272,7 +272,7 @@ class AudioClassifierService {
     try {
       if (_speech.isListening) {
         await _speech.stop();
-        await Future.delayed(const Duration(milliseconds: 100));
+        await Future.delayed(const Duration(milliseconds: 150));
       }
 
       final AudioRecorder sampleRecorder = AudioRecorder();
@@ -298,7 +298,7 @@ class AudioClassifierService {
             return val / 32768.0;
           });
           sampledPcm.addAll(samples);
-          if (sampledPcm.length >= 12000) {
+          if (sampledPcm.length >= 16000) {
             if (!sampleCompleter.isCompleted) sampleCompleter.complete();
           }
         }, onError: (_) {
@@ -306,7 +306,7 @@ class AudioClassifierService {
         });
 
         await sampleCompleter.future.timeout(
-          const Duration(milliseconds: 800),
+          const Duration(milliseconds: 950),
           onTimeout: () {},
         );
 
@@ -331,29 +331,35 @@ class AudioClassifierService {
             final double babyProb = pred.allProbabilities['baby_crying'] ?? 0.0;
             final double sirenProb = pred.allProbabilities['ambulance_siren'] ?? 0.0;
             final double hornProb = pred.allProbabilities['vehicle_horn'] ?? 0.0;
+            final double trafficProb = pred.allProbabilities['background_traffic'] ?? 0.0;
 
-            if (topLabel == 'dog_barking' || dogProb >= 0.20) {
+            if (topLabel == 'dog_barking' || dogProb >= 0.30) {
               simulateSoundDetection('dog_bark_dataset', confidence: math.max(topProb, dogProb), overrideCooldown: true);
               return;
             }
 
-            if (topLabel == 'baby_crying' || babyProb >= 0.20) {
+            if (topLabel == 'baby_crying' || babyProb >= 0.30) {
               simulateSoundDetection('baby crying', confidence: math.max(topProb, babyProb), overrideCooldown: true);
               return;
             }
 
-            if (topLabel == 'ambulance_siren' || sirenProb >= 0.20) {
+            if (topLabel == 'ambulance_siren' || sirenProb >= 0.30) {
               simulateSoundDetection('ambulance', confidence: math.max(topProb, sirenProb), overrideCooldown: true);
               return;
             }
 
-            if (topLabel == 'vehicle_horn' || hornProb >= 0.20) {
+            if (topLabel == 'vehicle_horn' || hornProb >= 0.30) {
               simulateSoundDetection('vehicle horns', confidence: math.max(topProb, hornProb), overrideCooldown: true);
               return;
             }
 
-            if (!mappedKey.startsWith('sinhala_') && mappedKey != 'road' && mappedKey != 'traffic') {
-              if (topProb >= 0.35) {
+            if (topLabel == 'background_traffic' || trafficProb >= 0.30) {
+              simulateSoundDetection('traffic', confidence: math.max(topProb, trafficProb), overrideCooldown: true);
+              return;
+            }
+
+            if (!mappedKey.startsWith('sinhala_') && mappedKey != 'road') {
+              if (topProb >= 0.40) {
                 simulateSoundDetection(mappedKey, confidence: topProb, overrideCooldown: true);
               }
             }
@@ -433,10 +439,7 @@ class AudioClassifierService {
     // 1. Continuous Live Speech Engine for transcribing EVERY single word spoken & sound alerts
     _safeListenSpeech();
 
-    // 2. Continuous Audio Streamer for PCM Acoustic Neural Inference & Environmental Sound Alerts
-    _startAudioStreamer();
-
-    // 3. Watchdog timer to ensure STT stays alive continuously
+    // 2. Watchdog timer to ensure STT stays alive continuously
     _startSttWatchdog();
 
     return true;
