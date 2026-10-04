@@ -228,10 +228,10 @@ class AudioClassifierService {
           _checkAcousticAudioSampleNeeded(soundVol);
         },
         listenOptions: stt.SpeechListenOptions(
-          listenMode: stt.ListenMode.dictation,
+          listenMode: stt.ListenMode.deviceDefault,
           partialResults: true,
           cancelOnError: false,
-          pauseFor: const Duration(seconds: 5),
+          pauseFor: const Duration(seconds: 3),
           listenFor: const Duration(hours: 1),
         ),
         localeId: targetLocale,
@@ -251,12 +251,12 @@ class AudioClassifierService {
 
     final nowMs = DateTime.now().millisecondsSinceEpoch;
 
-    // High acoustic sound level detected (> 0.28)
-    // Sample if non-speech acoustic sound has played for >250ms and NO speech in last 1.0s
-    if (soundVol >= 0.28) {
+    // High acoustic sound level detected (> 0.32)
+    // Sample if non-speech acoustic sound has played for >300ms and NO speech in last 1.8s
+    if (soundVol >= 0.32) {
       if (_highVolumeStartTimeMs == 0) {
         _highVolumeStartTimeMs = nowMs;
-      } else if (nowMs - _highVolumeStartTimeMs >= 250 && nowMs - _lastSpeechTimeMs >= 1000) {
+      } else if (nowMs - _highVolumeStartTimeMs >= 300 && nowMs - _lastSpeechTimeMs >= 1800) {
         _triggerAcousticNeuralSample();
       }
     } else {
