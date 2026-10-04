@@ -270,11 +270,6 @@ class AudioClassifierService {
     _highVolumeStartTimeMs = 0;
 
     try {
-      if (_speech.isListening) {
-        await _speech.stop();
-        await Future.delayed(const Duration(milliseconds: 120));
-      }
-
       final AudioRecorder sampleRecorder = AudioRecorder();
       if (await sampleRecorder.hasPermission()) {
         final stream = await sampleRecorder.startStream(
@@ -298,7 +293,7 @@ class AudioClassifierService {
             return val / 32768.0;
           });
           sampledPcm.addAll(samples);
-          if (sampledPcm.length >= 16000) {
+          if (sampledPcm.length >= 12000) {
             if (!sampleCompleter.isCompleted) sampleCompleter.complete();
           }
         }, onError: (_) {
@@ -306,7 +301,7 @@ class AudioClassifierService {
         });
 
         await sampleCompleter.future.timeout(
-          const Duration(milliseconds: 900),
+          const Duration(milliseconds: 800),
           onTimeout: () {},
         );
 
@@ -315,7 +310,10 @@ class AudioClassifierService {
           await sampleRecorder.stop();
         } catch (_) {}
 
-        if (sampledPcm.isNotEmpty) {
+        final nowMs = DateTime.now().millisecondsSinceEpoch;
+        final bool speechActiveRecently = (nowMs - _lastSpeechTimeMs < 2000);
+
+        if (!speechActiveRecently && sampledPcm.isNotEmpty) {
           final window1s = List<double>.filled(16000, 0.0);
           for (int i = 0; i < math.min(16000, sampledPcm.length); i++) {
             window1s[i] = sampledPcm[i];
@@ -370,9 +368,6 @@ class AudioClassifierService {
       print('Acoustic neural sampling error: $e');
     } finally {
       _isSamplingAcousticPCM = false;
-      if (_isListening && !_speech.isListening && !_isRestartingStt) {
-        _safeListenSpeech();
-      }
     }
   }
 
