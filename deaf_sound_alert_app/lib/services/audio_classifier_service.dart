@@ -433,7 +433,10 @@ class AudioClassifierService {
     // 1. Continuous Live Speech Engine for transcribing EVERY single word spoken & sound alerts
     _safeListenSpeech();
 
-    // 2. Watchdog timer to ensure STT stays alive continuously
+    // 2. Continuous Audio Streamer for PCM Acoustic Neural Inference & Environmental Sound Alerts
+    _startAudioStreamer();
+
+    // 3. Watchdog timer to ensure STT stays alive continuously
     _startSttWatchdog();
 
     return true;
@@ -586,11 +589,25 @@ class AudioClassifierService {
           final topProb = pred.probability;
           final mappedKey = _labelToSoundKey[topLabel] ?? topLabel;
 
-          final bool speechActiveRecently = (nowMs - _lastSpeechTimeMs < 800);
+          final bool speechActiveRecently = (nowMs - _lastSpeechTimeMs < 1200);
 
           // Environmental Acoustic Sound Detection (Baby Crying, Vehicle Horns, Ambulance Siren, Dog Barking, Traffic)
-          if (!mappedKey.startsWith('sinhala_') && mappedKey != 'road' && mappedKey != 'traffic') {
-            if (topProb >= 0.40 && (rms >= 0.005 || maxAmp >= 0.015)) {
+          // Muted while speech is active recently so speaking Sinhala emergency words doesn't trigger wrong sound cards!
+          if (!speechActiveRecently && !mappedKey.startsWith('sinhala_') && mappedKey != 'road' && mappedKey != 'traffic') {
+            final double dogProb = pred.allProbabilities['dog_barking'] ?? 0.0;
+            final double babyProb = pred.allProbabilities['baby_crying'] ?? 0.0;
+            final double sirenProb = pred.allProbabilities['ambulance_siren'] ?? 0.0;
+            final double hornProb = pred.allProbabilities['vehicle_horn'] ?? 0.0;
+
+            if (topLabel == 'dog_barking' || dogProb >= 0.22) {
+              simulateSoundDetection('dog_bark_dataset', confidence: math.max(topProb, dogProb));
+            } else if (topLabel == 'baby_crying' || babyProb >= 0.22) {
+              simulateSoundDetection('baby crying', confidence: math.max(topProb, babyProb));
+            } else if (topLabel == 'ambulance_siren' || sirenProb >= 0.22) {
+              simulateSoundDetection('ambulance', confidence: math.max(topProb, sirenProb));
+            } else if (topLabel == 'vehicle_horn' || hornProb >= 0.22) {
+              simulateSoundDetection('vehicle horns', confidence: math.max(topProb, hornProb));
+            } else if (topProb >= 0.40 && (rms >= 0.005 || maxAmp >= 0.015)) {
               simulateSoundDetection(mappedKey, confidence: topProb);
             }
           }
