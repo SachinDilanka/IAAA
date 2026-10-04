@@ -207,10 +207,10 @@ class AudioClassifierService {
       await _speech.listen(
         onResult: (result) {
           if (!_isListening) return;
-          _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
-          _highVolumeStartTimeMs = 0; // Reset acoustic timer immediately when any speech occurs
           final String rawWords = result.recognizedWords.trim();
           if (rawWords.isNotEmpty) {
+            _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
+            _highVolumeStartTimeMs = 0; // Reset acoustic timer immediately when any speech occurs
             final String formattedDisplay = _formatTranscriptWithSinhala(rawWords);
             _transcriptController.add(formattedDisplay);
             _processSpeechText(rawWords.toLowerCase());
@@ -226,7 +226,7 @@ class AudioClassifierService {
           listenMode: stt.ListenMode.dictation,
           partialResults: true,
           cancelOnError: false,
-          pauseFor: const Duration(seconds: 4),
+          pauseFor: const Duration(seconds: 5),
           listenFor: const Duration(hours: 1),
         ),
         localeId: targetLocale,
@@ -247,11 +247,11 @@ class AudioClassifierService {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
 
     // High acoustic sound level detected (> 0.35)
-    // Only sample if non-speech acoustic sound continues for >800ms and NO speech in last 2.5s
+    // Only sample if non-speech acoustic sound has played for >400ms and NO speech in last 1.8s
     if (soundVol >= 0.35) {
       if (_highVolumeStartTimeMs == 0) {
         _highVolumeStartTimeMs = nowMs;
-      } else if (nowMs - _highVolumeStartTimeMs >= 800 && nowMs - _lastSpeechTimeMs >= 2500) {
+      } else if (nowMs - _highVolumeStartTimeMs >= 400 && nowMs - _lastSpeechTimeMs >= 1800) {
         _triggerAcousticNeuralSample();
       }
     } else {
@@ -324,13 +324,13 @@ class AudioClassifierService {
             final double dogProb = pred.allProbabilities['dog_barking'] ?? 0.0;
             final double babyProb = pred.allProbabilities['baby_crying'] ?? 0.0;
 
-            if (dogProb >= 0.28) {
-              simulateSoundDetection('dog_bark_dataset', confidence: dogProb, overrideCooldown: true);
+            if (topLabel == 'dog_barking' || dogProb >= 0.22) {
+              simulateSoundDetection('dog_bark_dataset', confidence: math.max(topProb, dogProb), overrideCooldown: true);
               return;
             }
 
-            if (babyProb >= 0.28) {
-              simulateSoundDetection('baby crying', confidence: babyProb, overrideCooldown: true);
+            if (topLabel == 'baby_crying' || babyProb >= 0.22) {
+              simulateSoundDetection('baby crying', confidence: math.max(topProb, babyProb), overrideCooldown: true);
               return;
             }
 
