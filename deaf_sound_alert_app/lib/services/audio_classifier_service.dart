@@ -352,10 +352,13 @@ class AudioClassifierService {
     }
   }
 
+  Timer? _sttRestartTimer;
+
   void _onSpeechDone() {
     if (!_isListening) return;
-    Timer(const Duration(milliseconds: 300), () {
-      if (_isListening && !_speech.isListening && !_isRestartingStt) {
+    _sttRestartTimer?.cancel();
+    _sttRestartTimer = Timer(const Duration(milliseconds: 300), () {
+      if (_isListening && !_speech.isListening && !_isRestartingStt && !_isSamplingAcousticPCM) {
         _safeListenSpeech();
       }
     });
@@ -367,8 +370,22 @@ class AudioClassifierService {
     if (err.contains('language') || err.contains('locale') || err.contains('not_supported')) {
       _selectedLocaleId = "";
     }
-    Timer(const Duration(milliseconds: 500), () {
-      if (_isListening && !_speech.isListening && !_isRestartingStt) {
+    _sttRestartTimer?.cancel();
+    _sttRestartTimer = Timer(const Duration(milliseconds: 500), () {
+      if (_isListening && !_speech.isListening && !_isRestartingStt && !_isSamplingAcousticPCM) {
+        _safeListenSpeech();
+      }
+    });
+  }
+
+  void _startSttWatchdog() {
+    _sttWatchdogTimer?.cancel();
+    _sttWatchdogTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      if (!_isListening) {
+        timer.cancel();
+        return;
+      }
+      if (!_speech.isListening && !_isRestartingStt && !_isSamplingAcousticPCM) {
         _safeListenSpeech();
       }
     });
@@ -386,6 +403,7 @@ class AudioClassifierService {
 
     _isListening = true;
     _isRestartingStt = false;
+    _speechAvailable = false; // Force clean initialization after mic permissions confirmed
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     _listeningStartTimeMs = nowMs;
     _rollingIdx = 0;
@@ -397,6 +415,9 @@ class AudioClassifierService {
 
     // 1. Continuous Live Speech Engine for transcribing EVERY single word spoken & sound alerts
     _safeListenSpeech();
+
+    // 2. Watchdog timer to ensure STT stays alive continuously
+    _startSttWatchdog();
 
     return true;
   }
