@@ -207,10 +207,10 @@ class AudioClassifierService {
       await _speech.listen(
         onResult: (result) {
           if (!_isListening) return;
-          _highVolumeStartTimeMs = 0; // Reset acoustic timer immediately when speech is detected
+          _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
+          _highVolumeStartTimeMs = 0; // Reset acoustic timer immediately when any speech occurs
           final String rawWords = result.recognizedWords.trim();
           if (rawWords.isNotEmpty) {
-            _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
             final String formattedDisplay = _formatTranscriptWithSinhala(rawWords);
             _transcriptController.add(formattedDisplay);
             _processSpeechText(rawWords.toLowerCase());
@@ -223,10 +223,10 @@ class AudioClassifierService {
           _checkAcousticAudioSampleNeeded(soundVol);
         },
         listenOptions: stt.SpeechListenOptions(
-          listenMode: stt.ListenMode.deviceDefault,
+          listenMode: stt.ListenMode.dictation,
           partialResults: true,
           cancelOnError: false,
-          pauseFor: const Duration(seconds: 3),
+          pauseFor: const Duration(seconds: 4),
           listenFor: const Duration(hours: 1),
         ),
         localeId: targetLocale,
@@ -246,12 +246,12 @@ class AudioClassifierService {
 
     final nowMs = DateTime.now().millisecondsSinceEpoch;
 
-    // High acoustic sound level detected (> 0.38)
-    // Only sample environmental sounds if non-speech sound is continuous for > 1.2s and no speech in last 3.0s!
-    if (soundVol >= 0.38) {
+    // High acoustic sound level detected (> 0.35)
+    // Only sample if non-speech acoustic sound continues for >800ms and NO speech in last 2.5s
+    if (soundVol >= 0.35) {
       if (_highVolumeStartTimeMs == 0) {
         _highVolumeStartTimeMs = nowMs;
-      } else if (nowMs - _highVolumeStartTimeMs >= 1200 && nowMs - _lastSpeechTimeMs >= 3000) {
+      } else if (nowMs - _highVolumeStartTimeMs >= 800 && nowMs - _lastSpeechTimeMs >= 2500) {
         _triggerAcousticNeuralSample();
       }
     } else {
