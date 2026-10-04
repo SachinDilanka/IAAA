@@ -251,12 +251,12 @@ class AudioClassifierService {
 
     final nowMs = DateTime.now().millisecondsSinceEpoch;
 
-    // High acoustic sound level detected (> 0.32)
-    // Sample if non-speech acoustic sound has played for >300ms and NO speech in last 1.8s
-    if (soundVol >= 0.32) {
+    // High acoustic sound level detected (> 0.40)
+    // Only sample if non-speech acoustic sound has played for >400ms and NO speech in last 2.2s
+    if (soundVol >= 0.40) {
       if (_highVolumeStartTimeMs == 0) {
         _highVolumeStartTimeMs = nowMs;
-      } else if (nowMs - _highVolumeStartTimeMs >= 300 && nowMs - _lastSpeechTimeMs >= 1800) {
+      } else if (nowMs - _highVolumeStartTimeMs >= 400 && nowMs - _lastSpeechTimeMs >= 2200) {
         _triggerAcousticNeuralSample();
       }
     } else {
