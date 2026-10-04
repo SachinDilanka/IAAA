@@ -127,7 +127,6 @@ class AudioClassifierService {
             }
           }
         } catch (_) {}
-        _selectedLocaleId ??= 'si_LK';
       }
     } catch (_) {
       _speechAvailable = false;
