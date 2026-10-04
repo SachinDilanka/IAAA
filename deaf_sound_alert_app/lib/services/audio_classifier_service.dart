@@ -251,12 +251,12 @@ class AudioClassifierService {
 
     final nowMs = DateTime.now().millisecondsSinceEpoch;
 
-    // High acoustic sound level detected (> 0.35)
-    // Only sample if non-speech acoustic sound has played for >400ms and NO speech in last 1.8s
-    if (soundVol >= 0.35) {
+    // High acoustic sound level detected (> 0.28)
+    // Sample if non-speech acoustic sound has played for >250ms and NO speech in last 1.0s
+    if (soundVol >= 0.28) {
       if (_highVolumeStartTimeMs == 0) {
         _highVolumeStartTimeMs = nowMs;
-      } else if (nowMs - _highVolumeStartTimeMs >= 400 && nowMs - _lastSpeechTimeMs >= 1800) {
+      } else if (nowMs - _highVolumeStartTimeMs >= 250 && nowMs - _lastSpeechTimeMs >= 1000) {
         _triggerAcousticNeuralSample();
       }
     } else {
@@ -272,7 +272,7 @@ class AudioClassifierService {
     try {
       if (_speech.isListening) {
         await _speech.stop();
-        await Future.delayed(const Duration(milliseconds: 150));
+        await Future.delayed(const Duration(milliseconds: 120));
       }
 
       final AudioRecorder sampleRecorder = AudioRecorder();
@@ -306,7 +306,7 @@ class AudioClassifierService {
         });
 
         await sampleCompleter.future.timeout(
-          const Duration(milliseconds: 950),
+          const Duration(milliseconds: 900),
           onTimeout: () {},
         );
 
@@ -333,33 +333,33 @@ class AudioClassifierService {
             final double hornProb = pred.allProbabilities['vehicle_horn'] ?? 0.0;
             final double trafficProb = pred.allProbabilities['background_traffic'] ?? 0.0;
 
-            if (topLabel == 'dog_barking' || dogProb >= 0.30) {
+            if (topLabel == 'dog_barking' || dogProb >= 0.22) {
               simulateSoundDetection('dog_bark_dataset', confidence: math.max(topProb, dogProb), overrideCooldown: true);
               return;
             }
 
-            if (topLabel == 'baby_crying' || babyProb >= 0.30) {
+            if (topLabel == 'baby_crying' || babyProb >= 0.22) {
               simulateSoundDetection('baby crying', confidence: math.max(topProb, babyProb), overrideCooldown: true);
               return;
             }
 
-            if (topLabel == 'ambulance_siren' || sirenProb >= 0.30) {
+            if (topLabel == 'ambulance_siren' || sirenProb >= 0.22) {
               simulateSoundDetection('ambulance', confidence: math.max(topProb, sirenProb), overrideCooldown: true);
               return;
             }
 
-            if (topLabel == 'vehicle_horn' || hornProb >= 0.30) {
+            if (topLabel == 'vehicle_horn' || hornProb >= 0.22) {
               simulateSoundDetection('vehicle horns', confidence: math.max(topProb, hornProb), overrideCooldown: true);
               return;
             }
 
-            if (topLabel == 'background_traffic' || trafficProb >= 0.30) {
+            if (topLabel == 'background_traffic' || trafficProb >= 0.22) {
               simulateSoundDetection('traffic', confidence: math.max(topProb, trafficProb), overrideCooldown: true);
               return;
             }
 
             if (!mappedKey.startsWith('sinhala_') && mappedKey != 'road') {
-              if (topProb >= 0.40) {
+              if (topProb >= 0.35) {
                 simulateSoundDetection(mappedKey, confidence: topProb, overrideCooldown: true);
               }
             }
@@ -423,6 +423,7 @@ class AudioClassifierService {
         Permission.microphone,
         Permission.notification,
       ].request();
+      await Future.delayed(const Duration(milliseconds: 200));
     } catch (_) {}
 
     _isListening = true;
@@ -432,6 +433,17 @@ class AudioClassifierService {
     _rollingIdx = 0;
     _total16kPushed = 0;
     _latestSoundVolume = 0.25;
+
+    try {
+      _speechAvailable = await _speech.initialize(
+        onError: (val) => _onSpeechError(val.errorMsg),
+        onStatus: (val) {
+          if ((val == 'done' || val == 'notListening') && _isListening) {
+            _onSpeechDone();
+          }
+        },
+      );
+    } catch (_) {}
 
     // Start 50 FPS smooth visualizer animation ticker
     _startVisualizerTicker();
