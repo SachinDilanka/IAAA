@@ -33,15 +33,23 @@ class AudioClassifierService {
   int _total16kPushed = 0;
   int _lastMlTimeMs = 0;
   int _listeningStartTimeMs = 0;
-  int _lastSpeechEnergyMs = 0;
   int _keywordLockUntilMs = 0;
   String? _currentDisplayedKeyword;
 
-  // Keyword & Environmental detection voting
-  String? _pendingSpeechClass;
-  int _pendingSpeechVotes = 0;
+  // Environmental detection voting
   String? _pendingEnvClass;
   int _pendingEnvVotes = 0;
+
+  // Utterance accumulator for Sinhala emergency keywords (near & far voice)
+  int _speechFramesCount = 0;
+  final Map<String, double> _speechSumProbs = {};
+  final Map<String, double> _speechMaxProbs = {};
+
+  void _resetSpeechAccumulator() {
+    _speechFramesCount = 0;
+    _speechSumProbs.clear();
+    _speechMaxProbs.clear();
+  }
 
   final Map<String, DateTime> _lastSoundAlertTimes = {};
   DateTime? _lastEmittedAlertTime;
@@ -173,15 +181,13 @@ class AudioClassifierService {
     _isListening = true;
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     _listeningStartTimeMs = nowMs;
-    _lastSpeechEnergyMs = 0;
     _keywordLockUntilMs = 0;
     _rollingIdx = 0;
     _total16kPushed = 0;
     _lastMlTimeMs = 0;
-    _pendingSpeechClass = null;
-    _pendingSpeechVotes = 0;
     _pendingEnvClass = null;
     _pendingEnvVotes = 0;
+    _resetSpeechAccumulator();
     _currentDisplayedKeyword = null;
     _latestSoundVolume = 0.25;
     _rollingBuf16k.fillRange(0, 16000, 0.0);
@@ -276,8 +282,8 @@ class AudioClassifierService {
 
     final bool startupGraceOver = (nowMs - _listeningStartTimeMs >= 500);
 
-    // Run Neural Inference every 135ms on 16k window
-    if (_total16kPushed >= 8000 &&
+    // Run Neural Inference every 135ms on 16k window (after initial buffer fill)
+    if (_total16kPushed >= 16000 &&
         startupGraceOver &&
         (nowMs - _lastMlTimeMs >= 135)) {
       _lastMlTimeMs = nowMs;
@@ -293,8 +299,7 @@ class AudioClassifierService {
 
       // If alert lockout is currently active (2.2s after a keyword fired), hold
       if (nowMs < _keywordLockUntilMs) {
-        _pendingSpeechClass = null;
-        _pendingSpeechVotes = 0;
+        _resetSpeechAccumulator();
         _pendingEnvClass = null;
         _pendingEnvVotes = 0;
         return;
@@ -302,15 +307,14 @@ class AudioClassifierService {
 
       // Silence floor check
       if (windowMax < 0.003) {
-        _pendingSpeechClass = null;
-        _pendingSpeechVotes = 0;
+        _resetSpeechAccumulator();
         _pendingEnvClass = null;
         _pendingEnvVotes = 0;
         return;
       }
 
-      // Dynamic AGC: amplifies near or far sound up to 50x
-      final double gain = (0.50 / windowMax).clamp(1.0, 50.0);
+      // Gentle AGC: normalizes voice volume smoothly without creating high-frequency spectral artifacts
+      final double gain = (0.35 / windowMax).clamp(1.0, 2.5);
       final List<double> normWindow = List<double>.filled(16000, 0.0);
       for (int i = 0; i < 16000; i++) {
         normWindow[i] = (window16k[i] * gain).clamp(-1.0, 1.0);
@@ -348,19 +352,12 @@ class AudioClassifierService {
       final double totalEnvProb =
           _envClassToSoundKey.keys.fold(0.0, (sum, c) => sum + (allP[c] ?? 0.0));
 
-      // Background room silence / road noise check
-      if (bgTrafficProb >= 0.70) {
-        _pendingSpeechClass = null;
-        _pendingSpeechVotes = 0;
-        _pendingEnvClass = null;
-        _pendingEnvVotes = 0;
-        return;
-      }
-
       // === 1. ENVIRONMENTAL EMERGENCY SOUNDS (Baby Crying, Ambulance, Fire Truck, Horn, Dog Barking) ===
-      if (topEnvClass != null && totalEnvProb > totalSpeechProb * 1.15 && totalEnvProb >= 0.35) {
-        _pendingSpeechClass = null;
-        _pendingSpeechVotes = 0;
+      if (topEnvClass != null &&
+          totalEnvProb > totalSpeechProb * 1.5 &&
+          totalEnvProb >= 0.65 &&
+          totalSpeechProb < 0.20) {
+        _resetSpeechAccumulator();
 
         final candidateSound = _envClassToSoundKey[topEnvClass];
         if (candidateSound != null) {
@@ -368,19 +365,21 @@ class AudioClassifierService {
           final bool cooldownPassed = lastAlert == null ||
               nowMs - lastAlert.millisecondsSinceEpoch >= 2200;
 
-          if (_pendingEnvClass == candidateSound) {
+          if (_pendingEnvClass == candidateSound && topEnvProb >= 0.65) {
             _pendingEnvVotes++;
           } else {
             _pendingEnvClass = candidateSound;
             _pendingEnvVotes = 1;
           }
 
-          // Immediate trigger on high confidence (>= 0.65) or 2 confirmation frames (~270ms)
-          final bool shouldTriggerEnv = (topEnvProb >= 0.65) || (_pendingEnvVotes >= 2);
+          // Trigger on 2 confirmation frames (~270ms) or high instant confidence
+          final bool shouldTriggerEnv =
+              (topEnvProb >= 0.88) || (_pendingEnvVotes >= 2 && topEnvProb >= 0.70);
           if (cooldownPassed && shouldTriggerEnv) {
             _lastSoundAlertTimes[candidateSound] =
                 DateTime.fromMillisecondsSinceEpoch(nowMs);
             simulateSoundDetection(candidateSound, confidence: topEnvProb);
+            _keywordLockUntilMs = nowMs + 2200;
             _pendingEnvVotes = 0;
             _pendingEnvClass = null;
           }
@@ -388,30 +387,56 @@ class AudioClassifierService {
         return;
       }
 
-      // === 2. ALL 8 SINHALA EMERGENCY KEYWORDS (NEAR & FAR) ===
-      if (totalSpeechProb > totalEnvProb * 1.05 && totalSpeechProb >= 0.28) {
+      // === 2. ALL 8 SINHALA EMERGENCY KEYWORDS (NEAR & FAR VOICE) ===
+      if (totalSpeechProb > totalEnvProb &&
+          (totalSpeechProb >= 0.35 || topSpeechProb >= 0.40)) {
         _pendingEnvClass = null;
         _pendingEnvVotes = 0;
+        _speechFramesCount++;
 
-        if (_pendingSpeechClass == topSpeechClass) {
-          _pendingSpeechVotes++;
-        } else {
-          _pendingSpeechClass = topSpeechClass;
-          _pendingSpeechVotes = 1;
+        for (final s in speechClasses) {
+          final p = allP[s] ?? 0.0;
+          _speechSumProbs[s] = (_speechSumProbs[s] ?? 0.0) + p;
+          if (p > (_speechMaxProbs[s] ?? 0.0)) {
+            _speechMaxProbs[s] = p;
+          }
         }
 
-        // Immediate trigger on high confidence (>= 0.50) or 2 confirmation frames (~270ms)
-        final bool shouldTriggerSpeech = (topSpeechProb >= 0.50) || (_pendingSpeechVotes >= 2);
+        // Determine best speech candidate based on accumulated probabilities
+        String bestCandidate = topSpeechClass;
+        double bestSum = _speechSumProbs[bestCandidate] ?? 0.0;
+        for (final s in speechClasses) {
+          final sSum = _speechSumProbs[s] ?? 0.0;
+          if (sSum > bestSum) {
+            bestSum = sSum;
+            bestCandidate = s;
+          }
+        }
+
+        final double bestPeak = _speechMaxProbs[bestCandidate] ?? 0.0;
+
+        // Utterance trigger conditions:
+        // A) High-confidence trigger: 3 frames (~405ms) with peak >= 0.88 and dominant sum
+        // B) Utterance completion trigger: 5-6 frames (~675-810ms, full human word length) with peak >= 0.60
+        final bool shouldTriggerSpeech =
+            (_speechFramesCount >= 3 && bestPeak >= 0.88 && bestSum >= 2.0) ||
+            (_speechFramesCount >= 5 && bestPeak >= 0.60 && bestSum >= 2.2);
+
         if (shouldTriggerSpeech) {
-          _triggerKeywordAlert(topSpeechClass, topSpeechProb, nowMs);
-          _pendingSpeechVotes = 0;
-          _pendingSpeechClass = null;
+          _triggerKeywordAlert(bestCandidate, bestPeak, nowMs);
+          _resetSpeechAccumulator();
         }
         return;
       }
 
-      _pendingSpeechClass = null;
-      _pendingSpeechVotes = 0;
+      // Background room silence / road noise check
+      if (bgTrafficProb >= 0.70 && totalSpeechProb < 0.20) {
+        _resetSpeechAccumulator();
+        _pendingEnvClass = null;
+        _pendingEnvVotes = 0;
+        return;
+      }
+
       _pendingEnvClass = null;
       _pendingEnvVotes = 0;
     }
@@ -423,9 +448,7 @@ class AudioClassifierService {
 
     _keywordLockUntilMs = nowMs + 2200; // Hold for 2.2s so user can test next word sequentially
     _currentDisplayedKeyword = soundKey;
-    _lastSpeechEnergyMs = nowMs;
-    _pendingSpeechClass = null;
-    _pendingSpeechVotes = 0;
+    _resetSpeechAccumulator();
     _pendingEnvClass = null;
     _pendingEnvVotes = 0;
 
@@ -440,8 +463,7 @@ class AudioClassifierService {
       overrideCooldown: true,
     ));
 
-    // Zero out rolling buffer to eliminate trailing noise hallucinations
-    _rollingBuf16k.fillRange(0, 16000, 0.0);
+    // Note: Do not fill buffer with zeros! Continuous microphone flow prevents artificial step artifacts.
   }
 
   void stopListening() {
@@ -451,10 +473,9 @@ class AudioClassifierService {
     _latestSoundVolume = 0.02;
     _waveformController.add([]);
     _currentDisplayedKeyword = null;
-    _pendingSpeechClass = null;
-    _pendingSpeechVotes = 0;
     _pendingEnvClass = null;
     _pendingEnvVotes = 0;
+    _resetSpeechAccumulator();
 
     _recordStreamSub?.cancel();
     _recordStreamSub = null;
