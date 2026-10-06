@@ -287,7 +287,7 @@ class NativeNeuralAudioClassifier {
       frameMfccs.add(mfcc);
     }
 
-    // Feature set 1: Average MFCCs across full window (Continuous sounds like Ambulance Siren)
+    // Full 1-second average MFCC feature extraction (exact match with trained model)
     final List<double> featAvg = List<double>.filled(40, 0.0);
     for (int i = 0; i < 40; i++) {
       double sum = 0.0;
@@ -297,39 +297,17 @@ class NativeNeuralAudioClassifier {
       featAvg[i] = (sum / nFrames - _mean[i]) / (_std[i] > 0 ? _std[i] : 1.0);
     }
 
-    // Feature set 2: Top-K Active Energy frames (Transient sounds like Dog Barking, Baby Crying, Vehicle Horns, Traffic, Sinhala Speech)
-    final List<int> sortedIndices = List<int>.generate(nFrames, (i) => i);
-    sortedIndices.sort((a, b) => frameEnergies[b].compareTo(frameEnergies[a]));
-    final int topK = math.max(1, (nFrames * 0.45).round());
-
-    final List<double> featPeak = List<double>.filled(40, 0.0);
-    for (int i = 0; i < 40; i++) {
-      double sum = 0.0;
-      for (int k = 0; k < topK; k++) {
-        final int f = sortedIndices[k];
-        sum += frameMfccs[f][i];
-      }
-      featPeak[i] = (sum / topK - _mean[i]) / (_std[i] > 0 ? _std[i] : 1.0);
-    }
-
-    final Map<String, double> probsAvg = _evaluateDenseNN(featAvg);
-    final Map<String, double> probsPeak = _evaluateDenseNN(featPeak);
-
-    final Map<String, double> finalProbs = {};
+    final Map<String, double> finalProbs = _evaluateDenseNN(featAvg);
     int bestIdx = 0;
     double bestP = 0.0;
     final List<MapEntry<String, double>> entries = [];
 
     for (int j = 0; j < _classes.length; j++) {
       final String cls = _classes[j];
-      final double pAvg = probsAvg[cls] ?? 0.0;
-      final double pPeak = probsPeak[cls] ?? 0.0;
-      final double combinedP = math.max(pAvg, pPeak);
-
-      finalProbs[cls] = combinedP;
-      entries.add(MapEntry(cls, combinedP));
-      if (combinedP > bestP) {
-        bestP = combinedP;
+      final double prob = finalProbs[cls] ?? 0.0;
+      entries.add(MapEntry(cls, prob));
+      if (prob > bestP) {
+        bestP = prob;
         bestIdx = j;
       }
     }

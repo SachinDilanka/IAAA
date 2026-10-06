@@ -172,103 +172,40 @@ class DashboardScreen extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1E293B),
+                          color: const Color(0xFF132238),
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: provider.currentTranscript.isNotEmpty
-                                ? const Color(0xFF00E5FF)
-                                : Colors.cyanAccent.withValues(alpha: 0.35),
-                            width: provider.currentTranscript.isNotEmpty ? 1.5 : 1.0,
+                            color: const Color(0xFF00E5FF).withValues(alpha: 0.6),
+                            width: 1.5,
                           ),
                           boxShadow: [
-                            if (provider.currentTranscript.isNotEmpty)
-                              BoxShadow(
-                                color: const Color(0xFF00E5FF).withValues(alpha: 0.2),
-                                blurRadius: 12,
-                                spreadRadius: 1,
-                              ),
+                            BoxShadow(
+                              color: const Color(0xFF00E5FF).withValues(alpha: 0.15),
+                              blurRadius: 12,
+                              spreadRadius: 1,
+                            ),
                           ],
                         ),
                         child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            Container(
-                              margin: const EdgeInsets.only(top: 2),
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: provider.currentTranscript.isNotEmpty
-                                    ? const Color(0xFF00E5FF).withValues(alpha: 0.2)
-                                    : Colors.white10,
-                              ),
-                              child: Icon(
-                                Icons.record_voice_over_rounded,
-                                color: provider.currentTranscript.isNotEmpty
-                                    ? const Color(0xFF00E5FF)
-                                    : Colors.cyanAccent,
-                                size: 24,
-                              ),
+                            const Icon(
+                              Icons.record_voice_over_rounded,
+                              color: Color(0xFF00E5FF),
+                              size: 26,
                             ),
-                            const SizedBox(width: 12),
+                            const SizedBox(width: 14),
                             Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFFF3B30),
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: const Text(
-                                          'LIVE SPEECH',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w900,
-                                            fontSize: 9,
-                                            letterSpacing: 0.8,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      const Text(
-                                        'Voice to Text',
-                                        style: TextStyle(
-                                          color: Colors.white54,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    provider.currentTranscript.isNotEmpty
-                                        ? 'Live Speech: "${provider.currentTranscript}"'
-                                        : 'Live Speech: Listening for Sinhala keywords (උදව්, අනතුරක්...)',
-                                    style: TextStyle(
-                                      color: provider.currentTranscript.isNotEmpty ? Colors.white : Colors.white60,
-                                      fontWeight: provider.currentTranscript.isNotEmpty ? FontWeight.bold : FontWeight.normal,
-                                      fontSize: 14,
-                                      height: 1.3,
-                                    ),
-                                  ),
-                                  if (provider.sttStatus.isNotEmpty) ...[
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      provider.sttStatus,
-                                      style: TextStyle(
-                                        color: provider.sttStatus.contains('not available') ||
-                                                provider.sttStatus.contains('error')
-                                            ? Colors.orangeAccent
-                                            : Colors.cyanAccent.withValues(alpha: 0.75),
-                                        fontSize: 11,
-                                      ),
-                                    ),
-                                  ],
-                                ],
+                              child: Text(
+                                provider.currentTranscript.isNotEmpty
+                                    ? 'Live Speech: "${provider.currentTranscript}"'
+                                    : 'Live Speech: Listening...',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                  height: 1.35,
+                                ),
                               ),
                             ),
                           ],

@@ -20,11 +20,7 @@ class AudioClassifierService {
 
   final NativeNeuralAudioClassifier _neuralClassifier =
       NativeNeuralAudioClassifier();
-  static const MethodChannel _speechChannel =
-      MethodChannel('com.deafalert.app/speech');
-  static const EventChannel _speechEvents =
-      EventChannel('com.deafalert.app/speech/events');
-  StreamSubscription? _speechSubscription;
+
 
   AudioRecorder? _audioRecorder;
   StreamSubscription<Uint8List>? _recordStreamSub;
@@ -70,18 +66,6 @@ class AudioClassifierService {
     _sttStatusController.add(status);
   }
 
-  // Exact Live Speech display strings for 8 Sinhala emergency keywords
-  static final Map<String, String> _sinhalaLiveSpeechDisplay = {
-    'sinhala_udaw_': 'udaw  →  උදව් (Udaw - Help)',
-    'sinhala_beraganna_': 'beeraganna  →  බේරගන්න (Beraganna - Save Me)',
-    'sinhala_ginnak_': 'ginnak  →  ගින්නක් (Ginnak - Fire)',
-    'sinhala_anathurak_': 'anathurak  →  අනතුරක් (Anathurak - Danger)',
-    'sinhala_karadarayak_': 'karadarayak  →  කරදරයක් (Karadarayak - Trouble)',
-    'sinhala_balagena_': 'balagena  →  බලාගෙන (Balaagena - Watch Out)',
-    'sinhala_ehata_wenna_': 'ehata wenna  →  එහාට වෙන්න (Ehata Wenna - Move Aside)',
-    'sinhala_parissamin_': 'parissamin  →  පරිස්සමින් (Parissamin - Be Careful)',
-  };
-
   static const Map<String, String> _sinhalaLiveSpeechWord = {
     'sinhala_udaw_': 'උදව් (Udaw - Help)',
     'sinhala_beraganna_': 'බේරගන්න (Beraganna - Save Me)',
@@ -102,16 +86,6 @@ class AudioClassifierService {
     'balagena': 'sinhala_balagena_',
     'ehata_wenna': 'sinhala_ehata_wenna_',
     'parissamin': 'sinhala_parissamin_',
-  };
-
-  // Exact Live Speech display strings for 6 Environmental sounds
-  static final Map<String, String> _envLiveSpeechDisplay = {
-    'ambulance': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
-    'fire_truck': 'ගිනි නිවන රථ ශබ්දය (Fire Truck Siren)',
-    'vehicle horns': 'වාහන හොන් (Vehicle Horns)',
-    'baby crying': 'ළදරු හැඬීම (Baby Crying)',
-    'dog_bark_dataset': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
-    'traffic': 'වාහන තදබදය (Traffic Noise)',
   };
 
   Timer? _visualizerTicker;
@@ -220,346 +194,6 @@ class AudioClassifierService {
         'Offline detection active. Say a Sinhala keyword or play a sound.');
 
     return true;
-  }
-
-  Future<void> _startSpeechRecognition() async {
-    try {
-      await _speechSubscription?.cancel();
-      _speechSubscription = _speechEvents.receiveBroadcastStream().listen(
-        (event) {
-          if (!_isListening || event is! Map) return;
-          final type = event['type']?.toString();
-
-          if (type == 'rms') {
-            final rmsVal = (event['rms'] as num?)?.toDouble() ?? 0.0;
-            if (rmsVal > 0.0) {
-              final normVol = ((rmsVal + 2.0) / 12.0).clamp(0.18, 1.0);
-              _updateWaveformVolume(normVol);
-            }
-            return;
-          }
-
-          final text = event['text']?.toString().trim() ?? '';
-          final rawCandidates = (event['candidates'] as List<dynamic>?)
-                  ?.map((c) => c.toString())
-                  .toList() ??
-              [];
-
-          if ((type == 'partialResult' || type == 'finalResult') &&
-              text.isNotEmpty) {
-            _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
-            _setSttStatus('Listening for Sinhala emergency keywords');
-            _processSpeechText(text, candidates: rawCandidates);
-          } else if (type == 'error') {
-            _setSttStatus(
-                'Speech recognizer error: ${event['text'] ?? 'unknown'}');
-          }
-        },
-        onError: (Object error) {
-          if (_isListening) {
-            _setSttStatus('Speech recognizer error: $error');
-          }
-        },
-      );
-
-      final available =
-          await _speechChannel.invokeMethod<bool>('isAvailable') ?? false;
-      if (!available) {
-        _setSttStatus('Android speech recognizer is unavailable.');
-        return;
-      }
-      await _speechChannel.invokeMethod('startListening');
-      _setSttStatus(
-          'Speech recognition active. Say udaw, beeraganna, ginnak, anathurak, karadarayak, balagena, ehata wenna, or parissamin.');
-    } catch (error) {
-      _setSttStatus('Could not start speech recognition: $error');
-    }
-  }
-
-  String _normalizeText(String s) => s
-      .toLowerCase()
-      .replaceAll(RegExp(r'[^\w\s\u0D80-\u0DFF]'), ' ')
-      .replaceAll(RegExp(r'\s+'), ' ')
-      .trim();
-
-  void _processSpeechText(String rawText, {List<String> candidates = const []}) {
-    final cleanMain = _normalizeText(rawText);
-    if (cleanMain.isEmpty) return;
-
-    final targets = [cleanMain, ...candidates.map(_normalizeText)]
-        .where((s) => s.isNotEmpty)
-        .toList();
-
-    const sinhalaKeywords = <String, String>{
-      // 1. Udaw (Help) -> udaw  →  උදව් (Udaw - Help)
-      'udaw': 'sinhala_udaw_',
-      'udau': 'sinhala_udaw_',
-      'udav': 'sinhala_udaw_',
-      'udaaw': 'sinhala_udaw_',
-      'udaav': 'sinhala_udaw_',
-      'uda': 'sinhala_udaw_',
-      'help': 'sinhala_udaw_',
-      'wood owl': 'sinhala_udaw_',
-      'woodowl': 'sinhala_udaw_',
-      'you down': 'sinhala_udaw_',
-      'you dow': 'sinhala_udaw_',
-      'you do': 'sinhala_udaw_',
-      'u down': 'sinhala_udaw_',
-      'u dow': 'sinhala_udaw_',
-      'you doubted': 'sinhala_udaw_',
-      'who down': 'sinhala_udaw_',
-      'who doubt': 'sinhala_udaw_',
-      'who do': 'sinhala_udaw_',
-      'you dive': 'sinhala_udaw_',
-      'you dial': 'sinhala_udaw_',
-      'you dough': 'sinhala_udaw_',
-      'you know': 'sinhala_udaw_',
-      'you have': 'sinhala_udaw_',
-      'you doll': 'sinhala_udaw_',
-      'you dumb': 'sinhala_udaw_',
-      'you d': 'sinhala_udaw_',
-      'you dao': 'sinhala_udaw_',
-      'out down': 'sinhala_udaw_',
-      'how do': 'sinhala_udaw_',
-      'hudaw': 'sinhala_udaw_',
-      'hudau': 'sinhala_udaw_',
-      'ooh dow': 'sinhala_udaw_',
-      'oo dow': 'sinhala_udaw_',
-      'udo': 'sinhala_udaw_',
-      'down': 'sinhala_udaw_',
-      'dow': 'sinhala_udaw_',
-      'dao': 'sinhala_udaw_',
-      'you d have': 'sinhala_udaw_',
-      'you d how': 'sinhala_udaw_',
-      'උදව්': 'sinhala_udaw_',
-      'උදවු': 'sinhala_udaw_',
-      'උදව්ව': 'sinhala_udaw_',
-      'උදව් කරන්න': 'sinhala_udaw_',
-
-      // 2. Beeraganna (Save Me) -> beeraganna  →  බේරගන්න (Beraganna - Save Me)
-      'beeraganna': 'sinhala_beraganna_',
-      'beraganna': 'sinhala_beraganna_',
-      'beera ganna': 'sinhala_beraganna_',
-      'bera ganna': 'sinhala_beraganna_',
-      'rescue': 'sinhala_beraganna_',
-      'save me': 'sinhala_beraganna_',
-      'bear gonna': 'sinhala_beraganna_',
-      'beer gonna': 'sinhala_beraganna_',
-      'bear gunner': 'sinhala_beraganna_',
-      'beer gunner': 'sinhala_beraganna_',
-      'bear gone': 'sinhala_beraganna_',
-      'beer gone': 'sinhala_beraganna_',
-      'bear got': 'sinhala_beraganna_',
-      'beer got': 'sinhala_beraganna_',
-      'bear kinda': 'sinhala_beraganna_',
-      'beer kinda': 'sinhala_beraganna_',
-      'we are gonna': 'sinhala_beraganna_',
-      'big enough': 'sinhala_beraganna_',
-      'better gonna': 'sinhala_beraganna_',
-      'be a gunner': 'sinhala_beraganna_',
-      'beer can': 'sinhala_beraganna_',
-      'beer gun': 'sinhala_beraganna_',
-      'baragana': 'sinhala_beraganna_',
-      'baraganna': 'sinhala_beraganna_',
-      'biraganna': 'sinhala_beraganna_',
-      'biragana': 'sinhala_beraganna_',
-      'bear gotta': 'sinhala_beraganna_',
-      'bare gonna': 'sinhala_beraganna_',
-      'be gonna': 'sinhala_beraganna_',
-      'beer garden': 'sinhala_beraganna_',
-      'බේරගන්න': 'sinhala_beraganna_',
-      'බේරාගන්න': 'sinhala_beraganna_',
-      'බේර ගන්න': 'sinhala_beraganna_',
-      'බේරා ගන්න': 'sinhala_beraganna_',
-
-      // 3. Ginnak (Fire) -> ginnak  →  ගින්නක් (Ginnak - Fire)
-      'ginnak': 'sinhala_ginnak_',
-      'ginna': 'sinhala_ginnak_',
-      'fire': 'sinhala_ginnak_',
-      'gin knock': 'sinhala_ginnak_',
-      'gin noc': 'sinhala_ginnak_',
-      'gin nac': 'sinhala_ginnak_',
-      'good night': 'sinhala_ginnak_',
-      'get knock': 'sinhala_ginnak_',
-      'gin not': 'sinhala_ginnak_',
-      'in knock': 'sinhala_ginnak_',
-      'give knock': 'sinhala_ginnak_',
-      'gin nook': 'sinhala_ginnak_',
-      'green neck': 'sinhala_ginnak_',
-      'gin act': 'sinhala_ginnak_',
-      'gin nut': 'sinhala_ginnak_',
-      'gin neck': 'sinhala_ginnak_',
-      'kin knock': 'sinhala_ginnak_',
-      'can knock': 'sinhala_ginnak_',
-      'gin duck': 'sinhala_ginnak_',
-      'gin back': 'sinhala_ginnak_',
-      'ginnac': 'sinhala_ginnak_',
-      'gina': 'sinhala_ginnak_',
-      'gink': 'sinhala_ginnak_',
-      'ගින්නක්': 'sinhala_ginnak_',
-      'ගින්න': 'sinhala_ginnak_',
-      'ගිනි': 'sinhala_ginnak_',
-      'ගින්දර': 'sinhala_ginnak_',
-
-      // 4. Anathurak (Danger) -> anathurak  →  අනතුරක් (Anathurak - Danger)
-      'anathurak': 'sinhala_anathurak_',
-      'anaturak': 'sinhala_anathurak_',
-      'anathura': 'sinhala_anathurak_',
-      'anatura': 'sinhala_anathurak_',
-      'danger': 'sinhala_anathurak_',
-      'another act': 'sinhala_anathurak_',
-      'another rock': 'sinhala_anathurak_',
-      'another rack': 'sinhala_anathurak_',
-      'another ache': 'sinhala_anathurak_',
-      'another track': 'sinhala_anathurak_',
-      'another arc': 'sinhala_anathurak_',
-      'another accurate': 'sinhala_anathurak_',
-      'අනතුරක්': 'sinhala_anathurak_',
-      'අනතුර': 'sinhala_anathurak_',
-      'අනතුරු': 'sinhala_anathurak_',
-
-      // 5. Karadarayak (Trouble) -> karadarayak  →  කරදරයක් (Karadarayak - Trouble)
-      'karadarayak': 'sinhala_karadarayak_',
-      'karadara': 'sinhala_karadarayak_',
-      'kara darayak': 'sinhala_karadarayak_',
-      'karadara yak': 'sinhala_karadarayak_',
-      'karadhara': 'sinhala_karadarayak_',
-      'trouble': 'sinhala_karadarayak_',
-      'cardiac': 'sinhala_karadarayak_',
-      'color dark': 'sinhala_karadarayak_',
-      'car the rock': 'sinhala_karadarayak_',
-      'car that i act': 'sinhala_karadarayak_',
-      'car that i': 'sinhala_karadarayak_',
-      'car direct': 'sinhala_karadarayak_',
-      'canada act': 'sinhala_karadarayak_',
-      'care direct': 'sinhala_karadarayak_',
-      'car the rack': 'sinhala_karadarayak_',
-      'car dark': 'sinhala_karadarayak_',
-      'color direct': 'sinhala_karadarayak_',
-      'color doctor': 'sinhala_karadarayak_',
-      'car the right': 'sinhala_karadarayak_',
-      'car door act': 'sinhala_karadarayak_',
-      'car the react': 'sinhala_karadarayak_',
-      'current direct': 'sinhala_karadarayak_',
-      'character': 'sinhala_karadarayak_',
-      'කරදරයක්': 'sinhala_karadarayak_',
-      'කරදර': 'sinhala_karadarayak_',
-      'කරදරේ': 'sinhala_karadarayak_',
-
-      // 6. Balagena (Watch Out) -> balagena  →  බලාගෙන (Balaagena - Watch Out)
-      'balagena': 'sinhala_balagena_',
-      'balaagena': 'sinhala_balagena_',
-      'watch out': 'sinhala_balagena_',
-      'bala gonna': 'sinhala_balagena_',
-      'ballerina': 'sinhala_balagena_',
-      'baller gonna': 'sinhala_balagena_',
-      'body gonna': 'sinhala_balagena_',
-      'by la gonna': 'sinhala_balagena_',
-      'balaganna': 'sinhala_balagena_',
-      'balagan': 'sinhala_balagena_',
-      'bottle gonna': 'sinhala_balagena_',
-      'bala gone': 'sinhala_balagena_',
-      'balagene': 'sinhala_balagena_',
-      'palagena': 'sinhala_balagena_',
-      'pala gonna': 'sinhala_balagena_',
-      'bell again': 'sinhala_balagena_',
-      'ball again': 'sinhala_balagena_',
-      'bella gonna': 'sinhala_balagena_',
-      'balagener': 'sinhala_balagena_',
-      'bala gunner': 'sinhala_balagena_',
-      'bala game': 'sinhala_balagena_',
-      'balance': 'sinhala_balagena_',
-      'බලාගෙන': 'sinhala_balagena_',
-      'බලන්න': 'sinhala_balagena_',
-      'බලගෙන': 'sinhala_balagena_',
-
-      // 7. Ehata Wenna (Move Aside) -> ehata wenna  →  එහාට වෙන්න (Ehata Wenna - Move Aside)
-      'ehata wenna': 'sinhala_ehata_wenna_',
-      'ehatawenna': 'sinhala_ehata_wenna_',
-      'ehata': 'sinhala_ehata_wenna_',
-      'ehatha wenna': 'sinhala_ehata_wenna_',
-      'ehata win': 'sinhala_ehata_wenna_',
-      'move aside': 'sinhala_ehata_wenna_',
-      'aside': 'sinhala_ehata_wenna_',
-      'a hat to win': 'sinhala_ehata_wenna_',
-      'a hat to winner': 'sinhala_ehata_wenna_',
-      'hate the winner': 'sinhala_ehata_wenna_',
-      'eight o winner': 'sinhala_ehata_wenna_',
-      'eight have winner': 'sinhala_ehata_wenna_',
-      'air to win': 'sinhala_ehata_wenna_',
-      'a heart to win': 'sinhala_ehata_wenna_',
-      'a hat to when': 'sinhala_ehata_wenna_',
-      'hate to win': 'sinhala_ehata_wenna_',
-      'hate the when': 'sinhala_ehata_wenna_',
-      'eight to when': 'sinhala_ehata_wenna_',
-      'a how to win': 'sinhala_ehata_wenna_',
-      'a hat the winner': 'sinhala_ehata_wenna_',
-      'a hat winner': 'sinhala_ehata_wenna_',
-      'had to win': 'sinhala_ehata_wenna_',
-      'had to winner': 'sinhala_ehata_wenna_',
-      'එහාට වෙන්න': 'sinhala_ehata_wenna_',
-      'එහාට': 'sinhala_ehata_wenna_',
-      'වෙන්න': 'sinhala_ehata_wenna_',
-
-      // 8. Parissamin (Be Careful) -> parissamin  →  පරිස්සමින් (Parissamin - Be Careful)
-      'parissamin': 'sinhala_parissamin_',
-      'parissamen': 'sinhala_parissamin_',
-      'be careful': 'sinhala_parissamin_',
-      'careful': 'sinhala_parissamin_',
-      'paris man': 'sinhala_parissamin_',
-      'paracetamol': 'sinhala_parissamin_',
-      'paris samin': 'sinhala_parissamin_',
-      'paris amen': 'sinhala_parissamin_',
-      'barisamin': 'sinhala_parissamin_',
-      'parisam': 'sinhala_parissamin_',
-      'paris men': 'sinhala_parissamin_',
-      'paris in': 'sinhala_parissamin_',
-      'baris amen': 'sinhala_parissamin_',
-      'parisa min': 'sinhala_parissamin_',
-      'parasite man': 'sinhala_parissamin_',
-      'paris summit': 'sinhala_parissamin_',
-      'paris some in': 'sinhala_parissamin_',
-      'pariss man': 'sinhala_parissamin_',
-      'paris mean': 'sinhala_parissamin_',
-      'පරිස්සමින්': 'sinhala_parissamin_',
-      'පරිස්සමෙන්': 'sinhala_parissamin_',
-      'පරිස්සම්': 'sinhala_parissamin_',
-    };
-
-    // Prefer an exact recognizer result. Only fall back to a word boundary
-    // match when the recognizer returned a short phrase around the keyword.
-    for (final target in targets) {
-      for (final entry in sinhalaKeywords.entries) {
-        final exactMatch = target == entry.key;
-        final boundaryMatch = RegExp(
-          '(^|\\s)${RegExp.escape(entry.key)}(\\s|\$)',
-        ).hasMatch(target);
-        if (exactMatch || boundaryMatch) {
-          final now = DateTime.now();
-          final previous = _lastKeywordTriggerTimes[entry.value];
-          if (previous != null &&
-              now.difference(previous).inMilliseconds < 1500) {
-            return;
-          }
-          _lastKeywordTriggerTimes[entry.value] = now;
-          _lastSpeechTimeMs = now.millisecondsSinceEpoch;
-
-          _transcriptController.add(
-              _sinhalaLiveSpeechWord[entry.value] ?? rawText);
-
-          // 2. Pop up ONLY the matching Sinhala emergency card IMMEDIATELY
-          unawaited(simulateSoundDetection(
-            entry.value,
-            confidence: 0.99,
-            overrideCooldown: true,
-          ));
-          return; // STOP! User voice NEVER triggers environmental sounds!
-        }
-      }
-    }
-
-    // Ignore non-keyword speech. Environmental sounds are detected only from
-    // microphone PCM by the offline sound classifier below.
   }
 
   Future<bool> _startAudioCapture() async {
@@ -733,10 +367,9 @@ class AudioClassifierService {
         }
 
         // === DECISION ENGINE ===
-        // Treat even modest speech-class score as speech-like input.
         final bool speechLikely = bestSpeechClass != null &&
-            bestSpeechProb >= 0.10 &&
-            bestSpeechProb >= bestEnvProb * 0.35;
+            bestSpeechProb >= 0.18 &&
+            bestSpeechProb >= bestEnvProb * 0.60;
         if (speechLikely) {
           _lastSpeechTimeMs = nowMs;
         }
@@ -749,7 +382,7 @@ class AudioClassifierService {
                 : (bestSpeechProb >= 0.18 &&
                     bestSpeechProb >= secondSpeechProb * 1.05));
 
-        // Speech energy takes priority over environmental classification.
+        // Speech energy takes absolute priority over environmental classification.
         if (bestSpeechClass != null &&
             keywordIsUnambiguous &&
             bestSpeechProb >= bestEnvProb * 0.35) {
@@ -766,10 +399,9 @@ class AudioClassifierService {
           }
           _pendingSpeechAtMs = nowMs;
 
-          // For short keywords like 'udaw' (or high confidence >= 0.22), trigger immediately on 1 window.
-          // For lower confidence, 2 windows confirm it.
+          // For short keywords like 'udaw' (or confidence >= 0.20), trigger immediately on 1 window.
           final bool shouldTrigger = isUdaw ||
-              bestSpeechProb >= 0.22 ||
+              bestSpeechProb >= 0.20 ||
               _pendingSpeechVotes >= 2;
 
           if (shouldTrigger) {
@@ -792,15 +424,15 @@ class AudioClassifierService {
             }
             _pendingSpeechVotes = 0;
           }
-          return;
+          return; // STOP! User voice NEVER triggers environmental sounds!
         }
 
         _pendingSpeechClass = null;
         _pendingSpeechVotes = 0;
 
         // Case B: Background Environmental Sound (Ambulance, Fire Truck, Horn, Dog, Baby, Traffic)
-        // Strictly evaluated when user is not actively speaking (at least 3.5 seconds since speech)
-        final bool userSpokeRecently = (nowMs - _lastSpeechTimeMs < 3500);
+        // Strictly evaluated when user is not actively speaking (at least 2.0 seconds since speech)
+        final bool userSpokeRecently = (nowMs - _lastSpeechTimeMs < 2000);
 
         if (!userSpokeRecently && !speechLikely) {
           final candidateSound =
@@ -808,25 +440,25 @@ class AudioClassifierService {
 
           if (candidateSound != null) {
             const envThresholds = {
-              'ambulance_siren': 0.75,
-              'fire_truck': 0.88,
-              'vehicle_horn': 0.75,
-              'baby_crying': 0.75,
-              'dog_barking': 0.75,
-              'background_traffic': 0.80,
+              'ambulance_siren': 0.65,
+              'fire_truck': 0.70,
+              'vehicle_horn': 0.60,
+              'baby_crying': 0.65,
+              'dog_barking': 0.60,
+              'background_traffic': 0.70,
             };
-            final double reqProb = envThresholds[bestEnvClass] ?? 0.75;
+            final double reqProb = envThresholds[bestEnvClass] ?? 0.65;
             final bool trafficValid = (bestEnvClass != 'background_traffic') ||
-                (rms >= 0.035 && maxAmp >= 0.15);
+                (rms >= 0.025 && maxAmp >= 0.10);
             final bool isValid = bestEnvProb >= reqProb &&
-                bestEnvProb >= bestSpeechProb * 1.80 &&
+                bestEnvProb >= bestSpeechProb * 1.50 &&
                 trafficValid;
             final double confidence = bestEnvProb;
 
             if (isValid) {
               final lastAlert = _lastSoundAlertTimes[candidateSound];
               final bool cooldownPassed = lastAlert == null ||
-                  nowMs - lastAlert.millisecondsSinceEpoch >= 2500;
+                  nowMs - lastAlert.millisecondsSinceEpoch >= 2000;
 
               if (_pendingEnvironmentSound == candidateSound) {
                 _pendingEnvironmentVotes++;
@@ -835,7 +467,8 @@ class AudioClassifierService {
                 _pendingEnvironmentVotes = 1;
               }
 
-              const requiredEnvironmentVotes = 5;
+              // High confidence (>= 0.85) triggers in 1 window (~160ms); others require 2 windows (~320ms)
+              final int requiredEnvironmentVotes = (confidence >= 0.85) ? 1 : 2;
               if (cooldownPassed &&
                   _pendingEnvironmentVotes >= requiredEnvironmentVotes) {
                 _lastSoundAlertTimes[candidateSound] =
@@ -855,108 +488,17 @@ class AudioClassifierService {
     }
   }
 
-  String? _detectEnvironmentalAcousticSound(List<double> window16k, double maxA, double rms) {
-    if (window16k.length < 8000 || rms < 0.02 || maxA < 0.08) return null;
 
-    final int n = window16k.length;
-    int zcCount = 0;
-    for (int i = 1; i < n; i++) {
-      if ((window16k[i] >= 0 && window16k[i - 1] < 0) || (window16k[i] < 0 && window16k[i - 1] >= 0)) {
-        zcCount++;
-      }
-    }
-    final double zcr = zcCount / n;
-
-    final centerStart = (n ~/ 2) - 2048;
-    const testN = 4096;
-
-    double energyAt(double freq) {
-      final double k = (freq * testN / 16000).roundToDouble();
-      final double omega = (2.0 * math.pi / testN) * k;
-      final double coeff = 2.0 * math.cos(omega);
-      double q1 = 0.0, q2 = 0.0;
-
-      for (int i = centerStart; i < centerStart + testN; i++) {
-        final double q0 = coeff * q1 - q2 + window16k[i];
-        q2 = q1;
-        q1 = q0;
-      }
-      return q1 * q1 + q2 * q2 - q1 * q2 * coeff;
-    }
-
-    final double eLow = energyAt(100) + energyAt(150) + energyAt(200) + energyAt(250);
-    final double eHorn = energyAt(380) + energyAt(440) + energyAt(500);
-    final double eTruck = energyAt(300) + energyAt(550) + energyAt(650);
-    final double eSiren = energyAt(750) + energyAt(850) + energyAt(950) + energyAt(1050);
-    final double eCry = energyAt(1300) + energyAt(1600) + energyAt(2000) + energyAt(2400);
-    final double eBark = energyAt(900) + energyAt(1200) + energyAt(1700);
-
-    final double eTotal = eLow + eHorn + eTruck + eSiren + eCry + 1e-12;
-    final double rLow = eLow / eTotal;
-    final double rHorn = eHorn / eTotal;
-    final double rSiren = eSiren / eTotal;
-    final double rCry = eCry / eTotal;
-
-    // Transient bursts check for dog barking
-    int subFramesWithSpikes = 0;
-    const subLen = 1600;
-    for (int sf = 0; sf < 10; sf++) {
-      double sfMax = 0.0;
-      for (int i = sf * subLen; i < (sf + 1) * subLen; i++) {
-        final a = window16k[i].abs();
-        if (a > sfMax) sfMax = a;
-      }
-      if (sfMax > maxA * 0.70) subFramesWithSpikes++;
-    }
-    final bool isTransientBurst = (subFramesWithSpikes >= 1 && subFramesWithSpikes <= 4);
-
-    // 1. Baby Crying: High-pitch infant vocal cry in 1300-2400 Hz
-    if (rCry > 0.35 && zcr > 0.08 && rLow < 0.30) {
-      return 'baby crying';
-    }
-
-    // 2. Ambulance Siren: Sweeping siren in 750-1050 Hz
-    if (rSiren > 0.35 && rLow < 0.25 && !isTransientBurst) {
-      return 'ambulance';
-    }
-
-    // 3. Vehicle Horn: 380-500 Hz chord blast
-    if (rHorn > 0.45 && rLow < 0.30) {
-      return 'vehicle horns';
-    }
-
-    // 4. Dog Barking: Short acoustic bursts
-    if (isTransientBurst && zcr > 0.07 && (eBark / eTotal) > 0.30) {
-      return 'dog_bark_dataset';
-    }
-
-    // 5. Traffic Noise: Low engine rumble
-    if (rLow > 0.60 && zcr < 0.06) {
-      return 'traffic';
-    }
-
-    // 6. Fire Truck Siren (strictly requires truck energy and low cry ratio)
-    if ((eTruck / eTotal) > 0.60 && rLow < 0.30 && rCry < 0.15) {
-      return 'fire_truck';
-    }
-
-    return null;
-  }
 
   void stopListening() {
     _isListening = false;
     _visualizerTicker?.cancel();
     _visualizerTicker = null;
-    _speechSubscription?.cancel();
-    _speechSubscription = null;
     _latestSoundVolume = 0.02;
     _waveformController.add([]);
 
     _recordStreamSub?.cancel();
     _recordStreamSub = null;
-    try {
-      _speechChannel.invokeMethod('stopListening');
-    } catch (_) {}
     try {
       _audioRecorder?.stop();
       _audioRecorder?.dispose();
