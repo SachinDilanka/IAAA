@@ -44,6 +44,9 @@ class AudioClassifierService {
   int _keywordLockUntilMs = 0;
   String? _currentDisplayedKeyword;
 
+  String? _pendingSpeechClass;
+  int _pendingSpeechVotes = 0;
+
   final Map<String, DateTime> _lastSoundAlertTimes = {};
   final Map<String, DateTime> _lastKeywordTriggerTimes = {};
   DateTime? _lastEmittedAlertTime;
@@ -92,6 +95,18 @@ class AudioClassifierService {
     'balagena': 'sinhala_balagena_',
     'ehata_wenna': 'sinhala_ehata_wenna_',
     'parissamin': 'sinhala_parissamin_',
+  };
+
+  // Sensitivity thresholds calibrated for all 8 Sinhala classes
+  static const Map<String, double> _speechSensitivity = {
+    'udaw': 0.12,
+    'beeraganna': 0.11,
+    'ginnak': 0.11,
+    'anathurak': 0.11,
+    'karadarayak': 0.11,
+    'balagena': 0.11,
+    'ehata_wenna': 0.11,
+    'parissamin': 0.11,
   };
 
   static const Map<String, List<String>> _sinhalaKeywords = {
@@ -212,6 +227,8 @@ class AudioClassifierService {
     _rollingIdx = 0;
     _total16kPushed = 0;
     _lastMlTimeMs = 0;
+    _pendingSpeechClass = null;
+    _pendingSpeechVotes = 0;
     _pendingEnvironmentSound = null;
     _pendingEnvironmentVotes = 0;
     _currentDisplayedKeyword = null;
@@ -220,7 +237,7 @@ class AudioClassifierService {
 
     _startVisualizerTicker();
 
-    // 1. Hardware Microphone Stream via AudioRecorder (Guaranteed 100% Offline)
+    // 1. Hardware Microphone Stream via AudioRecorder (100% Offline)
     final captureStarted = await _startAudioCapture();
     if (!captureStarted) {
       _isListening = false;
@@ -232,7 +249,7 @@ class AudioClassifierService {
     // 2. Also listen for Android Speech Recognizer events if available
     _startSpeechRecognizerChannel();
 
-    _setSttStatus('Offline detection active. Say a Sinhala keyword or play sound.');
+    _setSttStatus('Listening for 8 Sinhala Keywords & Environmental Sounds.');
     return true;
   }
 
@@ -277,7 +294,7 @@ class AudioClassifierService {
           if (nowMs < _keywordLockUntilMs && soundKey != _currentDisplayedKeyword) {
             return;
           }
-          _keywordLockUntilMs = nowMs + 4000;
+          _keywordLockUntilMs = nowMs + 2500;
           _currentDisplayedKeyword = soundKey;
           _lastSpeechTimeMs = nowMs;
           _lastKeywordTriggerTimes[soundKey] = DateTime.fromMillisecondsSinceEpoch(nowMs);
@@ -375,10 +392,10 @@ class AudioClassifierService {
       'dog_barking': 'dog_bark_dataset',
     };
 
-    final bool startupGraceOver = (nowMs - _listeningStartTimeMs >= 600);
+    final bool startupGraceOver = (nowMs - _listeningStartTimeMs >= 500);
 
-    // Audio energy check (real sound, not electronic noise floor)
-    final bool hasSoundEnergy = (maxAmp >= 0.025 || rms >= 0.005);
+    // Audio energy check - sensitive for near (maxAmp > 0.10) and far (maxAmp > 0.008) speech
+    final bool hasSoundEnergy = (maxAmp >= 0.008 || rms >= 0.0015);
     if (hasSoundEnergy) {
       _lastSpeechTimeMs = nowMs;
     }
@@ -399,14 +416,16 @@ class AudioClassifierService {
       }
 
       // Skip electronic silence floor
-      if (windowMax < 0.020 || rms < 0.004) {
+      if (windowMax < 0.006 || rms < 0.001) {
+        _pendingSpeechClass = null;
+        _pendingSpeechVotes = 0;
         _pendingEnvironmentSound = null;
         _pendingEnvironmentVotes = 0;
         return;
       }
 
-      // Automatic Gain Control (AGC) - amplifies near and far voice/sounds up to 30x
-      final double gain = (0.50 / windowMax).clamp(1.0, 30.0);
+      // Dynamic Automatic Gain Control (AGC) - amplifies far voice/sounds up to 50x
+      final double gain = (0.50 / windowMax).clamp(1.0, 50.0);
       final List<double> normWindow = List<double>.filled(16000, 0.0);
       for (int i = 0; i < 16000; i++) {
         normWindow[i] = (window16k[i] * gain).clamp(-1.0, 1.0);
@@ -444,58 +463,74 @@ class AudioClassifierService {
 
       final bool keywordLocked = (nowMs < _keywordLockUntilMs);
 
-      // === 1. SINHALA EMERGENCY KEYWORDS DETECTION ===
-      // Evaluated when top speech class probability is distinct and dominant
-      final bool isDominantSpeech = topSpeechClass != null &&
-          topSpeechProb >= 0.20 &&
-          topSpeechProb >= secondSpeechProb * 1.25 &&
-          topSpeechProb >= topEnvProb * 1.10;
+      // === 1. ALL 8 SINHALA EMERGENCY KEYWORDS DETECTION (NEAR & FAR) ===
+      if (topSpeechClass != null) {
+        final double reqProb = _speechSensitivity[topSpeechClass] ?? 0.11;
+        final bool isSpeechCandidate = topSpeechProb >= reqProb &&
+            topSpeechProb >= secondSpeechProb * 1.05 &&
+            topSpeechProb > topEnvProb * 0.90;
 
-      if (isDominantSpeech) {
-        _lastSpeechTimeMs = nowMs;
-        _pendingEnvironmentSound = null;
-        _pendingEnvironmentVotes = 0;
+        if (isSpeechCandidate) {
+          _lastSpeechTimeMs = nowMs;
+          _pendingEnvironmentSound = null;
+          _pendingEnvironmentVotes = 0;
 
-        if (!keywordLocked || topSpeechClass == _currentDisplayedKeyword) {
-          _keywordLockUntilMs = nowMs + 3500; // Hold for 3.5s
-          _currentDisplayedKeyword = topSpeechClass;
-
-          final soundKey = _classToSoundKey[topSpeechClass];
-          if (soundKey != null) {
-            _lastKeywordTriggerTimes[soundKey] = DateTime.fromMillisecondsSinceEpoch(nowMs);
-            // Display formatted keyword in Live Speech box
-            final displayText = _sinhalaLiveSpeechDisplay[soundKey] ?? topSpeechClass;
-            _transcriptController.add(displayText);
-
-            // Pop up ONLY that matching emergency alert card!
-            unawaited(simulateSoundDetection(
-              soundKey,
-              confidence: math.max(topSpeechProb, 0.98),
-              overrideCooldown: true,
-            ));
+          if (_pendingSpeechClass == topSpeechClass) {
+            _pendingSpeechVotes++;
+          } else {
+            _pendingSpeechClass = topSpeechClass;
+            _pendingSpeechVotes = 1;
           }
+
+          // High confidence (>= 0.17) triggers immediately; lower confidence confirms in 2 windows (~280ms)
+          final bool shouldTrigger = (topSpeechProb >= 0.17) || (_pendingSpeechVotes >= 2);
+
+          if (shouldTrigger && !keywordLocked) {
+            _keywordLockUntilMs = nowMs + 2200; // Hold for 2.2s so user can test next keyword easily
+            _currentDisplayedKeyword = topSpeechClass;
+
+            final soundKey = _classToSoundKey[topSpeechClass];
+            if (soundKey != null) {
+              _lastKeywordTriggerTimes[soundKey] = DateTime.fromMillisecondsSinceEpoch(nowMs);
+              // 1. Display formatted keyword in Live Speech box
+              final displayText = _sinhalaLiveSpeechDisplay[soundKey] ?? topSpeechClass;
+              _transcriptController.add(displayText);
+
+              // 2. Pop up ONLY that matching emergency alert card!
+              unawaited(simulateSoundDetection(
+                soundKey,
+                confidence: math.max(topSpeechProb, 0.98),
+                overrideCooldown: true,
+              ));
+            }
+            _pendingSpeechVotes = 0;
+            _pendingSpeechClass = null;
+          }
+          return; // Speech candidate active: NEVER trigger environmental sounds!
+        } else {
+          _pendingSpeechClass = null;
+          _pendingSpeechVotes = 0;
         }
-        return; // Speech active: NEVER trigger environmental sounds!
       }
 
       // === 2. BACKGROUND ENVIRONMENTAL SOUNDS ===
       // Baby Crying, Ambulance Siren, Fire Truck, Vehicle Horns, Dog Barking
-      // Evaluated ONLY when user is NOT speaking (at least 2.5s silence) and no keyword lock
-      final bool userSpokeRecently = (nowMs - _lastSpeechTimeMs < 2500);
+      // Evaluated ONLY when user is NOT speaking (at least 2.0s silence) and no keyword lock
+      final bool userSpokeRecently = (nowMs - _lastSpeechTimeMs < 2000);
 
       if (!userSpokeRecently && !keywordLocked && topEnvClass != null) {
         final candidateSound = envSoundMap[topEnvClass];
         if (candidateSound != null) {
           const envThresholds = {
-            'ambulance_siren': 0.45,
-            'fire_truck': 0.55,
-            'vehicle_horn': 0.45,
-            'baby_crying': 0.40,
-            'dog_barking': 0.45,
+            'ambulance_siren': 0.40,
+            'fire_truck': 0.50,
+            'vehicle_horn': 0.40,
+            'baby_crying': 0.35,
+            'dog_barking': 0.40,
           };
-          final double reqProb = envThresholds[topEnvClass] ?? 0.45;
+          final double reqProb = envThresholds[topEnvClass] ?? 0.40;
           final bool isValid =
-              topEnvProb >= reqProb && topEnvProb >= topSpeechProb * 1.35;
+              topEnvProb >= reqProb && topEnvProb >= topSpeechProb * 1.30;
 
           if (isValid) {
             final lastAlert = _lastSoundAlertTimes[candidateSound];
@@ -513,7 +548,6 @@ class AudioClassifierService {
               _lastSoundAlertTimes[candidateSound] =
                   DateTime.fromMillisecondsSinceEpoch(nowMs);
               // Pop up ONLY that specific environmental sound card!
-              // Do NOT overwrite Live Speech box!
               simulateSoundDetection(candidateSound, confidence: topEnvProb);
               _pendingEnvironmentVotes = 0;
               _pendingEnvironmentSound = null;
@@ -534,6 +568,8 @@ class AudioClassifierService {
     _latestSoundVolume = 0.02;
     _waveformController.add([]);
     _currentDisplayedKeyword = null;
+    _pendingSpeechClass = null;
+    _pendingSpeechVotes = 0;
     _pendingEnvironmentSound = null;
     _pendingEnvironmentVotes = 0;
 
