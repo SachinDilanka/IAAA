@@ -23,9 +23,6 @@ class AudioClassifierService {
 
   static const MethodChannel _speechChannel =
       MethodChannel('com.deafalert.app/speech');
-  static const EventChannel _speechEvents =
-      EventChannel('com.deafalert.app/speech/events');
-  StreamSubscription? _speechSubscription;
 
   AudioRecorder? _audioRecorder;
   StreamSubscription<Uint8List>? _recordStreamSub;
@@ -371,41 +368,6 @@ class AudioClassifierService {
     });
   }
 
-  Future<void> _startSpeechRecognition() async {
-    try {
-      await _speechSubscription?.cancel();
-      _speechSubscription = _speechEvents.receiveBroadcastStream().listen(
-        (event) {
-          if (!_isListening || event is! Map) return;
-          final type = (event['type'] ?? '').toString();
-          if (type == 'rms') {
-            final double rmsVal =
-                ((event['rms'] as num?)?.toDouble() ?? -2.0);
-            final double vol =
-                (0.20 + (rmsVal.clamp(-2.0, 10.0) / 10.0)).clamp(0.18, 1.0);
-            _updateWaveformVolume(vol);
-          } else if (type == 'partialResult' || type == 'finalResult') {
-            final text = (event['text'] ?? '').toString().trim();
-            final candidates = ((event['candidates'] as List?) ?? [])
-                .map((e) => e.toString())
-                .toList();
-            if (text.isNotEmpty) {
-              processSpeechText(text, candidates: candidates);
-            }
-          }
-        },
-        onError: (_) {},
-        cancelOnError: false,
-      );
-
-      final available =
-          await _speechChannel.invokeMethod<bool>('isAvailable') ?? false;
-      if (available) {
-        await _speechChannel.invokeMethod('startListening');
-      }
-    } catch (_) {}
-  }
-
   Future<bool> startListening() async {
     if (_isListening) return true;
 
@@ -436,19 +398,10 @@ class AudioClassifierService {
 
     _startVisualizerTicker();
 
-    final bool sttAvailable =
-        await _speechChannel.invokeMethod<bool>('isAvailable') ?? false;
+    // Start continuous hardware audio capture for visualizer & neural sound classification
+    await _startAudioCapture();
 
-    if (sttAvailable) {
-      // 1. Native Android Speech Recognition for word-by-word streaming & exact keyword matching
-      await _startSpeechRecognition();
-      _setSttStatus('Listening for speech. Say any Sinhala word, sentence, or emergency keyword.');
-    } else {
-      // 2. Hardware audio capture fallback
-      await _startAudioCapture();
-      _setSttStatus('Listening for acoustic sound patterns & keywords.');
-    }
-
+    _setSttStatus('Listening lively. Say any Sinhala word or emergency keyword.');
     return true;
   }
 
@@ -551,8 +504,8 @@ class AudioClassifierService {
         return;
       }
 
-      // Smooth AGC for both near and far voice detection (boost soft/far speech up to 8x)
-      final double gain = (0.35 / windowMax).clamp(1.0, 8.0);
+      // Smooth AGC for both near and far voice detection (boost soft/far speech cleanly)
+      final double gain = (0.55 / (windowMax + 1e-4)).clamp(1.0, 12.0);
       final List<double> normWindow = List<double>.filled(16000, 0.0);
       for (int i = 0; i < 16000; i++) {
         normWindow[i] = (window16k[i] * gain).clamp(-1.0, 1.0);
@@ -637,36 +590,24 @@ class AudioClassifierService {
           if (p > (_speechMaxProbs[s] ?? 0.0)) {
             _speechMaxProbs[s] = p;
           }
-          if (p >= 0.50) {
+          if (p >= 0.38) {
             _speechVotes[s] = (_speechVotes[s] ?? 0) + 1;
           }
         }
 
-        // Determine best speech candidate based on accumulated probabilities
-        String bestCandidate = speechClasses.first;
-        double bestSum = _speechSumProbs[bestCandidate] ?? 0.0;
+        // Fast instant trigger on genuine keyword agreement during speech
         for (final s in speechClasses) {
+          final p = allP[s] ?? 0.0;
           final sSum = _speechSumProbs[s] ?? 0.0;
-          if (sSum > bestSum) {
-            bestSum = sSum;
-            bestCandidate = s;
+          final sVotes = _speechVotes[s] ?? 0;
+          if (p >= 0.60 && sSum >= 1.10 && sVotes >= 2) {
+            _triggerKeywordAlert(s, p, nowMs);
+            return;
           }
         }
 
-        final double bestPeak = _speechMaxProbs[bestCandidate] ?? 0.0;
-        final int bestVotes = _speechVotes[bestCandidate] ?? 0;
-
-        // Instant trigger during active speech:
-        // A) High confidence multi-frame agreement: >= 3 strong frames (sum >= 2.60, peak >= 0.85)
-        // B) Or >= 4 confirmed frames of the candidate
-        final bool shouldInstantTrigger =
-            (bestVotes >= 3 && bestSum >= 2.60 && bestPeak >= 0.85) || (bestVotes >= 4);
-
-        if (shouldInstantTrigger) {
-          _triggerKeywordAlert(bestCandidate, bestPeak, nowMs);
-          return;
-        } else if (_speechFramesCount == 1 && nowMs > _keywordLockUntilMs) {
-          _transcriptController.add('Speaking...');
+        if (_speechFramesCount == 1 && nowMs > _keywordLockUntilMs) {
+          _transcriptController.add('Speaking Sinhala Voice...');
         }
         return;
       }
@@ -710,13 +651,22 @@ class AudioClassifierService {
       final double bestPeak = _speechMaxProbs[bestCandidate] ?? 0.0;
       final int bestVotes = _speechVotes[bestCandidate] ?? 0;
 
-      // Single utterance evaluation: user spoke keyword once
-      if ((bestVotes >= 2 && bestPeak >= 0.45 && bestSum >= 0.90) ||
-          (bestPeak >= 0.70 && bestSum >= 1.10)) {
+      double secondSum = 0.0;
+      for (final s in speechClasses) {
+        if (s != bestCandidate) {
+          final sSum = _speechSumProbs[s] ?? 0.0;
+          if (sSum > secondSum) secondSum = sSum;
+        }
+      }
+
+      // Single utterance evaluation: user spoke keyword once (near or far)
+      final bool isDominant = (secondSum == 0.0) || (bestSum >= secondSum * 1.20);
+      if ((bestVotes >= 2 && bestPeak >= 0.40 && bestSum >= 0.70 && isDominant) ||
+          (bestPeak >= 0.65 && bestSum >= 0.85 && isDominant)) {
         _triggerKeywordAlert(bestCandidate, bestPeak, nowMs);
         return;
-      } else if (_speechFramesCount >= 2 && bestPeak < 0.40) {
-        _transcriptController.add('Voice Heard (Normal Speech)');
+      } else if (_speechFramesCount >= 2) {
+        _transcriptController.add('Voice Heard (Normal Conversational Speech)');
       }
     }
     _resetSpeechAccumulator();
@@ -751,8 +701,6 @@ class AudioClassifierService {
     _visualizerTicker?.cancel();
     _visualizerTicker = null;
 
-    _speechSubscription?.cancel();
-    _speechSubscription = null;
     try {
       _speechChannel.invokeMethod('stopListening');
     } catch (_) {}
