@@ -42,13 +42,17 @@ class AudioClassifierService {
 
   // Utterance accumulator for Sinhala emergency keywords (near & far voice)
   int _speechFramesCount = 0;
+  int _speechSilenceFrames = 0;
   final Map<String, double> _speechSumProbs = {};
   final Map<String, double> _speechMaxProbs = {};
+  final Map<String, int> _speechVotes = {};
 
   void _resetSpeechAccumulator() {
     _speechFramesCount = 0;
+    _speechSilenceFrames = 0;
     _speechSumProbs.clear();
     _speechMaxProbs.clear();
+    _speechVotes.clear();
   }
 
   final Map<String, DateTime> _lastSoundAlertTimes = {};
@@ -488,7 +492,7 @@ class AudioClassifierService {
         if (absS > windowMax) windowMax = absS;
       }
 
-      // If alert lockout is currently active (2.2s after a keyword fired), hold
+      // If alert lockout is currently active, hold
       if (nowMs < _keywordLockUntilMs) {
         _resetSpeechAccumulator();
         _pendingEnvClass = null;
@@ -496,16 +500,8 @@ class AudioClassifierService {
         return;
       }
 
-      // Silence floor check (speech offset)
-      if (windowMax < 0.003) {
-        _checkAndTriggerOffsetSpeech(nowMs);
-        _pendingEnvClass = null;
-        _pendingEnvVotes = 0;
-        return;
-      }
-
-      // Smooth AGC for both near and far voice detection
-      final double gain = (0.35 / windowMax).clamp(1.0, 4.5);
+      // Smooth AGC for both near and far voice detection (boost soft/far speech up to 8x)
+      final double gain = (0.35 / windowMax).clamp(1.0, 8.0);
       final List<double> normWindow = List<double>.filled(16000, 0.0);
       for (int i = 0; i < 16000; i++) {
         normWindow[i] = (window16k[i] * gain).clamp(-1.0, 1.0);
@@ -515,14 +511,12 @@ class AudioClassifierService {
       if (pred == null) return;
       final allP = pred.allProbabilities;
 
-      // Top speech class
-      String topSpeechClass = speechClasses.first;
+      // Top speech probability
       double topSpeechProb = 0.0;
       for (final s in speechClasses) {
         final p = allP[s] ?? 0.0;
         if (p > topSpeechProb) {
           topSpeechProb = p;
-          topSpeechClass = s;
         }
       }
 
@@ -537,7 +531,6 @@ class AudioClassifierService {
         }
       }
 
-      final double bgTrafficProb = allP['background_traffic'] ?? 0.0;
       final double totalSpeechProb =
           speechClasses.fold(0.0, (sum, c) => sum + (allP[c] ?? 0.0));
       final double totalEnvProb =
@@ -554,7 +547,7 @@ class AudioClassifierService {
         if (candidateSound != null) {
           final lastAlert = _lastSoundAlertTimes[candidateSound];
           final bool cooldownPassed = lastAlert == null ||
-              nowMs - lastAlert.millisecondsSinceEpoch >= 2200;
+              nowMs - lastAlert.millisecondsSinceEpoch >= 2000;
 
           if (_pendingEnvClass == candidateSound && topEnvProb >= 0.65) {
             _pendingEnvVotes++;
@@ -570,7 +563,7 @@ class AudioClassifierService {
             _lastSoundAlertTimes[candidateSound] =
                 DateTime.fromMillisecondsSinceEpoch(nowMs);
             simulateSoundDetection(candidateSound, confidence: topEnvProb);
-            _keywordLockUntilMs = nowMs + 2200;
+            _keywordLockUntilMs = nowMs + 1000;
             _pendingEnvVotes = 0;
             _pendingEnvClass = null;
           }
@@ -579,10 +572,12 @@ class AudioClassifierService {
       }
 
       // === 2. ALL 8 SINHALA EMERGENCY KEYWORDS (NEAR & FAR VOICE) ===
-      if (totalSpeechProb > totalEnvProb &&
-          (totalSpeechProb >= 0.18 || topSpeechProb >= 0.22)) {
+      final bool isSpeechFrame = (totalSpeechProb > totalEnvProb && totalSpeechProb >= 0.20);
+
+      if (isSpeechFrame) {
         _pendingEnvClass = null;
         _pendingEnvVotes = 0;
+        _speechSilenceFrames = 0;
         _speechFramesCount++;
 
         for (final s in speechClasses) {
@@ -591,10 +586,13 @@ class AudioClassifierService {
           if (p > (_speechMaxProbs[s] ?? 0.0)) {
             _speechMaxProbs[s] = p;
           }
+          if (p >= 0.50) {
+            _speechVotes[s] = (_speechVotes[s] ?? 0) + 1;
+          }
         }
 
         // Determine best speech candidate based on accumulated probabilities
-        String bestCandidate = topSpeechClass;
+        String bestCandidate = speechClasses.first;
         double bestSum = _speechSumProbs[bestCandidate] ?? 0.0;
         for (final s in speechClasses) {
           final sSum = _speechSumProbs[s] ?? 0.0;
@@ -605,33 +603,31 @@ class AudioClassifierService {
         }
 
         final double bestPeak = _speechMaxProbs[bestCandidate] ?? 0.0;
+        final int bestVotes = _speechVotes[bestCandidate] ?? 0;
 
-        // Utterance trigger conditions:
-        // A) Instant Fast-Path: single frame with peak >= 0.65 and topSpeechProb >= 0.65
-        // B) Multi-frame confirmation: 2 or more frames (~270ms) with peak >= 0.48 and sum >= 0.85
-        final bool shouldTriggerSpeech =
-            (topSpeechProb >= 0.65 && bestPeak >= 0.65) ||
-            (_speechFramesCount >= 2 && bestPeak >= 0.48 && bestSum >= 0.85);
+        // Instant trigger during active speech:
+        // A) High confidence multi-frame agreement: >= 3 strong frames (sum >= 2.60, peak >= 0.85)
+        // B) Or >= 4 confirmed frames of the candidate
+        final bool shouldInstantTrigger =
+            (bestVotes >= 3 && bestSum >= 2.60 && bestPeak >= 0.85) || (bestVotes >= 4);
 
-        if (shouldTriggerSpeech) {
+        if (shouldInstantTrigger) {
           _triggerKeywordAlert(bestCandidate, bestPeak, nowMs);
+          return;
         } else if (_speechFramesCount == 1 && nowMs > _keywordLockUntilMs) {
           _transcriptController.add('Speaking...');
         }
         return;
       }
 
-      // Background room silence / road noise check (speech offset)
-      if (bgTrafficProb >= 0.65 && totalSpeechProb < 0.25) {
-        _checkAndTriggerOffsetSpeech(nowMs);
-        _pendingEnvClass = null;
-        _pendingEnvVotes = 0;
-        return;
-      }
-
-      // If speech energy drops after an utterance, check accumulated speech
-      if (_speechFramesCount > 0 && totalSpeechProb < 0.25) {
-        _checkAndTriggerOffsetSpeech(nowMs);
+      // Voice dropped / speech offset (user finished saying word "just one time")
+      if (_speechFramesCount > 0) {
+        _speechSilenceFrames++;
+        // 2 consecutive non-speech frames (~270ms) means the single utterance has ended
+        if (_speechSilenceFrames >= 2) {
+          _checkAndTriggerOffsetSpeech(nowMs);
+          return;
+        }
       }
 
       _pendingEnvClass = null;
@@ -661,12 +657,14 @@ class AudioClassifierService {
         }
       }
       final double bestPeak = _speechMaxProbs[bestCandidate] ?? 0.0;
+      final int bestVotes = _speechVotes[bestCandidate] ?? 0;
 
-      // Word offset evaluation: short or soft keywords trigger on utterance completion
-      if (bestPeak >= 0.38 && bestSum >= 0.45) {
+      // Single utterance evaluation: user spoke keyword once
+      if ((bestVotes >= 2 && bestPeak >= 0.45 && bestSum >= 0.90) ||
+          (bestPeak >= 0.70 && bestSum >= 1.10)) {
         _triggerKeywordAlert(bestCandidate, bestPeak, nowMs);
         return;
-      } else if (_speechFramesCount >= 2 && bestPeak < 0.38) {
+      } else if (_speechFramesCount >= 2 && bestPeak < 0.40) {
         _transcriptController.add('Voice Heard (Normal Speech)');
       }
     }
@@ -677,7 +675,7 @@ class AudioClassifierService {
     final soundKey = _classToSoundKey[speechClass];
     if (soundKey == null) return;
 
-    _keywordLockUntilMs = nowMs + 2200; // Hold for 2.2s so user can test next word sequentially
+    _keywordLockUntilMs = nowMs + 1000; // Hold for 1.0s so user can test next word sequentially
     _currentDisplayedKeyword = soundKey;
     _resetSpeechAccumulator();
     _pendingEnvClass = null;
