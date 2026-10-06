@@ -28,20 +28,17 @@ class AudioClassifierService {
   double _latestSoundVolume = 0.02;
   final List<double> _visualizerBars = List<double>.filled(40, 0.15);
 
-  // 16,000 Hz circular rolling audio buffer (2 seconds = 32,000 samples)
-  final List<double> _rollingBuf32k = List<double>.filled(32000, 0.0);
+  // 16,000 Hz circular rolling audio buffer (1 second = 16,000 samples)
+  final List<double> _rollingBuf16k = List<double>.filled(16000, 0.0);
   int _rollingIdx = 0;
   int _total16kPushed = 0;
   int _lastMlTimeMs = 0;
   int _listeningStartTimeMs = 0;
   int _lastSpeechTimeMs = 0;
+  int _lastKeywordFiredMs = 0;
 
-  final Map<String, DateTime> _lastKeywordTriggerTimes = {};
   final Map<String, DateTime> _lastSoundAlertTimes = {};
   DateTime? _lastEmittedAlertTime;
-  String? _pendingSpeechClass;
-  int _pendingSpeechVotes = 0;
-  int _pendingSpeechAtMs = 0;
   String? _pendingEnvironmentSound;
   int _pendingEnvironmentVotes = 0;
 
@@ -167,16 +164,14 @@ class AudioClassifierService {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     _listeningStartTimeMs = nowMs;
     _lastSpeechTimeMs = 0;
+    _lastKeywordFiredMs = 0;
     _rollingIdx = 0;
     _total16kPushed = 0;
     _lastMlTimeMs = 0;
-    _pendingSpeechClass = null;
-    _pendingSpeechVotes = 0;
-    _pendingSpeechAtMs = 0;
     _pendingEnvironmentSound = null;
     _pendingEnvironmentVotes = 0;
     _latestSoundVolume = 0.25;
-    _rollingBuf32k.fillRange(0, 32000, 0.0);
+    _rollingBuf16k.fillRange(0, 16000, 0.0);
 
     _startVisualizerTicker();
 
@@ -251,8 +246,8 @@ class AudioClassifierService {
       if (absS > maxAmp) maxAmp = absS;
       sumSquares += sampleNorm * sampleNorm;
 
-      _rollingBuf32k[_rollingIdx] = sampleNorm;
-      _rollingIdx = (_rollingIdx + 1) % 32000;
+      _rollingBuf16k[_rollingIdx] = sampleNorm;
+      _rollingIdx = (_rollingIdx + 1) % 16000;
       _total16kPushed++;
     }
 
@@ -266,278 +261,151 @@ class AudioClassifierService {
     final bool hasSoundEnergy = (maxAmp >= 0.0030 || rms >= 0.0008);
     final bool startupGraceOver = (nowMs - _listeningStartTimeMs >= 1000);
 
-    if (_total16kPushed >= 6000 &&
+    // Require full 16,000 samples (1.0 full second) in buffer before running classification
+    if (_total16kPushed >= 16000 &&
         startupGraceOver &&
         hasSoundEnergy &&
-        (nowMs - _lastMlTimeMs >= 160)) {
+        (nowMs - _lastMlTimeMs >= 140)) {
       _lastMlTimeMs = nowMs;
 
-      // Linear unroll of latest 32,000 samples (2.0 seconds)
-      final List<double> linearBuf = List<double>.filled(32000, 0.0);
-      for (int i = 0; i < 32000; i++) {
-        linearBuf[i] =
-            _rollingBuf32k[(_rollingIdx - 32000 + i + 32000) % 32000];
+      // Extract unrolled 16,000 samples (1.0 second)
+      final List<double> window16k = List<double>.filled(16000, 0.0);
+      double windowMax = 0.0;
+      double windowSumSq = 0.0;
+      for (int i = 0; i < 16000; i++) {
+        final s = _rollingBuf16k[(_rollingIdx - 16000 + i + 16000) % 16000];
+        window16k[i] = s;
+        final absS = s.abs();
+        if (absS > windowMax) windowMax = absS;
+        windowSumSq += absS * absS;
       }
-
-      // Check signal level in the recent 16,000 samples
-      double recentMax = 0.0;
-      double recentSumSq = 0.0;
-      for (int i = 16000; i < 32000; i++) {
-        final absS = linearBuf[i].abs();
-        if (absS > recentMax) recentMax = absS;
-        recentSumSq += absS * absS;
-      }
-      final double recentRms = math.sqrt(recentSumSq / 16000);
+      final double windowRms = math.sqrt(windowSumSq / 16000);
 
       // Gate out electronic silence floor
-      if (recentMax < 0.0025 || recentRms < 0.0007) {
-        _pendingSpeechClass = null;
-        _pendingSpeechVotes = 0;
+      if (windowMax < 0.0025 && windowRms < 0.0007) {
         _pendingEnvironmentSound = null;
         _pendingEnvironmentVotes = 0;
         return;
       }
 
-      // 1. Candidate Window A: Voice Onset Aligned Window
-      // Search in recent samples (from index 12000 to 32000) for sound energy peak
-      double maxLocalEnergy = 0.0;
-      int peakLocalIdx = 24000;
-      for (int i = 12000; i < 32000 - 400; i += 200) {
-        double e = 0.0;
-        for (int k = 0; k < 400; k++) {
-          e += linearBuf[i + k].abs();
-        }
-        if (e > maxLocalEnergy) {
-          maxLocalEnergy = e;
-          peakLocalIdx = i;
-        }
-      }
-
-      // Trace backwards to find onset where sound energy starts
-      final double onsetThreshold = (maxLocalEnergy / 400.0) * 0.15;
-      int voiceStart = peakLocalIdx;
-      while (voiceStart > 12000) {
-        double e = 0.0;
-        for (int k = 0; k < 200; k++) {
-          e += linearBuf[voiceStart - k].abs();
-        }
-        if (e / 200.0 < onsetThreshold) break;
-        voiceStart -= 200;
-      }
-      voiceStart = math.max(0, voiceStart - 200);
-
-      final List<double> onsetWindow = List<double>.filled(16000, 0.0);
-      double onsetMax = 0.0;
-      for (int i = 0; i < 16000 && (voiceStart + i) < 32000; i++) {
-        final s = linearBuf[voiceStart + i];
-        onsetWindow[i] = s;
-        if (s.abs() > onsetMax) onsetMax = s.abs();
-      }
-
-      // Dynamic AGC up to 60x for near/far voice
-      final double onsetGain =
-          onsetMax > 0.0002 ? (0.60 / onsetMax).clamp(1.0, 60.0) : 1.0;
+      // Dynamic gain normalization for near & far speech
+      final double gain =
+          windowMax > 0.0002 ? (0.50 / windowMax).clamp(1.0, 40.0) : 1.0;
+      final List<double> normWindow = List<double>.filled(16000, 0.0);
       for (int i = 0; i < 16000; i++) {
-        onsetWindow[i] = (onsetWindow[i] * onsetGain).clamp(-1.0, 1.0);
+        normWindow[i] = (window16k[i] * gain).clamp(-1.0, 1.0);
       }
 
-      // 2. Candidate Window B: Standard Latest 1-Second Window
-      final List<double> latestWindow = List<double>.filled(16000, 0.0);
-      double latestMax = 0.0;
-      for (int i = 0; i < 16000; i++) {
-        final s = linearBuf[16000 + i];
-        latestWindow[i] = s;
-        if (s.abs() > latestMax) latestMax = s.abs();
-      }
-      final double latestGain =
-          latestMax > 0.0002 ? (0.60 / latestMax).clamp(1.0, 60.0) : 1.0;
-      for (int i = 0; i < 16000; i++) {
-        latestWindow[i] = (latestWindow[i] * latestGain).clamp(-1.0, 1.0);
-      }
+      final pred = _neuralClassifier.predict(normWindow);
+      if (pred == null) return;
+      final allP = pred.allProbabilities;
 
-      // Run prediction on Onset Window first
-      var pred = _neuralClassifier.predict(onsetWindow);
-      // If onset window prediction is moderate, also evaluate latest window
-      if (pred == null || pred.probability < 0.45) {
-        final predB = _neuralClassifier.predict(latestWindow);
-        if (predB != null &&
-            (pred == null || predB.probability > pred.probability)) {
-          pred = predB;
+      const speechClasses = {
+        'udaw',
+        'beeraganna',
+        'ginnak',
+        'anathurak',
+        'karadarayak',
+        'balagena',
+        'ehata_wenna',
+        'parissamin',
+      };
+
+      const envSoundMap = {
+        'ambulance_siren': 'ambulance',
+        'fire_truck': 'fire_truck',
+        'vehicle_horn': 'vehicle horns',
+        'baby_crying': 'baby crying',
+        'dog_barking': 'dog_bark_dataset',
+        'background_traffic': 'traffic',
+      };
+
+      // Find top Sinhala speech class
+      String? topSpeechClass;
+      double topSpeechProb = 0.0;
+      for (final s in speechClasses) {
+        final p = allP[s] ?? 0.0;
+        if (p > topSpeechProb) {
+          topSpeechProb = p;
+          topSpeechClass = s;
         }
       }
-      if (pred != null) {
-        final allP = pred.allProbabilities;
 
-        const speechClasses = {
-          'udaw',
-          'beeraganna',
-          'ginnak',
-          'anathurak',
-          'karadarayak',
-          'balagena',
-          'ehata_wenna',
-          'parissamin',
-        };
+      // Find top environmental class
+      String? topEnvClass;
+      double topEnvProb = 0.0;
+      for (final e in envSoundMap.keys) {
+        final p = allP[e] ?? 0.0;
+        if (p > topEnvProb) {
+          topEnvProb = p;
+          topEnvClass = e;
+        }
+      }
 
-        const envSoundMap = {
-          'ambulance_siren': 'ambulance',
-          'fire_truck': 'fire_truck',
-          'vehicle_horn': 'vehicle horns',
-          'baby_crying': 'baby crying',
-          'dog_barking': 'dog_bark_dataset',
-          'background_traffic': 'traffic',
-        };
+      // Decision: Is this Sinhala speech?
+      final bool isSpeech = topSpeechClass != null &&
+          topSpeechProb >= 0.40 &&
+          topSpeechProb >= topEnvProb * 0.70;
 
-        // Find top Sinhala speech class
-        String? bestSpeechClass;
-        double bestSpeechProb = 0.0;
-        double secondSpeechProb = 0.0;
-        for (final s in speechClasses) {
-          final p = allP[s] ?? 0.0;
-          if (p > bestSpeechProb) {
-            secondSpeechProb = bestSpeechProb;
-            bestSpeechProb = p;
-            bestSpeechClass = s;
-          } else if (p > secondSpeechProb) {
-            secondSpeechProb = p;
+      if (isSpeech) {
+        _lastSpeechTimeMs = nowMs;
+        _pendingEnvironmentSound = null;
+        _pendingEnvironmentVotes = 0;
+
+        // Trigger keyword with a 2.0-second cooldown to prevent double-triggering or tail noise
+        if (nowMs - _lastKeywordFiredMs >= 2000) {
+          _lastKeywordFiredMs = nowMs;
+          final soundKey = _classToSoundKey[topSpeechClass];
+          if (soundKey != null) {
+            final displayText =
+                _sinhalaLiveSpeechWord[soundKey] ?? topSpeechClass;
+            _transcriptController.add(displayText);
+            unawaited(simulateSoundDetection(
+              soundKey,
+              confidence: topSpeechProb,
+              overrideCooldown: true,
+            ));
           }
         }
+        return; // ABSOLUTE STOP! User speech NEVER triggers environmental sounds!
+      }
 
-        // Prioritize udaw when udaw probability is present
-        if ((allP['udaw'] ?? 0.0) >= 0.14 && (allP['udaw'] ?? 0.0) >= bestSpeechProb * 0.70) {
-          bestSpeechClass = 'udaw';
-          bestSpeechProb = allP['udaw']!;
-        }
+      // Environmental sounds branch:
+      // STRICT conditions:
+      // 1. User has NOT spoken for at least 2.5 seconds
+      // 2. Speech probability is negligible (< 0.25)
+      // 3. High sustained confidence (>= 0.70)
+      // 4. Requires multiple consecutive voting windows (~420ms)
+      final bool userSpokeRecently = (nowMs - _lastSpeechTimeMs < 2500);
+      if (!userSpokeRecently &&
+          topSpeechProb < 0.25 &&
+          topEnvClass != null &&
+          topEnvProb >= 0.70) {
+        final candidateSound = envSoundMap[topEnvClass];
+        if (candidateSound != null) {
+          final bool trafficValid = (topEnvClass != 'background_traffic') ||
+              (topEnvProb >= 0.85 && windowRms >= 0.03 && windowMax >= 0.12);
 
-        // Find top environmental class
-        String? bestEnvClass;
-        double bestEnvProb = 0.0;
-        for (final e in envSoundMap.keys) {
-          final p = allP[e] ?? 0.0;
-          if (p > bestEnvProb) {
-            bestEnvProb = p;
-            bestEnvClass = e;
-          }
-        }
-
-        // === DECISION ENGINE ===
-        final bool speechLikely = bestSpeechClass != null &&
-            bestSpeechProb >= 0.18 &&
-            bestSpeechProb >= bestEnvProb * 0.60;
-        if (speechLikely) {
-          _lastSpeechTimeMs = nowMs;
-        }
-
-        // Check if keyword is detected with confidence
-        final bool isUdaw = bestSpeechClass == 'udaw';
-        final bool keywordIsUnambiguous = bestSpeechClass != null &&
-            (isUdaw
-                ? (bestSpeechProb >= 0.14)
-                : (bestSpeechProb >= 0.18 &&
-                    bestSpeechProb >= secondSpeechProb * 1.05));
-
-        // Speech energy takes absolute priority over environmental classification.
-        if (bestSpeechClass != null &&
-            keywordIsUnambiguous &&
-            bestSpeechProb >= bestEnvProb * 0.35) {
-          _lastSpeechTimeMs = nowMs;
-          _pendingEnvironmentSound = null;
-          _pendingEnvironmentVotes = 0;
-
-          if (_pendingSpeechClass == bestSpeechClass &&
-              nowMs - _pendingSpeechAtMs <= 1200) {
-            _pendingSpeechVotes++;
-          } else {
-            _pendingSpeechClass = bestSpeechClass;
-            _pendingSpeechVotes = 1;
-          }
-          _pendingSpeechAtMs = nowMs;
-
-          // For short keywords like 'udaw' (or confidence >= 0.20), trigger immediately on 1 window.
-          final bool shouldTrigger = isUdaw ||
-              bestSpeechProb >= 0.20 ||
-              _pendingSpeechVotes >= 2;
-
-          if (shouldTrigger) {
-            final soundKey = _classToSoundKey[bestSpeechClass];
-            if (soundKey != null) {
-              final lastKeyword = _lastKeywordTriggerTimes[soundKey];
-              final keywordCooldownPassed = lastKeyword == null ||
-                  nowMs - lastKeyword.millisecondsSinceEpoch >= 1500;
-              if (keywordCooldownPassed) {
-                _lastKeywordTriggerTimes[soundKey] =
-                    DateTime.fromMillisecondsSinceEpoch(nowMs);
-                _transcriptController.add(
-                    _sinhalaLiveSpeechWord[soundKey] ?? bestSpeechClass);
-                unawaited(simulateSoundDetection(
-                  soundKey,
-                  confidence: 0.99,
-                  overrideCooldown: true,
-                ));
-              }
-            }
-            _pendingSpeechVotes = 0;
-          }
-          return; // STOP! User voice NEVER triggers environmental sounds!
-        }
-
-        _pendingSpeechClass = null;
-        _pendingSpeechVotes = 0;
-
-        // Case B: Background Environmental Sound (Ambulance, Fire Truck, Horn, Dog, Baby, Traffic)
-        // Strictly evaluated when user is not actively speaking (at least 2.0 seconds since speech)
-        final bool userSpokeRecently = (nowMs - _lastSpeechTimeMs < 2000);
-
-        if (!userSpokeRecently && !speechLikely) {
-          final candidateSound =
-              bestEnvClass != null ? envSoundMap[bestEnvClass] : null;
-
-          if (candidateSound != null) {
-            const envThresholds = {
-              'ambulance_siren': 0.65,
-              'fire_truck': 0.70,
-              'vehicle_horn': 0.60,
-              'baby_crying': 0.65,
-              'dog_barking': 0.60,
-              'background_traffic': 0.70,
-            };
-            final double reqProb = envThresholds[bestEnvClass] ?? 0.65;
-            final bool trafficValid = (bestEnvClass != 'background_traffic') ||
-                (rms >= 0.025 && maxAmp >= 0.10);
-            final bool isValid = bestEnvProb >= reqProb &&
-                bestEnvProb >= bestSpeechProb * 1.50 &&
-                trafficValid;
-            final double confidence = bestEnvProb;
-
-            if (isValid) {
-              final lastAlert = _lastSoundAlertTimes[candidateSound];
-              final bool cooldownPassed = lastAlert == null ||
-                  nowMs - lastAlert.millisecondsSinceEpoch >= 2000;
-
-              if (_pendingEnvironmentSound == candidateSound) {
-                _pendingEnvironmentVotes++;
-              } else {
-                _pendingEnvironmentSound = candidateSound;
-                _pendingEnvironmentVotes = 1;
-              }
-
-              // High confidence (>= 0.85) triggers in 1 window (~160ms); others require 2 windows (~320ms)
-              final int requiredEnvironmentVotes = (confidence >= 0.85) ? 1 : 2;
-              if (cooldownPassed &&
-                  _pendingEnvironmentVotes >= requiredEnvironmentVotes) {
-                _lastSoundAlertTimes[candidateSound] =
-                    DateTime.fromMillisecondsSinceEpoch(nowMs);
-                simulateSoundDetection(candidateSound, confidence: confidence);
-              }
+          if (trafficValid) {
+            if (_pendingEnvironmentSound == candidateSound) {
+              _pendingEnvironmentVotes++;
             } else {
-              _pendingEnvironmentSound = null;
+              _pendingEnvironmentSound = candidateSound;
+              _pendingEnvironmentVotes = 1;
+            }
+
+            final int reqVotes = (topEnvProb >= 0.88) ? 2 : 3;
+            if (_pendingEnvironmentVotes >= reqVotes) {
               _pendingEnvironmentVotes = 0;
+              simulateSoundDetection(candidateSound, confidence: topEnvProb);
             }
           } else {
-            _pendingEnvironmentSound = null;
             _pendingEnvironmentVotes = 0;
           }
         }
+      } else {
+        _pendingEnvironmentVotes = 0;
+        _pendingEnvironmentSound = null;
       }
     }
   }
