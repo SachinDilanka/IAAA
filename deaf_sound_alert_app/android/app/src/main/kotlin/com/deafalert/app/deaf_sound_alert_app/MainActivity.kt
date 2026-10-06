@@ -115,7 +115,7 @@ class MainActivity : FlutterActivity(), RecognitionListener {
                         putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US")
                         putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "en-US")
                         putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
+                        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 10)
                         putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
                     }
                     speechRecognizer?.startListening(intent)
@@ -136,34 +136,55 @@ class MainActivity : FlutterActivity(), RecognitionListener {
             }
         }
 
-        private fun emitSpeech(type: String, text: String) {
+        private fun emitSpeech(type: String, text: String, candidates: List<String> = emptyList()) {
             if (isListening) {
-                speechEventSink?.success(mapOf("type" to type, "text" to text))
+                speechEventSink?.success(mapOf(
+                    "type" to type,
+                    "text" to text,
+                    "candidates" to candidates
+                ))
+            }
+        }
+
+        private fun emitRms(rmsdB: Float) {
+            if (isListening) {
+                speechEventSink?.success(mapOf(
+                    "type" to "rms",
+                    "rms" to rmsdB
+                ))
             }
         }
 
         override fun onPartialResults(results: Bundle?) {
-            results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                ?.firstOrNull()?.let { emitSpeech("partialResult", it) }
+            val list = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) ?: arrayListOf()
+            val first = list.firstOrNull()
+            if (first != null) {
+                emitSpeech("partialResult", first, list)
+            }
         }
 
         override fun onResults(results: Bundle?) {
-            results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                ?.firstOrNull()?.let { emitSpeech("finalResult", it) }
+            val list = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) ?: arrayListOf()
+            val first = list.firstOrNull()
+            if (first != null) {
+                emitSpeech("finalResult", first, list)
+            }
             if (isListening) {
-                handler.postDelayed({ startSpeechRecognizer() }, 250)
+                handler.postDelayed({ startSpeechRecognizer() }, 150)
             }
         }
 
         override fun onError(error: Int) {
             if (isListening) {
-                handler.postDelayed({ startSpeechRecognizer() }, 500)
+                handler.postDelayed({ startSpeechRecognizer() }, 250)
             }
         }
 
         override fun onReadyForSpeech(params: Bundle?) {}
         override fun onBeginningOfSpeech() {}
-        override fun onRmsChanged(rmsdB: Float) {}
+        override fun onRmsChanged(rmsdB: Float) {
+            emitRms(rmsdB)
+        }
         override fun onBufferReceived(buffer: ByteArray?) {}
         override fun onEndOfSpeech() {}
         override fun onEvent(eventType: Int, params: Bundle?) {}
