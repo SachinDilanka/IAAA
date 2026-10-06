@@ -37,13 +37,9 @@ class AudioClassifierService {
   int _keywordLockUntilMs = 0;
   String? _currentDisplayedKeyword;
 
-  // Utterance tracking for high-accuracy keyword detection near and far
-  String? _currentUtteranceBestClass;
-  double _currentUtteranceBestProb = 0.0;
-  int _utteranceSpeechFrames = 0;
-  int _utteranceSilenceFrames = 0;
-
-  // Environmental sound tracking
+  // Keyword & Environmental detection voting
+  String? _pendingSpeechClass;
+  int _pendingSpeechVotes = 0;
   String? _pendingEnvClass;
   int _pendingEnvVotes = 0;
 
@@ -182,10 +178,8 @@ class AudioClassifierService {
     _rollingIdx = 0;
     _total16kPushed = 0;
     _lastMlTimeMs = 0;
-    _currentUtteranceBestClass = null;
-    _currentUtteranceBestProb = 0.0;
-    _utteranceSpeechFrames = 0;
-    _utteranceSilenceFrames = 0;
+    _pendingSpeechClass = null;
+    _pendingSpeechVotes = 0;
     _pendingEnvClass = null;
     _pendingEnvVotes = 0;
     _currentDisplayedKeyword = null;
@@ -299,25 +293,19 @@ class AudioClassifierService {
 
       // If alert lockout is currently active (2.2s after a keyword fired), hold
       if (nowMs < _keywordLockUntilMs) {
-        _currentUtteranceBestClass = null;
-        _currentUtteranceBestProb = 0.0;
-        _utteranceSpeechFrames = 0;
-        _utteranceSilenceFrames = 0;
+        _pendingSpeechClass = null;
+        _pendingSpeechVotes = 0;
         _pendingEnvClass = null;
         _pendingEnvVotes = 0;
         return;
       }
 
       // Silence floor check
-      if (windowMax < 0.005) {
-        // In silence, if an utterance was previously active and reached silence:
-        if (_utteranceSpeechFrames > 0 && _currentUtteranceBestClass != null) {
-          _utteranceSilenceFrames++;
-          if (_utteranceSilenceFrames >= 2 && _currentUtteranceBestProb >= 0.20) {
-            _triggerKeywordAlert(_currentUtteranceBestClass!, _currentUtteranceBestProb, nowMs);
-            return;
-          }
-        }
+      if (windowMax < 0.003) {
+        _pendingSpeechClass = null;
+        _pendingSpeechVotes = 0;
+        _pendingEnvClass = null;
+        _pendingEnvVotes = 0;
         return;
       }
 
@@ -354,79 +342,78 @@ class AudioClassifierService {
         }
       }
 
-      final bool isChunkSpeech = (maxAmp >= 0.010 || rms >= 0.0018);
+      final double bgTrafficProb = allP['background_traffic'] ?? 0.0;
+      final double totalSpeechProb =
+          speechClasses.fold(0.0, (sum, c) => sum + (allP[c] ?? 0.0));
+      final double totalEnvProb =
+          _envClassToSoundKey.keys.fold(0.0, (sum, c) => sum + (allP[c] ?? 0.0));
 
-      // === 1. SINHALA EMERGENCY KEYWORDS (NEAR & FAR) ===
-      if (isChunkSpeech) {
-        _lastSpeechEnergyMs = nowMs;
-        _utteranceSpeechFrames++;
-        _utteranceSilenceFrames = 0;
+      // Background room silence / road noise check
+      if (bgTrafficProb >= 0.70) {
+        _pendingSpeechClass = null;
+        _pendingSpeechVotes = 0;
         _pendingEnvClass = null;
         _pendingEnvVotes = 0;
-
-        if (topSpeechProb > _currentUtteranceBestProb) {
-          _currentUtteranceBestProb = topSpeechProb;
-          _currentUtteranceBestClass = topSpeechClass;
-        }
-
-        // Instant trigger on very high confidence (>= 0.70) when word is fully formed
-        if (_currentUtteranceBestProb >= 0.70 && _utteranceSpeechFrames >= 2) {
-          _triggerKeywordAlert(_currentUtteranceBestClass!, _currentUtteranceBestProb, nowMs);
-          return;
-        }
-      } else {
-        if (_utteranceSpeechFrames > 0 && _currentUtteranceBestClass != null) {
-          _utteranceSilenceFrames++;
-          // When speech pauses for ~270ms (2 frames), commit the best detected keyword
-          if (_utteranceSilenceFrames >= 2 && _currentUtteranceBestProb >= 0.20) {
-            _triggerKeywordAlert(_currentUtteranceBestClass!, _currentUtteranceBestProb, nowMs);
-            return;
-          }
-        }
+        return;
       }
 
-      // === 2. BACKGROUND ENVIRONMENTAL SOUNDS ===
-      // Baby Crying, Ambulance Siren, Fire Truck, Vehicle Horns, Dog Barking
-      final bool userSpokeRecently = (nowMs - _lastSpeechEnergyMs < 1200);
+      // === 1. ENVIRONMENTAL EMERGENCY SOUNDS (Baby Crying, Ambulance, Fire Truck, Horn, Dog Barking) ===
+      if (topEnvClass != null && totalEnvProb > totalSpeechProb * 1.15 && totalEnvProb >= 0.35) {
+        _pendingSpeechClass = null;
+        _pendingSpeechVotes = 0;
 
-      if (!userSpokeRecently && topEnvClass != null) {
         final candidateSound = _envClassToSoundKey[topEnvClass];
         if (candidateSound != null) {
-          const envThresholds = {
-            'ambulance_siren': 0.35,
-            'fire_truck': 0.35,
-            'vehicle_horn': 0.35,
-            'baby_crying': 0.32,
-            'dog_barking': 0.35,
-          };
-          final double reqProb = envThresholds[topEnvClass] ?? 0.35;
-          final bool isValid = topEnvProb >= reqProb && topEnvProb > topSpeechProb * 1.20;
+          final lastAlert = _lastSoundAlertTimes[candidateSound];
+          final bool cooldownPassed = lastAlert == null ||
+              nowMs - lastAlert.millisecondsSinceEpoch >= 2200;
 
-          if (isValid) {
-            final lastAlert = _lastSoundAlertTimes[candidateSound];
-            final bool cooldownPassed = lastAlert == null ||
-                nowMs - lastAlert.millisecondsSinceEpoch >= 2200;
-
-            if (_pendingEnvClass == candidateSound) {
-              _pendingEnvVotes++;
-            } else {
-              _pendingEnvClass = candidateSound;
-              _pendingEnvVotes = 1;
-            }
-
-            if (cooldownPassed && _pendingEnvVotes >= 2) {
-              _lastSoundAlertTimes[candidateSound] =
-                  DateTime.fromMillisecondsSinceEpoch(nowMs);
-              simulateSoundDetection(candidateSound, confidence: topEnvProb);
-              _pendingEnvVotes = 0;
-              _pendingEnvClass = null;
-            }
+          if (_pendingEnvClass == candidateSound) {
+            _pendingEnvVotes++;
           } else {
+            _pendingEnvClass = candidateSound;
+            _pendingEnvVotes = 1;
+          }
+
+          // Immediate trigger on high confidence (>= 0.65) or 2 confirmation frames (~270ms)
+          final bool shouldTriggerEnv = (topEnvProb >= 0.65) || (_pendingEnvVotes >= 2);
+          if (cooldownPassed && shouldTriggerEnv) {
+            _lastSoundAlertTimes[candidateSound] =
+                DateTime.fromMillisecondsSinceEpoch(nowMs);
+            simulateSoundDetection(candidateSound, confidence: topEnvProb);
             _pendingEnvVotes = 0;
             _pendingEnvClass = null;
           }
         }
+        return;
       }
+
+      // === 2. ALL 8 SINHALA EMERGENCY KEYWORDS (NEAR & FAR) ===
+      if (totalSpeechProb > totalEnvProb * 1.05 && totalSpeechProb >= 0.28) {
+        _pendingEnvClass = null;
+        _pendingEnvVotes = 0;
+
+        if (_pendingSpeechClass == topSpeechClass) {
+          _pendingSpeechVotes++;
+        } else {
+          _pendingSpeechClass = topSpeechClass;
+          _pendingSpeechVotes = 1;
+        }
+
+        // Immediate trigger on high confidence (>= 0.50) or 2 confirmation frames (~270ms)
+        final bool shouldTriggerSpeech = (topSpeechProb >= 0.50) || (_pendingSpeechVotes >= 2);
+        if (shouldTriggerSpeech) {
+          _triggerKeywordAlert(topSpeechClass, topSpeechProb, nowMs);
+          _pendingSpeechVotes = 0;
+          _pendingSpeechClass = null;
+        }
+        return;
+      }
+
+      _pendingSpeechClass = null;
+      _pendingSpeechVotes = 0;
+      _pendingEnvClass = null;
+      _pendingEnvVotes = 0;
     }
   }
 
@@ -437,10 +424,10 @@ class AudioClassifierService {
     _keywordLockUntilMs = nowMs + 2200; // Hold for 2.2s so user can test next word sequentially
     _currentDisplayedKeyword = soundKey;
     _lastSpeechEnergyMs = nowMs;
-    _currentUtteranceBestClass = null;
-    _currentUtteranceBestProb = 0.0;
-    _utteranceSpeechFrames = 0;
-    _utteranceSilenceFrames = 0;
+    _pendingSpeechClass = null;
+    _pendingSpeechVotes = 0;
+    _pendingEnvClass = null;
+    _pendingEnvVotes = 0;
 
     // 1. Display formatted keyword in Live Speech box
     final displayText = _sinhalaLiveSpeechDisplay[soundKey] ?? speechClass;
@@ -464,10 +451,8 @@ class AudioClassifierService {
     _latestSoundVolume = 0.02;
     _waveformController.add([]);
     _currentDisplayedKeyword = null;
-    _currentUtteranceBestClass = null;
-    _currentUtteranceBestProb = 0.0;
-    _utteranceSpeechFrames = 0;
-    _utteranceSilenceFrames = 0;
+    _pendingSpeechClass = null;
+    _pendingSpeechVotes = 0;
     _pendingEnvClass = null;
     _pendingEnvVotes = 0;
 
