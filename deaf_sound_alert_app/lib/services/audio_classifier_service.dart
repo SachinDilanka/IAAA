@@ -344,8 +344,8 @@ class AudioClassifierService {
 
       // Decision: Is this Sinhala speech?
       final bool isSpeech = topSpeechClass != null &&
-          topSpeechProb >= 0.40 &&
-          topSpeechProb >= topEnvProb * 0.70;
+          topSpeechProb >= 0.35 &&
+          topSpeechProb >= topEnvProb * 0.65;
 
       if (isSpeech) {
         _lastSpeechTimeMs = nowMs;
@@ -372,19 +372,24 @@ class AudioClassifierService {
 
       // Environmental sounds branch:
       // STRICT conditions:
-      // 1. User has NOT spoken for at least 2.5 seconds
-      // 2. Speech probability is negligible (< 0.25)
-      // 3. High sustained confidence (>= 0.70)
-      // 4. Requires multiple consecutive voting windows (~420ms)
-      final bool userSpokeRecently = (nowMs - _lastSpeechTimeMs < 2500);
+      // 1. User has NOT spoken for at least 6.0 seconds
+      // 2. Real acoustic volume (sirens, car horns, dog barking, baby crying):
+      //    windowMax >= 0.08 and windowRms >= 0.012 (prevents room noise/breathing from ever triggering sirens!)
+      // 3. Speech probability is negligible (< 0.20)
+      // 4. High sustained confidence (>= 0.75)
+      // 5. Requires multiple consecutive voting windows (~700ms) of sustained siren/sound
+      final bool userSpokeRecently = (nowMs - _lastSpeechTimeMs < 6000);
+      final bool hasRealEmergencyEnergy = (windowMax >= 0.08 && windowRms >= 0.012);
+
       if (!userSpokeRecently &&
-          topSpeechProb < 0.25 &&
+          hasRealEmergencyEnergy &&
+          topSpeechProb < 0.20 &&
           topEnvClass != null &&
-          topEnvProb >= 0.70) {
+          topEnvProb >= 0.75) {
         final candidateSound = envSoundMap[topEnvClass];
         if (candidateSound != null) {
           final bool trafficValid = (topEnvClass != 'background_traffic') ||
-              (topEnvProb >= 0.85 && windowRms >= 0.03 && windowMax >= 0.12);
+              (topEnvProb >= 0.88 && windowRms >= 0.035 && windowMax >= 0.15);
 
           if (trafficValid) {
             if (_pendingEnvironmentSound == candidateSound) {
@@ -394,7 +399,7 @@ class AudioClassifierService {
               _pendingEnvironmentVotes = 1;
             }
 
-            final int reqVotes = (topEnvProb >= 0.88) ? 2 : 3;
+            final int reqVotes = (topEnvProb >= 0.90) ? 4 : 5;
             if (_pendingEnvironmentVotes >= reqVotes) {
               _pendingEnvironmentVotes = 0;
               simulateSoundDetection(candidateSound, confidence: topEnvProb);
