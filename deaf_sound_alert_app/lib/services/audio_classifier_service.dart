@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:audio_streamer/audio_streamer.dart';
 import '../models/detected_sound.dart';
 import 'vibration_service.dart';
@@ -18,6 +19,12 @@ class AudioClassifierService {
 
   final NativeNeuralAudioClassifier _neuralClassifier =
       NativeNeuralAudioClassifier();
+
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  bool _speechAvailable = false;
+  bool _isRestartingStt = false;
+  Timer? _sttWatchdogTimer;
+  Timer? _sttRestartTimer;
 
   AudioStreamer? _audioStreamer;
   StreamSubscription? _pcmStreamSubscription;
@@ -62,16 +69,38 @@ class AudioClassifierService {
     _sttStatusController.add(status);
   }
 
-  // Exact Live Speech display strings for 8 Sinhala emergency keywords & 6 Environmental sounds
+  // Exact Live Speech display strings for 8 Sinhala emergency keywords
+  static final Map<String, String> _sinhalaLiveSpeechDisplay = {
+    'sinhala_udaw_': 'udaw  →  උදව් (Udaw - Help)',
+    'sinhala_beraganna_': 'beeraganna  →  බේරගන්න (Beraganna - Save Me)',
+    'sinhala_ginnak_': 'ginnak  →  ගින්නක් (Ginnak - Fire)',
+    'sinhala_anathurak_': 'anathurak  →  අනතුරක් (Anathurak - Danger)',
+    'sinhala_karadarayak_': 'karadarayak  →  කරදරයක් (Karadarayak - Trouble)',
+    'sinhala_balagena_': 'balagena  →  බලාගෙන (Balaagena - Watch Out)',
+    'sinhala_ehata_wenna_': 'ehata wenna  →  එහාට වෙන්න (Ehata Wenna - Move Aside)',
+    'sinhala_parissamin_': 'parissamin  →  පරිස්සමින් (Parissamin - Be Careful)',
+  };
+
+  // Exact Live Speech display strings for 6 Environmental sounds
+  static final Map<String, String> _envLiveSpeechDisplay = {
+    'ambulance_siren': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
+    'fire_truck': 'ගිනි නිවන රථ ශබ්දය (Fire Truck Siren)',
+    'vehicle_horn': 'වාහන හොන් (Vehicle Horns)',
+    'baby_crying': 'ළදරු හැඬීම (Baby Crying)',
+    'dog_barking': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
+    'background_traffic': 'වාහන තදබදය (Traffic Noise)',
+  };
+
+  // General display lookup
   static final Map<String, String> _classToLiveSpeechDisplay = {
-    'udaw': 'උදව් (Udaw - Help)',
-    'beeraganna': 'බේරගන්න (Beraganna - Save Me)',
-    'ginnak': 'ගින්නක් (Ginnak - Fire)',
-    'anathurak': 'අනතුරක් (Anathurak - Danger)',
-    'karadarayak': 'කරදරයක් (Karadarayak - Trouble)',
-    'balagena': 'බලාගෙන (Balaagena - Watch Out)',
-    'ehata_wenna': 'එහාට වෙන්න (Ehata Wenna - Move Aside)',
-    'parissamin': 'පරිස්සමින් (Parissamin - Be Careful)',
+    'udaw': 'udaw  →  උදව් (Udaw - Help)',
+    'beeraganna': 'beeraganna  →  බේරගන්න (Beraganna - Save Me)',
+    'ginnak': 'ginnak  →  ගින්නක් (Ginnak - Fire)',
+    'anathurak': 'anathurak  →  අනතුරක් (Anathurak - Danger)',
+    'karadarayak': 'karadarayak  →  කරදරයක් (Karadarayak - Trouble)',
+    'balagena': 'balagena  →  බලාගෙන (Balaagena - Watch Out)',
+    'ehata_wenna': 'ehata wenna  →  එහාට වෙන්න (Ehata Wenna - Move Aside)',
+    'parissamin': 'parissamin  →  පරිස්සමින් (Parissamin - Be Careful)',
     'ambulance_siren': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
     'fire_truck': 'ගිනි නිවන රථ ශබ්දය (Fire Truck Siren)',
     'vehicle_horn': 'වාහන හොන් (Vehicle Horns)',
@@ -96,6 +125,42 @@ class AudioClassifierService {
     'baby_crying': 'baby crying',
     'dog_barking': 'dog_bark_dataset',
     'background_traffic': 'traffic',
+  };
+
+  // Comprehensive speech-to-text keyword patterns for the 8 Sinhala emergencies
+  static final Map<String, List<String>> _sinhalaKeywordPatterns = {
+    'sinhala_udaw_': [
+      'udaw', 'udaww', 'udawwa', 'udau', 'udauwa', 'udav', 'udavv', 'udawu', 'udauw', 'help', 'sos', 'emergency',
+      'උදව්', 'උදව්වක්', 'උදවු', 'උදවු කරන්න', 'උදව් කරන්න', 'උදව්ව', 'උදව්ක්'
+    ],
+    'sinhala_anathurak_': [
+      'anathurak', 'anatura', 'anathura', 'anathurai', 'anaturak', 'danger', 'anaturai', 'anathurac', 'accident', 'warning', 'anatur', 'anathur',
+      'අනතුරක්', 'අනතුර', 'අනතුරයි', 'අනතුරු'
+    ],
+    'sinhala_beraganna_': [
+      'beraganna', 'beeraganna', 'bera ganna', 'beera ganna', 'bcraganna', 'beera', 'beragan', 'beeragan', 'save me', 'rescue', 'beragannako',
+      'බේරාගන්න', 'බේරගන්න', 'බේරාගන්නකෝ', 'බේරගන්නකෝ', 'බේරන්න'
+    ],
+    'sinhala_ginnak_': [
+      'ginnak', 'ginna', 'ginak', 'ginnaki', 'ginnac', 'fire', 'burning', 'gindara',
+      'ගින්නක්', 'ගින්න', 'ගිනි', 'ගිණි', 'ගින්දර'
+    ],
+    'sinhala_karadarayak_': [
+      'karadarayak', 'karadara', 'karadarai', 'karadarayac', 'trouble', 'karadarak', 'problem', 'distress',
+      'කරදරයක්', 'කරදර', 'කරදරයි', 'කරදරේ'
+    ],
+    'sinhala_balagena_': [
+      'balagena', 'balagenna', 'balaagena', 'bala gena', 'balaganna', 'balang', 'watch out', 'look out', 'caution',
+      'බලාගෙන', 'බලන්', 'බලාගෙනම'
+    ],
+    'sinhala_ehata_wenna_': [
+      'ehata wenna', 'ehatawenna', 'ehata', 'ehaata wenna', 'move aside', 'move away', 'step back', 'get away',
+      'එහාට වෙන්න', 'එහාටවෙන්න', 'එහාට'
+    ],
+    'sinhala_parissamin_': [
+      'parissamin', 'parisamin', 'parissamen', 'parisamen', 'parissam', 'parisam', 'be careful', 'take care', 'careful',
+      'පරිස්සමින්', 'පරිස්සමෙන්', 'පරිසමින්', 'පරිස්සම්'
+    ],
   };
 
   Timer? _visualizerTicker;
@@ -183,12 +248,185 @@ class AudioClassifierService {
 
     _startVisualizerTicker();
 
-    _setSttStatus('100% Offline Mode Active (Zero Internet Needed)');
+    _setSttStatus('Live Speech & Sound Detection Active');
 
-    // Start 100% offline continuous hardware microphone stream
+    // 1. Continuous Speech-to-Text for word-by-word Live Speech & keyword alerts
+    _safeListenSpeech();
+
+    _sttWatchdogTimer?.cancel();
+    _sttWatchdogTimer =
+        Timer.periodic(const Duration(milliseconds: 1500), (timer) {
+      if (!_isListening) {
+        timer.cancel();
+        return;
+      }
+      if (!_speech.isListening && !_isRestartingStt) {
+        _safeListenSpeech();
+      }
+    });
+
+    // 2. Continuous Hardware Microphone Stream for offline acoustic neural network
     _startAudioStreamer();
 
     return true;
+  }
+
+  void _safeListenSpeech() async {
+    if (!_isListening || _isRestartingStt) return;
+    if (_speech.isListening) return;
+
+    _isRestartingStt = true;
+
+    try {
+      if (!_speechAvailable) {
+        _speechAvailable = await _speech.initialize(
+          onError: (val) => _onSpeechError(val.errorMsg),
+          onStatus: (val) {
+            if ((val == 'done' || val == 'notListening') && _isListening) {
+              _onSpeechDone();
+            }
+          },
+        );
+      }
+
+      if (!_speechAvailable || !_isListening) {
+        _isRestartingStt = false;
+        return;
+      }
+
+      await _speech.listen(
+        onResult: (result) {
+          if (!_isListening) return;
+          final rawWords = result.recognizedWords.trim();
+          if (rawWords.isNotEmpty) {
+            _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
+            _processSpeechText(rawWords);
+          }
+        },
+        onSoundLevelChange: (level) {
+          if (!_isListening) return;
+          final double vol =
+              (0.20 + (level.clamp(-2.0, 10.0) / 10.0)).clamp(0.18, 1.0);
+          _updateWaveformVolume(vol);
+        },
+        listenOptions: stt.SpeechListenOptions(
+          listenMode: stt.ListenMode.dictation,
+          partialResults: true,
+          cancelOnError: false,
+          pauseFor: const Duration(seconds: 30),
+          listenFor: const Duration(hours: 1),
+          localeId: null,
+        ),
+      );
+    } catch (e) {
+      _onSpeechError(e.toString());
+    } finally {
+      _isRestartingStt = false;
+    }
+  }
+
+  void _onSpeechDone() {
+    if (!_isListening) return;
+    _sttRestartTimer?.cancel();
+    _sttRestartTimer = Timer(const Duration(milliseconds: 300), () {
+      if (_isListening && !_speech.isListening && !_isRestartingStt) {
+        _safeListenSpeech();
+      }
+    });
+  }
+
+  void _onSpeechError(String errorMsg) {
+    if (!_isListening) return;
+    _sttRestartTimer?.cancel();
+    _sttRestartTimer = Timer(const Duration(milliseconds: 600), () {
+      if (_isListening && !_speech.isListening && !_isRestartingStt) {
+        _safeListenSpeech();
+      }
+    });
+  }
+
+  int _levenshtein(String s1, String s2) {
+    if (s1 == s2) return 0;
+    if (s1.isEmpty) return s2.length;
+    if (s2.isEmpty) return s1.length;
+
+    List<int> v0 = List<int>.generate(s2.length + 1, (i) => i);
+    List<int> v1 = List<int>.filled(s2.length + 1, 0);
+
+    for (int i = 0; i < s1.length; i++) {
+      v1[0] = i + 1;
+      for (int j = 0; j < s2.length; j++) {
+        int cost = (s1[i] == s2[j]) ? 0 : 1;
+        v1[j + 1] = math.min(v1[j] + 1, math.min(v0[j + 1] + 1, v0[j] + cost));
+      }
+      for (int j = 0; j <= s2.length; j++) {
+        v0[j] = v1[j];
+      }
+    }
+    return v0[s2.length];
+  }
+
+  bool _isKeywordMatch(String fullText, String pattern) {
+    if (fullText.contains(pattern)) return true;
+
+    final words = fullText.split(RegExp(r'\s+'));
+    final patternWords = pattern.split(RegExp(r'\s+'));
+
+    if (patternWords.length == 1) {
+      for (final w in words) {
+        if (w == pattern) return true;
+        if (pattern.length >= 5 && w.length >= 4) {
+          final dist = _levenshtein(w, pattern);
+          if (dist <= 1) return true;
+        }
+      }
+    } else {
+      for (int i = 0; i <= words.length - patternWords.length; i++) {
+        final phrase = words.sublist(i, i + patternWords.length).join(' ');
+        if (phrase == pattern) return true;
+        if (phrase.length >= 6) {
+          final dist = _levenshtein(phrase, pattern);
+          if (dist <= 2) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  void _processSpeechText(String rawWords) {
+    final sanitized = rawWords
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^\w\s\u0D80-\u0DFF]'), ' ')
+        .trim();
+    final now = DateTime.now();
+
+    // 1. Check if spoken text matches any of the 8 Sinhala emergency keywords
+    for (var entry in _sinhalaKeywordPatterns.entries) {
+      final key = entry.key;
+      for (var pattern in entry.value) {
+        if (_isKeywordMatch(sanitized, pattern)) {
+          final lastTime = _lastKeywordTriggerTimes[key];
+          if (lastTime != null &&
+              now.difference(lastTime).inMilliseconds < 2000) {
+            return;
+          }
+          _lastKeywordTriggerTimes[key] = now;
+          _lastSpeechTimeMs = now.millisecondsSinceEpoch;
+
+          // 1. Display formatted keyword in Live Speech box FIRST
+          final display = _sinhalaLiveSpeechDisplay[key] ?? rawWords;
+          _transcriptController.add(display);
+
+          // 2. Pop up ONLY that matching Sinhala emergency card!
+          simulateSoundDetection(key, confidence: 0.99, overrideCooldown: true);
+          return;
+        }
+      }
+    }
+
+    // 2. Normal Speech (English or other words): Display word-by-word in Live Speech!
+    // NO alert card pops up! Voice NEVER triggers environmental sounds!
+    _transcriptController.add(rawWords);
   }
 
   void _startAudioStreamer() async {
@@ -197,7 +435,6 @@ class AudioClassifierService {
       _pcmStreamSubscription = null;
       _audioStreamer = AudioStreamer();
 
-      // Configure native 16000 Hz sampling on Android
       _audioStreamer!.sampleRate = 16000;
       _hardwareSampleRate = 16000;
 
@@ -207,12 +444,11 @@ class AudioClassifierService {
           _processPcmBuffer(buffer);
         },
         onError: (error) {
-          _setSttStatus('Microphone stream error: $error');
+          // Keep running smoothly even if stream reports an error
         },
         cancelOnError: false,
       );
 
-      // Verify the actual hardware sample rate reported by Android AudioRecord
       Future.delayed(const Duration(milliseconds: 250), () async {
         try {
           if (_audioStreamer != null) {
@@ -223,9 +459,7 @@ class AudioClassifierService {
           }
         } catch (_) {}
       });
-    } catch (e) {
-      _setSttStatus('Microphone stream initialization error: $e');
-    }
+    } catch (_) {}
   }
 
   void _processPcmBuffer(List<double> rawBuffer) {
@@ -296,7 +530,7 @@ class AudioClassifierService {
     final double soundVol = (maxAmp * 4.0 + rms * 10.0).clamp(0.04, 1.0);
     _updateWaveformVolume(soundVol);
 
-    // Run Offline Neural Network Inference when sound energy is present (sensitive for near or far speech / audio clips)
+    // Run Neural Network Inference when sound energy is present
     final bool hasSoundEnergy = (maxAmp >= 0.003 || rms >= 0.0015);
     final bool startupGraceOver = (nowMs - _listeningStartTimeMs >= 350);
 
@@ -316,7 +550,7 @@ class AudioClassifierService {
         if (absS > windowMax) windowMax = absS;
       }
 
-      // Dynamic Automatic Gain Control (AGC) up to 50x for far speech
+      // Dynamic Automatic Gain Control (AGC) up to 50x for far speech or sounds
       final List<double> normalizedWindow = List<double>.filled(16000, 0.0);
       final double gain =
           windowMax > 0.001 ? (0.55 / windowMax).clamp(1.0, 50.0) : 1.0;
@@ -352,15 +586,11 @@ class AudioClassifierService {
         // Find top Sinhala speech class
         String? bestSpeechClass;
         double bestSpeechProb = 0.0;
-        double secondSpeechProb = 0.0;
         for (final s in speechClasses) {
           final p = allP[s] ?? 0.0;
           if (p > bestSpeechProb) {
-            secondSpeechProb = bestSpeechProb;
             bestSpeechProb = p;
             bestSpeechClass = s;
-          } else if (p > secondSpeechProb) {
-            secondSpeechProb = p;
           }
         }
 
@@ -375,63 +605,66 @@ class AudioClassifierService {
           }
         }
 
-        // === DECISION ENGINE ===
-        // Case A: Sinhala Speech Keyword Detected (ABSOLUTE PRIORITY OVER ENVIRONMENTAL SOUNDS)
-        final bool isSpeechTrigger = (bestSpeechClass != null) &&
-            (bestSpeechProb >= 0.30) &&
-            (bestSpeechProb >= bestEnvProb * 0.65 || (bestSpeechProb - secondSpeechProb >= 0.05));
-
-        if (isSpeechTrigger) {
+        // 1. If acoustic model strongly detects one of the 8 Sinhala keywords (offline backup):
+        if (bestSpeechClass != null &&
+            bestSpeechProb >= 0.70 &&
+            bestSpeechProb > bestEnvProb * 1.4) {
           final soundKey = _classToSoundKey[bestSpeechClass] ?? bestSpeechClass;
           final lastAlert = _lastKeywordTriggerTimes[soundKey];
           final bool cooldownPassed = lastAlert == null ||
-              nowMs - lastAlert.millisecondsSinceEpoch >= 1800;
+              nowMs - lastAlert.millisecondsSinceEpoch >= 2000;
 
           if (cooldownPassed) {
             _lastKeywordTriggerTimes[soundKey] =
                 DateTime.fromMillisecondsSinceEpoch(nowMs);
             _lastSpeechTimeMs = nowMs;
 
-            final display =
-                _classToLiveSpeechDisplay[bestSpeechClass] ?? bestSpeechClass;
+            final display = _sinhalaLiveSpeechDisplay[soundKey] ??
+                _classToLiveSpeechDisplay[bestSpeechClass] ??
+                bestSpeechClass;
 
             // 1. Display recognized Sinhala word in the Live Speech box FIRST
             _transcriptController.add(display);
 
-            // 2. Pop up the matching Sinhala emergency card IMMEDIATELY
-            simulateSoundDetection(
-              soundKey,
-              confidence: bestSpeechProb,
-              overrideCooldown: true,
-            );
+            // 2. Pop up matching Sinhala alert card
+            simulateSoundDetection(soundKey,
+                confidence: bestSpeechProb, overrideCooldown: true);
           }
-          return; // Stop here! User voice NEVER triggers environmental sounds!
+          return; // STOP! User voice NEVER triggers environmental sounds!
         }
 
-        // Case B: Background Environmental Sound (Ambulance, Fire Truck, Horn, Dog, Baby, Traffic)
-        // Only evaluated when user is NOT speaking (no speech within last 2.2 seconds)
-        final bool userSpokeRecently = (nowMs - _lastSpeechTimeMs < 2200);
+        // 2. Background Environmental Sounds (Ambulance, Fire Truck, Horn, Baby, Dog, Traffic)
+        // User voice lock: strictly require NO SPEECH within the last 3.0 seconds!
+        final bool speechActiveRecently = (nowMs - _lastSpeechTimeMs < 3000);
 
-        if (!userSpokeRecently && bestEnvClass != null) {
+        if (!speechActiveRecently && bestEnvClass != null) {
           final soundKey = envSoundMap[bestEnvClass];
-          final double requiredEnvProb =
-              (bestEnvClass == 'background_traffic') ? 0.85 : 0.65;
+          const envThresholds = {
+            'ambulance_siren': 0.70,
+            'fire_truck': 0.70,
+            'vehicle_horn': 0.70,
+            'baby_crying': 0.70,
+            'dog_barking': 0.70,
+            'background_traffic': 0.88,
+          };
+          final double requiredProb = envThresholds[bestEnvClass] ?? 0.75;
 
           if (soundKey != null &&
-              bestEnvProb >= requiredEnvProb &&
+              bestEnvProb >= requiredProb &&
               bestSpeechProb < 0.20) {
             final lastAlert = _lastSoundAlertTimes[soundKey];
             final bool cooldownPassed = lastAlert == null ||
                 nowMs - lastAlert.millisecondsSinceEpoch >= 2500;
 
             if (cooldownPassed) {
-              final display =
-                  _classToLiveSpeechDisplay[bestEnvClass] ?? bestEnvClass;
+              final display = _envLiveSpeechDisplay[bestEnvClass] ??
+                  _classToLiveSpeechDisplay[bestEnvClass] ??
+                  bestEnvClass;
 
               // 1. Display detected environmental sound in Live Speech box
               _transcriptController.add(display);
 
-              // 2. Pop up that environmental sound card
+              // 2. Pop up ONLY that specific environmental sound card!
               simulateSoundDetection(soundKey, confidence: bestEnvProb);
             }
           }
@@ -442,11 +675,18 @@ class AudioClassifierService {
 
   void stopListening() {
     _isListening = false;
+    _sttWatchdogTimer?.cancel();
+    _sttWatchdogTimer = null;
+    _sttRestartTimer?.cancel();
+    _sttRestartTimer = null;
     _visualizerTicker?.cancel();
     _visualizerTicker = null;
     _latestSoundVolume = 0.02;
     _waveformController.add([]);
 
+    if (_speech.isListening) {
+      _speech.stop();
+    }
     _pcmStreamSubscription?.cancel();
     _pcmStreamSubscription = null;
     _audioStreamer = null;
