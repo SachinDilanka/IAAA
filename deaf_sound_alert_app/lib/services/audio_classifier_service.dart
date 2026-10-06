@@ -44,6 +44,11 @@ class AudioClassifierService {
   final Map<String, DateTime> _lastKeywordTriggerTimes = {};
   final Map<String, DateTime> _lastSoundAlertTimes = {};
   DateTime? _lastEmittedAlertTime;
+  String? _pendingSpeechClass;
+  int _pendingSpeechVotes = 0;
+  int _pendingSpeechAtMs = 0;
+  String? _pendingEnvironmentSound;
+  int _pendingEnvironmentVotes = 0;
 
   final _controller = StreamController<DetectedSound>.broadcast();
   final _waveformController = StreamController<List<double>>.broadcast();
@@ -77,6 +82,28 @@ class AudioClassifierService {
     'sinhala_parissamin_': 'parissamin  →  පරිස්සමින් (Parissamin - Be Careful)',
   };
 
+  static const Map<String, String> _sinhalaLiveSpeechWord = {
+    'sinhala_udaw_': 'udaw',
+    'sinhala_beraganna_': 'beeraganna',
+    'sinhala_ginnak_': 'ginnak',
+    'sinhala_anathurak_': 'anathurak',
+    'sinhala_karadarayak_': 'karadarayak',
+    'sinhala_balagena_': 'balagena',
+    'sinhala_ehata_wenna_': 'ehata wenna',
+    'sinhala_parissamin_': 'parissamin',
+  };
+
+  static const Map<String, String> _classToSoundKey = {
+    'udaw': 'sinhala_udaw_',
+    'beeraganna': 'sinhala_beraganna_',
+    'ginnak': 'sinhala_ginnak_',
+    'anathurak': 'sinhala_anathurak_',
+    'karadarayak': 'sinhala_karadarayak_',
+    'balagena': 'sinhala_balagena_',
+    'ehata_wenna': 'sinhala_ehata_wenna_',
+    'parissamin': 'sinhala_parissamin_',
+  };
+
   // Exact Live Speech display strings for 6 Environmental sounds
   static final Map<String, String> _envLiveSpeechDisplay = {
     'ambulance': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
@@ -108,7 +135,7 @@ class AudioClassifierService {
   void _startVisualizerTicker() {
     _visualizerTicker?.cancel();
     _visualizerTicker =
-        Timer.periodic(const Duration(milliseconds: 20), (timer) {
+        Timer.periodic(const Duration(milliseconds: 33), (timer) {
       if (!_isListening) {
         timer.cancel();
         return;
@@ -156,7 +183,11 @@ class AudioClassifierService {
     } catch (_) {}
 
     if (!_neuralClassifier.isLoaded) {
-      await _neuralClassifier.loadModel();
+      final modelLoaded = await _neuralClassifier.loadModel();
+      if (!modelLoaded) {
+        _setSttStatus('Offline sound model could not be loaded.');
+        return false;
+      }
     }
 
     _isListening = true;
@@ -166,19 +197,27 @@ class AudioClassifierService {
     _rollingIdx = 0;
     _total16kPushed = 0;
     _lastMlTimeMs = 0;
+    _pendingSpeechClass = null;
+    _pendingSpeechVotes = 0;
+    _pendingSpeechAtMs = 0;
+    _pendingEnvironmentSound = null;
+    _pendingEnvironmentVotes = 0;
     _latestSoundVolume = 0.25;
     _rollingBuf16k.fillRange(0, 16000, 0.0);
 
     _startVisualizerTicker();
 
+    // Fully offline mode: the bundled classifier is the only microphone
+    // consumer. Android SpeechRecognizer is not started.
+    final captureStarted = await _startAudioCapture();
+    if (!captureStarted) {
+      _isListening = false;
+      _visualizerTicker?.cancel();
+      _visualizerTicker = null;
+      return false;
+    }
     _setSttStatus(
-        'Listening for speech… Speak near or far from mic');
-
-    // Start continuous live speech recognition for word-by-word streaming
-    await _startSpeechRecognition();
-
-    // Start 16kHz audio capture for background environmental sound detection
-    _startAudioCapture();
+        'Offline detection active. Say a Sinhala keyword or play a sound.');
 
     return true;
   }
@@ -209,7 +248,7 @@ class AudioClassifierService {
           if ((type == 'partialResult' || type == 'finalResult') &&
               text.isNotEmpty) {
             _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
-            _setSttStatus('Live offline speech active');
+            _setSttStatus('Listening for Sinhala emergency keywords');
             _processSpeechText(text, candidates: rawCandidates);
           } else if (type == 'error') {
             _setSttStatus(
@@ -231,7 +270,7 @@ class AudioClassifierService {
       }
       await _speechChannel.invokeMethod('startListening');
       _setSttStatus(
-          'Listening offline. Say udaw, beeraganna, ginnak, anathurak, karadarayak, balagena, ehata wenna, or parissamin.');
+          'Speech recognition active. Say udaw, beeraganna, ginnak, anathurak, karadarayak, balagena, ehata wenna, or parissamin.');
     } catch (error) {
       _setSttStatus('Could not start speech recognition: $error');
     }
@@ -487,34 +526,15 @@ class AudioClassifierService {
       'පරිස්සම්': 'sinhala_parissamin_',
     };
 
-    const envKeywords = <String, String>{
-      'ambulance': 'ambulance',
-      'siren': 'ambulance',
-      'fire truck': 'fire_truck',
-      'firetruck': 'fire_truck',
-      'vehicle horn': 'vehicle horns',
-      'car horn': 'vehicle horns',
-      'honk': 'vehicle horns',
-      'horn': 'vehicle horns',
-      'baby crying': 'baby crying',
-      'baby cry': 'baby crying',
-      'crying baby': 'baby crying',
-      'crying': 'baby crying',
-      'baby': 'baby crying',
-      'cry': 'baby crying',
-      'dog barking': 'dog_bark_dataset',
-      'dog bark': 'dog_bark_dataset',
-      'barking': 'dog_bark_dataset',
-      'traffic noise': 'traffic',
-      'traffic jam': 'traffic',
-      'traffic sound': 'traffic',
-      'heavy traffic': 'traffic',
-    };
-
-    // 1. First priority: Check if any target contains any Sinhala emergency keyword
+    // Prefer an exact recognizer result. Only fall back to a word boundary
+    // match when the recognizer returned a short phrase around the keyword.
     for (final target in targets) {
       for (final entry in sinhalaKeywords.entries) {
-        if (target.contains(entry.key)) {
+        final exactMatch = target == entry.key;
+        final boundaryMatch = RegExp(
+          '(^|\\s)${RegExp.escape(entry.key)}(\\s|\$)',
+        ).hasMatch(target);
+        if (exactMatch || boundaryMatch) {
           final now = DateTime.now();
           final previous = _lastKeywordTriggerTimes[entry.value];
           if (previous != null &&
@@ -524,9 +544,8 @@ class AudioClassifierService {
           _lastKeywordTriggerTimes[entry.value] = now;
           _lastSpeechTimeMs = now.millisecondsSinceEpoch;
 
-          // 1. Lively display recognized Sinhala word in Live Speech box FIRST
           _transcriptController.add(
-              _sinhalaLiveSpeechDisplay[entry.value] ?? rawText);
+              _sinhalaLiveSpeechWord[entry.value] ?? rawText);
 
           // 2. Pop up ONLY the matching Sinhala emergency card IMMEDIATELY
           unawaited(simulateSoundDetection(
@@ -539,35 +558,20 @@ class AudioClassifierService {
       }
     }
 
-    // 2. Second priority: Check if speech recognizer heard environmental sound keywords
-    for (final target in targets) {
-      for (final entry in envKeywords.entries) {
-        if (target.contains(entry.key)) {
-          final now = DateTime.now();
-          final previous = _lastSoundAlertTimes[entry.value];
-          if (previous != null &&
-              now.difference(previous).inMilliseconds < 2000) {
-            return;
-          }
-          _lastSoundAlertTimes[entry.value] = now;
-
-          final displayStr = _envLiveSpeechDisplay[entry.value] ?? entry.key;
-          _transcriptController.add(displayStr);
-          unawaited(simulateSoundDetection(entry.value, confidence: 0.95));
-          return;
-        }
-      }
-    }
-
-    // 3. Lively word-by-word display of what user is speaking in Live Speech box
-    _transcriptController.add(rawText);
+    // Ignore non-keyword speech. Environmental sounds are detected only from
+    // microphone PCM by the offline sound classifier below.
   }
 
-  void _startAudioCapture() async {
+  Future<bool> _startAudioCapture() async {
     try {
       _recordStreamSub?.cancel();
       _audioRecorder?.dispose();
       _audioRecorder = AudioRecorder();
+
+      if (!await _audioRecorder!.hasPermission()) {
+        _setSttStatus('Microphone permission was denied.');
+        return false;
+      }
 
       final stream = await _audioRecorder!.startStream(
         const RecordConfig(
@@ -587,8 +591,11 @@ class AudioClassifierService {
         },
         cancelOnError: false,
       );
+      _setSttStatus('Listening offline. Say a Sinhala emergency keyword.');
+      return true;
     } catch (e) {
       _setSttStatus('Audio stream init error: $e');
+      return false;
     }
   }
 
@@ -624,22 +631,40 @@ class AudioClassifierService {
 
     // Filter out silence and ambient room noise (Real speech / audio has MaxAmp >= 0.012 or RMS >= 0.004)
     final bool hasSoundEnergy = (maxAmp >= 0.012 || rms >= 0.004);
-    final bool startupGraceOver = (nowMs - _listeningStartTimeMs >= 300);
+    // Give the recorder and microphone AGC time to settle. The initial
+    // rolling window often contains startup clicks or device noise.
+    final bool startupGraceOver = (nowMs - _listeningStartTimeMs >= 1500);
 
     if (_total16kPushed >= 6000 &&
         startupGraceOver &&
         hasSoundEnergy &&
-        (nowMs - _lastMlTimeMs >= 100)) {
+        // The offline model performs a full 16 kHz FFT and neural inference.
+        // Keep the rolling model responsive without processing every audio
+        // packet. A shorter cadence reduces the gap between consecutive words.
+        (nowMs - _lastMlTimeMs >= 180)) {
       _lastMlTimeMs = nowMs;
 
       // Extract 1-second rolling window
       final List<double> window1s = List<double>.filled(16000, 0.0);
       double windowMax = 0.0;
+      double windowSumSquares = 0.0;
       for (int i = 0; i < 16000; i++) {
         final s = _rollingBuf16k[(_rollingIdx - 16000 + i + 16000) % 16000];
         window1s[i] = s;
         final absS = s.abs();
         if (absS > windowMax) windowMax = absS;
+        windowSumSquares += s * s;
+      }
+      final double windowRms = math.sqrt(windowSumSquares / window1s.length);
+
+      // Do not classify silence, microphone self-noise, or AGC-amplified room
+      // noise. This gate is based on the original samples, before gain.
+      if (windowRms < 0.0035 || windowMax < 0.015) {
+        _pendingSpeechClass = null;
+        _pendingSpeechVotes = 0;
+        _pendingEnvironmentSound = null;
+        _pendingEnvironmentVotes = 0;
+        return;
       }
 
       // Dynamic Automatic Gain Control (AGC) up to 30x for far speech or sounds
@@ -678,11 +703,15 @@ class AudioClassifierService {
         // Find top Sinhala speech class
         String? bestSpeechClass;
         double bestSpeechProb = 0.0;
+        double secondSpeechProb = 0.0;
         for (final s in speechClasses) {
           final p = allP[s] ?? 0.0;
           if (p > bestSpeechProb) {
+            secondSpeechProb = bestSpeechProb;
             bestSpeechProb = p;
             bestSpeechClass = s;
+          } else if (p > secondSpeechProb) {
+            secondSpeechProb = p;
           }
         }
 
@@ -698,64 +727,134 @@ class AudioClassifierService {
         }
 
         // === DECISION ENGINE ===
-        // Case A: Human Speech Detected in audio (ABSOLUTE PRIORITY: USER VOICE NEVER TRIGGERS ENVIRONMENTAL SOUNDS!)
-        if (bestSpeechClass != null &&
-            bestSpeechProb >= 0.28 &&
-            bestSpeechProb >= bestEnvProb * 0.85) {
+        // Treat even a modest speech-class score as speech-like input. This
+        // wider gate is important because a single noisy window can otherwise
+        // rank a voice as a siren or another environmental sound.
+        final bool speechLikely = bestSpeechClass != null &&
+            bestSpeechProb >= 0.10 &&
+            bestSpeechProb >= bestEnvProb * 0.35;
+        if (speechLikely) {
           _lastSpeechTimeMs = nowMs;
-          return; // STOP! User voice NEVER triggers environmental sounds!
         }
+
+        // Check if keyword is detected with high confidence
+        final bool isUdaw = bestSpeechClass == 'udaw';
+        final bool keywordIsUnambiguous = bestSpeechClass != null &&
+            (isUdaw
+                ? (bestSpeechProb >= 0.16 && bestSpeechProb > secondSpeechProb)
+                : (bestSpeechProb >= 0.18 &&
+                    bestSpeechProb >= secondSpeechProb * 1.10 &&
+                    bestSpeechProb - secondSpeechProb >= 0.03));
+
+        // Speech energy takes priority over environmental classification.
+        if (bestSpeechClass != null &&
+            keywordIsUnambiguous &&
+            bestSpeechProb >= bestEnvProb * 0.35) {
+          _lastSpeechTimeMs = nowMs;
+          _pendingEnvironmentSound = null;
+          _pendingEnvironmentVotes = 0;
+
+          if (_pendingSpeechClass == bestSpeechClass &&
+              nowMs - _pendingSpeechAtMs <= 1200) {
+            _pendingSpeechVotes++;
+          } else {
+            _pendingSpeechClass = bestSpeechClass;
+            _pendingSpeechVotes = 1;
+          }
+          _pendingSpeechAtMs = nowMs;
+
+          // For short keywords like 'udaw' (or high confidence >= 0.22), trigger immediately on 1 window.
+          // For lower confidence, 2 windows confirm it.
+          final bool shouldTrigger = isUdaw ||
+              bestSpeechProb >= 0.22 ||
+              _pendingSpeechVotes >= 2;
+
+          if (shouldTrigger) {
+            final soundKey = _classToSoundKey[bestSpeechClass];
+            if (soundKey != null) {
+              final lastKeyword = _lastKeywordTriggerTimes[soundKey];
+              final keywordCooldownPassed = lastKeyword == null ||
+                  nowMs - lastKeyword.millisecondsSinceEpoch >= 1500;
+              if (keywordCooldownPassed) {
+                _lastKeywordTriggerTimes[soundKey] =
+                    DateTime.fromMillisecondsSinceEpoch(nowMs);
+                _transcriptController.add(
+                    _sinhalaLiveSpeechWord[soundKey] ?? bestSpeechClass);
+                unawaited(simulateSoundDetection(
+                  soundKey,
+                  confidence: bestSpeechProb.clamp(0.0, 1.0),
+                  overrideCooldown: true,
+                ));
+              }
+            }
+            _pendingSpeechVotes = 0;
+          }
+          return;
+        }
+
+        _pendingSpeechClass = null;
+        _pendingSpeechVotes = 0;
 
         // Case B: Background Environmental Sound (Ambulance, Fire Truck, Horn, Dog, Baby, Traffic)
         // Evaluated when user is not actively speaking
-        final bool userSpokeRecently = (nowMs - _lastSpeechTimeMs < 1200);
+        // Keep environmental classification gated briefly after a speech
+        // window. A spoken keyword can span several model windows; without
+        // this hold, the tail of "udaw" may be misclassified as another
+        // sound and replace the keyword alert.
+        final bool userSpokeRecently = (nowMs - _lastSpeechTimeMs < 2800);
 
-        if (!userSpokeRecently) {
-          // 1. Direct DSP Acoustic Detection (100% accurate for Baby Crying, Ambulance, Horn, Dog, Traffic)
-          final acousticMatch = _detectEnvironmentalAcousticSound(normalizedWindow, maxAmp, rms);
-          final candidateSound = acousticMatch ?? (bestEnvClass != null ? envSoundMap[bestEnvClass] : null);
+        if (!userSpokeRecently && !speechLikely) {
+          // Environmental alert decisions must come from the trained model.
+          // The direct frequency shortcut was too eager and produced false
+          // cards from room noise and microphone startup artifacts.
+          final candidateSound =
+              bestEnvClass != null ? envSoundMap[bestEnvClass] : null;
 
           if (candidateSound != null) {
-            final double confidence;
-            bool isValid = false;
-
-            if (acousticMatch != null) {
-              confidence = 0.95;
-              isValid = true;
-            } else {
-              const envThresholds = {
-                'ambulance_siren': 0.40,
-                'fire_truck': 0.80, // High threshold: Prevents false fire truck alarms!
-                'vehicle_horn': 0.45,
-                'baby_crying': 0.28,
-                'dog_barking': 0.45,
-                'background_traffic': 0.55,
-              };
-              final double reqProb = envThresholds[bestEnvClass] ?? 0.50;
-              final bool trafficValid = (bestEnvClass != 'background_traffic') ||
-                  (rms >= 0.025 && maxAmp >= 0.10);
-              isValid = (bestEnvProb >= reqProb && bestEnvProb > bestSpeechProb && trafficValid);
-              confidence = bestEnvProb;
-            }
+            const envThresholds = {
+              'ambulance_siren': 0.70,
+              'fire_truck': 0.85,
+              'vehicle_horn': 0.70,
+              'baby_crying': 0.70,
+              'dog_barking': 0.70,
+              'background_traffic': 0.75,
+            };
+            final double reqProb = envThresholds[bestEnvClass] ?? 0.75;
+            final bool trafficValid = (bestEnvClass != 'background_traffic') ||
+                (rms >= 0.025 && maxAmp >= 0.10);
+            final bool isValid = bestEnvProb >= reqProb &&
+                bestEnvProb >= bestSpeechProb * 1.50 &&
+                trafficValid;
+            final double confidence = bestEnvProb;
 
             if (isValid) {
               final lastAlert = _lastSoundAlertTimes[candidateSound];
               final bool cooldownPassed = lastAlert == null ||
                   nowMs - lastAlert.millisecondsSinceEpoch >= 2000;
 
-              if (cooldownPassed) {
+              if (_pendingEnvironmentSound == candidateSound) {
+                _pendingEnvironmentVotes++;
+              } else {
+                _pendingEnvironmentSound = candidateSound;
+                _pendingEnvironmentVotes = 1;
+              }
+
+              const requiredEnvironmentVotes = 3;
+              if (cooldownPassed &&
+                  _pendingEnvironmentVotes >= requiredEnvironmentVotes) {
                 _lastSoundAlertTimes[candidateSound] =
                     DateTime.fromMillisecondsSinceEpoch(nowMs);
-                final display = _envLiveSpeechDisplay[candidateSound] ??
-                    candidateSound;
-
-                // 1. Display detected environmental sound in Live Speech box
-                _transcriptController.add(display);
-
-                // 2. Pop up ONLY that specific environmental sound card!
+                // Environmental sounds only create an alert card. They are
+                // written as the confirmed sound name, never as speech text.
                 simulateSoundDetection(candidateSound, confidence: confidence);
               }
+            } else {
+              _pendingEnvironmentSound = null;
+              _pendingEnvironmentVotes = 0;
             }
+          } else {
+            _pendingEnvironmentSound = null;
+            _pendingEnvironmentVotes = 0;
           }
         }
       }

@@ -119,8 +119,15 @@ class MainActivity : FlutterActivity(), RecognitionListener {
                     putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                     putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 10)
                     putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US")
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "en-US")
                     putExtra("android.speech.extra.DICTATION_MODE", true)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    // Prefer on-device recognition when available, but allow
+                    // Android's normal speech provider when the phone has no
+                    // downloaded offline pack. Without this fallback the
+                    // recognizer can fail silently on many devices.
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                        SpeechRecognizer.isOnDeviceRecognitionAvailable(this@MainActivity)) {
                         putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
                     }
                 }
@@ -190,6 +197,7 @@ class MainActivity : FlutterActivity(), RecognitionListener {
 
     override fun onError(error: Int) {
         if (isListening) {
+            emitSpeech("error", recognitionErrorText(error))
             try {
                 speechRecognizer?.cancel()
                 speechRecognizer?.destroy()
@@ -203,6 +211,21 @@ class MainActivity : FlutterActivity(), RecognitionListener {
             handler.postDelayed({
                 if (isListening) startSpeechRecognizer()
             }, delay)
+        }
+    }
+
+    private fun recognitionErrorText(error: Int): String {
+        return when (error) {
+            SpeechRecognizer.ERROR_AUDIO -> "Microphone audio error"
+            SpeechRecognizer.ERROR_CLIENT -> "Speech recognizer client error"
+            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission denied"
+            SpeechRecognizer.ERROR_NETWORK -> "Speech recognition network error"
+            SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Speech recognition network timeout"
+            SpeechRecognizer.ERROR_NO_MATCH -> "No speech match"
+            SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Speech recognizer is busy"
+            SpeechRecognizer.ERROR_SERVER -> "Speech recognition server error"
+            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Speech timeout"
+            else -> "Speech recognition error ($error)"
         }
     }
 

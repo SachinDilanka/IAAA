@@ -79,8 +79,7 @@ class AppProvider with ChangeNotifier {
       AudioClassifierService().stopListening();
       _isListening = false;
     } else {
-      await AudioClassifierService().startListening();
-      _isListening = true;
+      _isListening = await AudioClassifierService().startListening();
     }
     notifyListeners();
   }
