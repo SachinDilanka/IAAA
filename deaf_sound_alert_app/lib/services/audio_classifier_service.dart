@@ -77,17 +77,6 @@ class AudioClassifierService {
     'sinhala_parissamin_': 'parissamin  →  පරිස්සමින් (Parissamin - Be Careful)',
   };
 
-  static const Map<String, String> _sinhalaLiveSpeechWord = {
-    'sinhala_udaw_': 'udaw',
-    'sinhala_beraganna_': 'beeraganna',
-    'sinhala_ginnak_': 'ginnak',
-    'sinhala_anathurak_': 'anathurak',
-    'sinhala_karadarayak_': 'karadarayak',
-    'sinhala_balagena_': 'balagena',
-    'sinhala_ehata_wenna_': 'ehata wenna',
-    'sinhala_parissamin_': 'parissamin',
-  };
-
   // Exact Live Speech display strings for 6 Environmental sounds
   static final Map<String, String> _envLiveSpeechDisplay = {
     'ambulance': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
@@ -96,40 +85,6 @@ class AudioClassifierService {
     'baby crying': 'ළදරු හැඬීම (Baby Crying)',
     'dog_bark_dataset': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
     'traffic': 'වාහන තදබදය (Traffic Noise)',
-  };
-
-  static final Map<String, String> _classToLiveSpeechDisplay = {
-    'udaw': 'udaw  →  උදව් (Udaw - Help)',
-    'beeraganna': 'beeraganna  →  බේරගන්න (Beraganna - Save Me)',
-    'ginnak': 'ginnak  →  ගින්නක් (Ginnak - Fire)',
-    'anathurak': 'anathurak  →  අනතුරක් (Anathurak - Danger)',
-    'karadarayak': 'karadarayak  →  කරදරයක් (Karadarayak - Trouble)',
-    'balagena': 'balagena  →  බලාගෙන (Balaagena - Watch Out)',
-    'ehata_wenna': 'ehata wenna  →  එහාට වෙන්න (Ehata Wenna - Move Aside)',
-    'parissamin': 'parissamin  →  පරිස්සමින් (Parissamin - Be Careful)',
-    'ambulance_siren': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
-    'fire_truck': 'ගිනි නිවන රථ ශබ්දය (Fire Truck Siren)',
-    'vehicle_horn': 'වාහන හොන් (Vehicle Horns)',
-    'baby_crying': 'ළදරු හැඬීම (Baby Crying)',
-    'dog_barking': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
-    'background_traffic': 'වාහන තදබදය (Traffic Noise)',
-  };
-
-  static final Map<String, String> _classToSoundKey = {
-    'udaw': 'sinhala_udaw_',
-    'beeraganna': 'sinhala_beraganna_',
-    'ginnak': 'sinhala_ginnak_',
-    'anathurak': 'sinhala_anathurak_',
-    'karadarayak': 'sinhala_karadarayak_',
-    'balagena': 'sinhala_balagena_',
-    'ehata_wenna': 'sinhala_ehata_wenna_',
-    'parissamin': 'sinhala_parissamin_',
-    'ambulance_siren': 'ambulance',
-    'fire_truck': 'fire_truck',
-    'vehicle_horn': 'vehicle horns',
-    'baby_crying': 'baby crying',
-    'dog_barking': 'dog_bark_dataset',
-    'background_traffic': 'traffic',
   };
 
   Timer? _visualizerTicker;
