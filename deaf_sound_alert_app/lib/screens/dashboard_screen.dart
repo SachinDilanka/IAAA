@@ -247,7 +247,7 @@ class DashboardScreen extends StatelessWidget {
                                   Text(
                                     provider.currentTranscript.isNotEmpty
                                         ? provider.currentTranscript
-                                        : 'Listening for speech… Say "Udaw", "Beeraganna", "Ginnak", "Anathurak" near or far from mic.',
+                                        : 'Listening for speech… Say "udaw", "beeraganna", "ginnak", "anathurak", "karadarayak", "balagena", "ehata wenna", or "parissamin".',
                                     style: TextStyle(
                                       color: provider.currentTranscript.isNotEmpty ? Colors.white : Colors.white60,
                                       fontWeight: provider.currentTranscript.isNotEmpty ? FontWeight.bold : FontWeight.normal,
