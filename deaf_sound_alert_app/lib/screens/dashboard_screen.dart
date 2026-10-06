@@ -246,8 +246,8 @@ class DashboardScreen extends StatelessWidget {
                                   const SizedBox(height: 6),
                                   Text(
                                     provider.currentTranscript.isNotEmpty
-                                        ? provider.currentTranscript
-                                        : 'Listening for speech… Say "udaw", "beeraganna", "ginnak", "anathurak", "karadarayak", "balagena", "ehata wenna", or "parissamin".',
+                                        ? 'Live Speech: "${provider.currentTranscript}"'
+                                        : 'Live Speech: Listening for Sinhala keywords (උදව්, අනතුරක්...)',
                                     style: TextStyle(
                                       color: provider.currentTranscript.isNotEmpty ? Colors.white : Colors.white60,
                                       fontWeight: provider.currentTranscript.isNotEmpty ? FontWeight.bold : FontWeight.normal,

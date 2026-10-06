@@ -83,14 +83,14 @@ class AudioClassifierService {
   };
 
   static const Map<String, String> _sinhalaLiveSpeechWord = {
-    'sinhala_udaw_': 'udaw',
-    'sinhala_beraganna_': 'beeraganna',
-    'sinhala_ginnak_': 'ginnak',
-    'sinhala_anathurak_': 'anathurak',
-    'sinhala_karadarayak_': 'karadarayak',
-    'sinhala_balagena_': 'balagena',
-    'sinhala_ehata_wenna_': 'ehata wenna',
-    'sinhala_parissamin_': 'parissamin',
+    'sinhala_udaw_': 'උදව් (Udaw - Help)',
+    'sinhala_beraganna_': 'බේරගන්න (Beraganna - Save Me)',
+    'sinhala_ginnak_': 'ගින්නක් (Ginnak - Fire)',
+    'sinhala_anathurak_': 'අනතුරක් (Anathurak - Danger)',
+    'sinhala_karadarayak_': 'කරදරයක් (Karadarayak - Trouble)',
+    'sinhala_balagena_': 'බලාගෙන (Balaagena - Watch Out)',
+    'sinhala_ehata_wenna_': 'එහාට වෙන්න (Ehata Wenna - Move Aside)',
+    'sinhala_parissamin_': 'පරිස්සමින් (Parissamin - Be Careful)',
   };
 
   static const Map<String, String> _classToSoundKey = {
@@ -715,6 +715,12 @@ class AudioClassifierService {
           }
         }
 
+        // Prioritize udaw when udaw probability is present
+        if ((allP['udaw'] ?? 0.0) >= 0.14 && (allP['udaw'] ?? 0.0) >= bestSpeechProb * 0.70) {
+          bestSpeechClass = 'udaw';
+          bestSpeechProb = allP['udaw']!;
+        }
+
         // Find top environmental class
         String? bestEnvClass;
         double bestEnvProb = 0.0;
@@ -727,9 +733,7 @@ class AudioClassifierService {
         }
 
         // === DECISION ENGINE ===
-        // Treat even a modest speech-class score as speech-like input. This
-        // wider gate is important because a single noisy window can otherwise
-        // rank a voice as a siren or another environmental sound.
+        // Treat even modest speech-class score as speech-like input.
         final bool speechLikely = bestSpeechClass != null &&
             bestSpeechProb >= 0.10 &&
             bestSpeechProb >= bestEnvProb * 0.35;
@@ -737,14 +741,13 @@ class AudioClassifierService {
           _lastSpeechTimeMs = nowMs;
         }
 
-        // Check if keyword is detected with high confidence
+        // Check if keyword is detected with confidence
         final bool isUdaw = bestSpeechClass == 'udaw';
         final bool keywordIsUnambiguous = bestSpeechClass != null &&
             (isUdaw
-                ? (bestSpeechProb >= 0.16 && bestSpeechProb > secondSpeechProb)
+                ? (bestSpeechProb >= 0.14)
                 : (bestSpeechProb >= 0.18 &&
-                    bestSpeechProb >= secondSpeechProb * 1.10 &&
-                    bestSpeechProb - secondSpeechProb >= 0.03));
+                    bestSpeechProb >= secondSpeechProb * 1.05));
 
         // Speech energy takes priority over environmental classification.
         if (bestSpeechClass != null &&
@@ -782,7 +785,7 @@ class AudioClassifierService {
                     _sinhalaLiveSpeechWord[soundKey] ?? bestSpeechClass);
                 unawaited(simulateSoundDetection(
                   soundKey,
-                  confidence: bestSpeechProb.clamp(0.0, 1.0),
+                  confidence: 0.99,
                   overrideCooldown: true,
                 ));
               }
@@ -796,41 +799,34 @@ class AudioClassifierService {
         _pendingSpeechVotes = 0;
 
         // Case B: Background Environmental Sound (Ambulance, Fire Truck, Horn, Dog, Baby, Traffic)
-        // Evaluated when user is not actively speaking
-        // Keep environmental classification gated briefly after a speech
-        // window. A spoken keyword can span several model windows; without
-        // this hold, the tail of "udaw" may be misclassified as another
-        // sound and replace the keyword alert.
-        final bool userSpokeRecently = (nowMs - _lastSpeechTimeMs < 2800);
+        // Strictly evaluated when user is not actively speaking (at least 3.5 seconds since speech)
+        final bool userSpokeRecently = (nowMs - _lastSpeechTimeMs < 3500);
 
         if (!userSpokeRecently && !speechLikely) {
-          // Environmental alert decisions must come from the trained model.
-          // The direct frequency shortcut was too eager and produced false
-          // cards from room noise and microphone startup artifacts.
           final candidateSound =
               bestEnvClass != null ? envSoundMap[bestEnvClass] : null;
 
           if (candidateSound != null) {
             const envThresholds = {
-              'ambulance_siren': 0.70,
-              'fire_truck': 0.85,
-              'vehicle_horn': 0.70,
-              'baby_crying': 0.70,
-              'dog_barking': 0.70,
-              'background_traffic': 0.75,
+              'ambulance_siren': 0.75,
+              'fire_truck': 0.88,
+              'vehicle_horn': 0.75,
+              'baby_crying': 0.75,
+              'dog_barking': 0.75,
+              'background_traffic': 0.80,
             };
             final double reqProb = envThresholds[bestEnvClass] ?? 0.75;
             final bool trafficValid = (bestEnvClass != 'background_traffic') ||
-                (rms >= 0.025 && maxAmp >= 0.10);
+                (rms >= 0.035 && maxAmp >= 0.15);
             final bool isValid = bestEnvProb >= reqProb &&
-                bestEnvProb >= bestSpeechProb * 1.50 &&
+                bestEnvProb >= bestSpeechProb * 1.80 &&
                 trafficValid;
             final double confidence = bestEnvProb;
 
             if (isValid) {
               final lastAlert = _lastSoundAlertTimes[candidateSound];
               final bool cooldownPassed = lastAlert == null ||
-                  nowMs - lastAlert.millisecondsSinceEpoch >= 2000;
+                  nowMs - lastAlert.millisecondsSinceEpoch >= 2500;
 
               if (_pendingEnvironmentSound == candidateSound) {
                 _pendingEnvironmentVotes++;
@@ -839,13 +835,11 @@ class AudioClassifierService {
                 _pendingEnvironmentVotes = 1;
               }
 
-              const requiredEnvironmentVotes = 3;
+              const requiredEnvironmentVotes = 5;
               if (cooldownPassed &&
                   _pendingEnvironmentVotes >= requiredEnvironmentVotes) {
                 _lastSoundAlertTimes[candidateSound] =
                     DateTime.fromMillisecondsSinceEpoch(nowMs);
-                // Environmental sounds only create an alert card. They are
-                // written as the confirmed sound name, never as speech text.
                 simulateSoundDetection(candidateSound, confidence: confidence);
               }
             } else {
