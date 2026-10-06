@@ -100,85 +100,111 @@ class MainActivity : FlutterActivity(), RecognitionListener {
                         speechEventSink = null
                     }
                 })
-        }
+    }
 
-        private fun startSpeechRecognizer() {
-            handler.post {
-                if (!isListening) return@post
-                try {
-                    if (speechRecognizer == null) {
-                        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(applicationContext)
-                        speechRecognizer?.setRecognitionListener(this)
+    private fun startSpeechRecognizer() {
+        handler.post {
+            if (!isListening) return@post
+            try {
+                if (speechRecognizer == null) {
+                    speechRecognizer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(this)) {
+                        SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
+                    } else {
+                        SpeechRecognizer.createSpeechRecognizer(this)
                     }
-                    val intent = android.content.Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                        putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 10)
+                    speechRecognizer?.setRecognitionListener(this)
+                }
+                val intent = android.content.Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 10)
+                    putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
+                    putExtra("android.speech.extra.DICTATION_MODE", true)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
                     }
-                    speechRecognizer?.startListening(intent)
-                } catch (error: Exception) {
-                    // Fail silently or retry smoothly
                 }
-            }
-        }
-
-        private fun stopSpeechRecognizer() {
-            handler.post {
-                try {
-                    speechRecognizer?.cancel()
-                    speechRecognizer?.destroy()
-                } finally {
-                    speechRecognizer = null
-                }
-            }
-        }
-
-        private fun emitSpeech(type: String, text: String, candidates: List<String> = emptyList()) {
-            if (isListening) {
-                speechEventSink?.success(mapOf(
-                    "type" to type,
-                    "text" to text,
-                    "candidates" to candidates
-                ))
-            }
-        }
-
-        private fun emitRms(rmsdB: Float) {
-            if (isListening) {
-                speechEventSink?.success(mapOf(
-                    "type" to "rms",
-                    "rms" to rmsdB
-                ))
-            }
-        }
-
-        override fun onPartialResults(results: Bundle?) {
-            val list = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) ?: arrayListOf()
-            val first = list.firstOrNull()
-            if (first != null) {
-                emitSpeech("partialResult", first, list)
-            }
-        }
-
-        override fun onResults(results: Bundle?) {
-            val list = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) ?: arrayListOf()
-            val first = list.firstOrNull()
-            if (first != null) {
-                emitSpeech("finalResult", first, list)
-            }
-            if (isListening) {
-                handler.postDelayed({ startSpeechRecognizer() }, 200)
-            }
-        }
-
-        override fun onError(error: Int) {
-            if (isListening) {
-                // Restart recognizer smoothly without thrashing
+                speechRecognizer?.startListening(intent)
+            } catch (error: Exception) {
                 handler.postDelayed({
                     if (isListening) startSpeechRecognizer()
-                }, 800)
+                }, 500)
             }
         }
+    }
+
+    private fun stopSpeechRecognizer() {
+        handler.post {
+            try {
+                speechRecognizer?.cancel()
+                speechRecognizer?.destroy()
+            } catch (_: Exception) {}
+            speechRecognizer = null
+        }
+    }
+
+    private fun emitSpeech(type: String, text: String, candidates: List<String> = emptyList()) {
+        if (isListening) {
+            speechEventSink?.success(mapOf(
+                "type" to type,
+                "text" to text,
+                "candidates" to candidates
+            ))
+        }
+    }
+
+    private fun emitRms(rmsdB: Float) {
+        if (isListening) {
+            speechEventSink?.success(mapOf(
+                "type" to "rms",
+                "rms" to rmsdB
+            ))
+        }
+    }
+
+    override fun onPartialResults(results: Bundle?) {
+        val list = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) ?: arrayListOf()
+        val first = list.firstOrNull()
+        if (!first.isNullOrBlank()) {
+            emitSpeech("partialResult", first, list)
+        }
+    }
+
+    override fun onResults(results: Bundle?) {
+        val list = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) ?: arrayListOf()
+        val first = list.firstOrNull()
+        if (!first.isNullOrBlank()) {
+            emitSpeech("finalResult", first, list)
+        }
+        if (isListening) {
+            try {
+                speechRecognizer?.cancel()
+                speechRecognizer?.destroy()
+            } catch (_: Exception) {}
+            speechRecognizer = null
+            handler.postDelayed({
+                if (isListening) startSpeechRecognizer()
+            }, 100)
+        }
+    }
+
+    override fun onError(error: Int) {
+        if (isListening) {
+            try {
+                speechRecognizer?.cancel()
+                speechRecognizer?.destroy()
+            } catch (_: Exception) {}
+            speechRecognizer = null
+            val delay = if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
+                100L
+            } else {
+                350L
+            }
+            handler.postDelayed({
+                if (isListening) startSpeechRecognizer()
+            }, delay)
+        }
+    }
 
         override fun onReadyForSpeech(params: Bundle?) {}
         override fun onBeginningOfSpeech() {}

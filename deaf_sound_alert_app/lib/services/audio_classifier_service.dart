@@ -77,6 +77,17 @@ class AudioClassifierService {
     'sinhala_parissamin_': 'parissamin  →  පරිස්සමින් (Parissamin - Be Careful)',
   };
 
+  static const Map<String, String> _sinhalaLiveSpeechWord = {
+    'sinhala_udaw_': 'udaw',
+    'sinhala_beraganna_': 'beeraganna',
+    'sinhala_ginnak_': 'ginnak',
+    'sinhala_anathurak_': 'anathurak',
+    'sinhala_karadarayak_': 'karadarayak',
+    'sinhala_balagena_': 'balagena',
+    'sinhala_ehata_wenna_': 'ehata wenna',
+    'sinhala_parissamin_': 'parissamin',
+  };
+
   // Exact Live Speech display strings for 6 Environmental sounds
   static final Map<String, String> _envLiveSpeechDisplay = {
     'ambulance': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
@@ -205,12 +216,14 @@ class AudioClassifierService {
 
     _startVisualizerTicker();
 
-    _setSttStatus('100% Offline Deep Audio Awareness Active (Zero Internet)');
+    _setSttStatus(
+        'Listening for speech… Speak near or far from mic');
 
-    // Start 100% offline native 16kHz audio stream via AudioRecorder FIRST
-    _startAudioCapture();
-
+    // Start continuous live speech recognition for word-by-word streaming
     await _startSpeechRecognition();
+
+    // Start 16kHz audio capture for background environmental sound detection
+    _startAudioCapture();
 
     return true;
   }
@@ -556,10 +569,9 @@ class AudioClassifierService {
           _lastKeywordTriggerTimes[entry.value] = now;
           _lastSpeechTimeMs = now.millisecondsSinceEpoch;
 
-          final displayStr = _sinhalaLiveSpeechDisplay[entry.value] ?? rawText;
-
           // 1. Lively display recognized Sinhala word in Live Speech box FIRST
-          _transcriptController.add(displayStr);
+          _transcriptController.add(
+              _sinhalaLiveSpeechDisplay[entry.value] ?? rawText);
 
           // 2. Pop up ONLY the matching Sinhala emergency card IMMEDIATELY
           unawaited(simulateSoundDetection(
@@ -731,34 +743,11 @@ class AudioClassifierService {
         }
 
         // === DECISION ENGINE ===
-        // Case A: Sinhala Speech Keyword Detected (ABSOLUTE PRIORITY OVER ENVIRONMENTAL SOUNDS)
+        // Case A: Human Speech Detected in audio (ABSOLUTE PRIORITY: USER VOICE NEVER TRIGGERS ENVIRONMENTAL SOUNDS!)
         if (bestSpeechClass != null &&
             bestSpeechProb >= 0.28 &&
             bestSpeechProb >= bestEnvProb * 0.85) {
-          final soundKey = _classToSoundKey[bestSpeechClass] ?? bestSpeechClass;
-          final lastAlert = _lastKeywordTriggerTimes[soundKey];
-          final bool cooldownPassed = lastAlert == null ||
-              nowMs - lastAlert.millisecondsSinceEpoch >= 1500;
-
-          if (cooldownPassed) {
-            _lastKeywordTriggerTimes[soundKey] =
-                DateTime.fromMillisecondsSinceEpoch(nowMs);
-            _lastSpeechTimeMs = nowMs;
-
-            final display = _sinhalaLiveSpeechDisplay[soundKey] ??
-                _classToLiveSpeechDisplay[bestSpeechClass] ??
-                bestSpeechClass;
-
-            // 1. Display recognized Sinhala word in the Live Speech box FIRST
-            _transcriptController.add(display);
-
-            // 2. Pop up the matching Sinhala emergency card IMMEDIATELY
-            simulateSoundDetection(
-              soundKey,
-              confidence: bestSpeechProb,
-              overrideCooldown: true,
-            );
-          }
+          _lastSpeechTimeMs = nowMs;
           return; // STOP! User voice NEVER triggers environmental sounds!
         }
 
@@ -912,12 +901,14 @@ class AudioClassifierService {
     _visualizerTicker = null;
     _speechSubscription?.cancel();
     _speechSubscription = null;
-    _speechChannel.invokeMethod('stopListening');
     _latestSoundVolume = 0.02;
     _waveformController.add([]);
 
     _recordStreamSub?.cancel();
     _recordStreamSub = null;
+    try {
+      _speechChannel.invokeMethod('stopListening');
+    } catch (_) {}
     try {
       _audioRecorder?.stop();
       _audioRecorder?.dispose();
