@@ -35,7 +35,7 @@ class AudioClassifierService {
   int _lastMlTimeMs = 0;
   int _listeningStartTimeMs = 0;
   int _lastSpeechTimeMs = 0;
-  int _lastKeywordFiredMs = 0;
+  int _keywordLockUntilMs = 0;
 
   final Map<String, DateTime> _lastSoundAlertTimes = {};
   DateTime? _lastEmittedAlertTime;
@@ -164,7 +164,7 @@ class AudioClassifierService {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     _listeningStartTimeMs = nowMs;
     _lastSpeechTimeMs = 0;
-    _lastKeywordFiredMs = 0;
+    _keywordLockUntilMs = 0;
     _rollingIdx = 0;
     _total16kPushed = 0;
     _lastMlTimeMs = 0;
@@ -331,6 +331,13 @@ class AudioClassifierService {
         }
       }
 
+      // Prioritize short emergency keyword 'udaw' when detected so word decay doesn't override with 'anathurak'
+      final double udawProb = allP['udaw'] ?? 0.0;
+      if (udawProb >= 0.22 && udawProb >= topSpeechProb * 0.50) {
+        topSpeechClass = 'udaw';
+        topSpeechProb = udawProb;
+      }
+
       // Find top environmental class
       String? topEnvClass;
       double topEnvProb = 0.0;
@@ -344,48 +351,55 @@ class AudioClassifierService {
 
       // Decision: Is this Sinhala speech?
       final bool isSpeech = topSpeechClass != null &&
-          topSpeechProb >= 0.35 &&
-          topSpeechProb >= topEnvProb * 0.65;
+          topSpeechProb >= 0.25 &&
+          topSpeechProb >= topEnvProb * 0.55;
 
       if (isSpeech) {
         _lastSpeechTimeMs = nowMs;
         _pendingEnvironmentSound = null;
         _pendingEnvironmentVotes = 0;
 
-        // Trigger keyword with a 2.0-second cooldown to prevent double-triggering or tail noise
-        if (nowMs - _lastKeywordFiredMs >= 2000) {
-          _lastKeywordFiredMs = nowMs;
-          final soundKey = _classToSoundKey[topSpeechClass];
-          if (soundKey != null) {
-            final displayText =
-                _sinhalaLiveSpeechWord[soundKey] ?? topSpeechClass;
-            _transcriptController.add(displayText);
-            unawaited(simulateSoundDetection(
-              soundKey,
-              confidence: topSpeechProb,
-              overrideCooldown: true,
-            ));
-          }
+        // If a keyword was triggered recently (< 4.0 seconds ago), lock out overrides so
+        // word decay or room echo CANNOT change or override the active alert card!
+        if (nowMs < _keywordLockUntilMs) {
+          return; // The spoken keyword is locked and securely displayed on screen!
+        }
+
+        // Trigger the new Sinhala emergency keyword
+        _keywordLockUntilMs = nowMs + 4000; // Lock for 4 full seconds!
+        final soundKey = _classToSoundKey[topSpeechClass];
+        if (soundKey != null) {
+          final displayText =
+              _sinhalaLiveSpeechWord[soundKey] ?? topSpeechClass;
+          _transcriptController.add(displayText);
+          unawaited(simulateSoundDetection(
+            soundKey,
+            confidence: math.max(topSpeechProb, 0.95),
+            overrideCooldown: true,
+          ));
         }
         return; // ABSOLUTE STOP! User speech NEVER triggers environmental sounds!
       }
 
       // Environmental sounds branch:
       // STRICT conditions:
-      // 1. User has NOT spoken for at least 6.0 seconds
-      // 2. Real acoustic volume (sirens, car horns, dog barking, baby crying):
-      //    windowMax >= 0.08 and windowRms >= 0.012 (prevents room noise/breathing from ever triggering sirens!)
-      // 3. Speech probability is negligible (< 0.20)
-      // 4. High sustained confidence (>= 0.75)
-      // 5. Requires multiple consecutive voting windows (~700ms) of sustained siren/sound
-      final bool userSpokeRecently = (nowMs - _lastSpeechTimeMs < 6000);
-      final bool hasRealEmergencyEnergy = (windowMax >= 0.08 && windowRms >= 0.012);
+      // 1. User has NOT spoken for at least 8.0 seconds
+      // 2. Keyword lock has expired (nowMs >= _keywordLockUntilMs)
+      // 3. Real acoustic emergency volume (sirens, car horns, dog barking, baby crying):
+      //    windowMax >= 0.09 and windowRms >= 0.015 (prevents quiet room noise/breathing from ever triggering sirens!)
+      // 4. Speech probability is negligible (< 0.18)
+      // 5. High sustained confidence (>= 0.80)
+      // 6. Requires multiple consecutive voting windows (~700ms) of sustained siren/sound
+      final bool userSpokeRecently = (nowMs - _lastSpeechTimeMs < 8000);
+      final bool keywordActive = (nowMs < _keywordLockUntilMs);
+      final bool hasRealEmergencyEnergy = (windowMax >= 0.09 && windowRms >= 0.015);
 
       if (!userSpokeRecently &&
+          !keywordActive &&
           hasRealEmergencyEnergy &&
-          topSpeechProb < 0.20 &&
+          topSpeechProb < 0.18 &&
           topEnvClass != null &&
-          topEnvProb >= 0.75) {
+          topEnvProb >= 0.80) {
         final candidateSound = envSoundMap[topEnvClass];
         if (candidateSound != null) {
           final bool trafficValid = (topEnvClass != 'background_traffic') ||
