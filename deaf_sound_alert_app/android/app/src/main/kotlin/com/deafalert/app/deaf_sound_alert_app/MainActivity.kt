@@ -113,10 +113,11 @@ class MainActivity : FlutterActivity(), RecognitionListener {
                 val intent = android.content.Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                     putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 10)
                     putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, "si-LK")
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "si-LK")
+                    putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf("si-LK", "en-US", "en-GB"))
                 }
                 speechRecognizer?.startListening(intent)
             } catch (error: Exception) {
@@ -178,22 +179,24 @@ class MainActivity : FlutterActivity(), RecognitionListener {
             speechRecognizer = null
             handler.postDelayed({
                 if (isListening) startSpeechRecognizer()
-            }, 80)
+            }, 60L)
         }
     }
 
     override fun onError(error: Int) {
         if (isListening) {
-            emitSpeech("error", recognitionErrorText(error))
+            if (error != SpeechRecognizer.ERROR_NO_MATCH && error != SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
+                emitSpeech("error", recognitionErrorText(error))
+            }
             try {
                 speechRecognizer?.cancel()
                 speechRecognizer?.destroy()
             } catch (_: Exception) {}
             speechRecognizer = null
             val delay = if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
-                150L
+                60L
             } else {
-                1200L
+                800L
             }
             handler.postDelayed({
                 if (isListening) startSpeechRecognizer()

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import '../models/detected_sound.dart';
@@ -19,6 +20,12 @@ class AudioClassifierService {
 
   final NativeNeuralAudioClassifier _neuralClassifier =
       NativeNeuralAudioClassifier();
+
+  static const MethodChannel _speechChannel =
+      MethodChannel('com.deafalert.app/speech');
+  static const EventChannel _speechEvents =
+      EventChannel('com.deafalert.app/speech/events');
+  StreamSubscription? _speechSubscription;
 
   AudioRecorder? _audioRecorder;
   StreamSubscription<Uint8List>? _recordStreamSub;
@@ -131,7 +138,7 @@ class AudioClassifierService {
       'උදව්', 'උදවු', 'උදව්ව', 'උදව් කරන්න', 'උදව්වක්', 'උදව්ක්'
     ],
     'sinhala_karadarayak_': [
-      'karadarayak', 'karadara', 'karadarai', 'karadarak', 'karadare', 'karadhara',
+      'karadarayak', 'karadrayak', 'karadara', 'karadarai', 'karadarak', 'karadare', 'karadhara',
       'kara darayak', 'karadara yak', 'trouble', 'problem', 'distress',
       'kara da rai', 'kara da rak', 'car the rack', 'cardiac', 'car direct', 'care direct',
       'color dark', 'car dark', 'color direct', 'current direct', 'character', 'canada act',
@@ -263,7 +270,7 @@ class AudioClassifierService {
             }
 
             _lastKeywordTriggerTimes[soundKey] = DateTime.fromMillisecondsSinceEpoch(nowMs);
-            _keywordLockUntilMs = nowMs + 2500;
+            _keywordLockUntilMs = nowMs + 1200;
             _currentDisplayedKeyword = soundKey;
 
             // Formatted keyword in Live Speech box
@@ -364,6 +371,41 @@ class AudioClassifierService {
     });
   }
 
+  Future<void> _startSpeechRecognition() async {
+    try {
+      await _speechSubscription?.cancel();
+      _speechSubscription = _speechEvents.receiveBroadcastStream().listen(
+        (event) {
+          if (!_isListening || event is! Map) return;
+          final type = (event['type'] ?? '').toString();
+          if (type == 'rms') {
+            final double rmsVal =
+                ((event['rms'] as num?)?.toDouble() ?? -2.0);
+            final double vol =
+                (0.20 + (rmsVal.clamp(-2.0, 10.0) / 10.0)).clamp(0.18, 1.0);
+            _updateWaveformVolume(vol);
+          } else if (type == 'partialResult' || type == 'finalResult') {
+            final text = (event['text'] ?? '').toString().trim();
+            final candidates = ((event['candidates'] as List?) ?? [])
+                .map((e) => e.toString())
+                .toList();
+            if (text.isNotEmpty) {
+              processSpeechText(text, candidates: candidates);
+            }
+          }
+        },
+        onError: (_) {},
+        cancelOnError: false,
+      );
+
+      final available =
+          await _speechChannel.invokeMethod<bool>('isAvailable') ?? false;
+      if (available) {
+        await _speechChannel.invokeMethod('startListening');
+      }
+    } catch (_) {}
+  }
+
   Future<bool> startListening() async {
     if (_isListening) return true;
 
@@ -394,10 +436,19 @@ class AudioClassifierService {
 
     _startVisualizerTicker();
 
-    // Start hardware audio capture exclusively for visualizer & neural sound classification
-    await _startAudioCapture();
+    final bool sttAvailable =
+        await _speechChannel.invokeMethod<bool>('isAvailable') ?? false;
 
-    _setSttStatus('Listening lively. Say any Sinhala word, sentence, or emergency keyword.');
+    if (sttAvailable) {
+      // 1. Native Android Speech Recognition for word-by-word streaming & exact keyword matching
+      await _startSpeechRecognition();
+      _setSttStatus('Listening for speech. Say any Sinhala word, sentence, or emergency keyword.');
+    } else {
+      // 2. Hardware audio capture fallback
+      await _startAudioCapture();
+      _setSttStatus('Listening for acoustic sound patterns & keywords.');
+    }
+
     return true;
   }
 
@@ -699,6 +750,12 @@ class AudioClassifierService {
     _isListening = false;
     _visualizerTicker?.cancel();
     _visualizerTicker = null;
+
+    _speechSubscription?.cancel();
+    _speechSubscription = null;
+    try {
+      _speechChannel.invokeMethod('stopListening');
+    } catch (_) {}
 
     _latestSoundVolume = 0.02;
     _waveformController.add([]);
