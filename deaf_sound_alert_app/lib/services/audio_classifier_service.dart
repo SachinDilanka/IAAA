@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:permission_handler/permission_handler.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:audio_streamer/audio_streamer.dart';
 import '../models/detected_sound.dart';
 import 'vibration_service.dart';
 import 'flashlight_service.dart';
 import 'smartwatch_service.dart';
 import 'sound_config_service.dart';
 import 'history_service.dart';
+import 'native_neural_audio_classifier.dart';
 
 class AudioClassifierService {
   static final AudioClassifierService _instance =
@@ -15,16 +16,32 @@ class AudioClassifierService {
   factory AudioClassifierService() => _instance;
   AudioClassifierService._internal();
 
-  final stt.SpeechToText _speech = stt.SpeechToText();
+  final NativeNeuralAudioClassifier _neuralClassifier =
+      NativeNeuralAudioClassifier();
 
-  Timer? _sttWatchdogTimer;
-  bool _speechAvailable = false;
-  String? _selectedLocaleId;
-  bool _sinhalaLocaleRejected = false;
+  AudioStreamer? _audioStreamer;
+  StreamSubscription? _pcmStreamSubscription;
+
   bool _isListening = false;
-  bool _isRestartingStt = false;
   double _latestSoundVolume = 0.02;
   final List<double> _visualizerBars = List<double>.filled(40, 0.15);
+
+  // 16,000 Hz circular rolling audio buffer (1 second = 16,000 samples)
+  final List<double> _rollingBuf16k = List<double>.filled(16000, 0.0);
+  int _rollingIdx = 0;
+  int _total16kPushed = 0;
+  int _hardwareSampleRate = 16000;
+  int _lastPcmTimeMs = 0;
+  int _lastMlTimeMs = 0;
+  int _listeningStartTimeMs = 0;
+
+  // Adaptive ambient noise floor tracking (raw mic RMS)
+  double _noiseFloor = 0.008;
+
+  // Temporal voting for zero-latency, high-accuracy offline classification
+  String? _lastVoteLabel;
+  int _voteCount = 0;
+  int _lastVoteMs = 0;
 
   final Map<String, DateTime> _lastKeywordTriggerTimes = {};
   final Map<String, DateTime> _lastSoundAlertTimes = {};
@@ -50,34 +67,48 @@ class AudioClassifierService {
     _sttStatusController.add(status);
   }
 
+  // Display names in Sinhala script with English transliteration and meaning
+  final Map<String, String> _labelToSinhalaDisplay = {
+    'udaw': 'උදව් (Udaw - Help)',
+    'beeraganna': 'බේරගන්න (Beraganna - Save Me)',
+    'ginnak': 'ගින්නක් (Ginnak - Fire)',
+    'anathurak': 'අනතුරක් (Anathurak - Danger)',
+    'karadarayak': 'කරදරයක් (Karadarayak - Trouble)',
+    'balagena': 'බලාගෙන (Balaagena - Watch Out)',
+    'ehata_wenna': 'එහාට වෙන්න (Ehata Wenna - Move Aside)',
+    'parissamin': 'පරිස්සමින් (Parissamin - Be Careful)',
+    'ambulance_siren': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
+    'fire_truck': 'ගිනි නිවන රථ ශබ්දය (Fire Truck Siren)',
+    'vehicle_horn': 'වාහන හොන් (Vehicle Horns)',
+    'baby_crying': 'ළදරු හැඬීම (Baby Crying)',
+    'dog_barking': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
+    'background_traffic': 'වාහන තදබදය (Traffic Noise)',
+  };
+
+  // Maps neural network class names to SoundConfig service keys
+  final Map<String, String> _classToSoundKey = {
+    'udaw': 'sinhala_udaw_',
+    'beeraganna': 'sinhala_beraganna_',
+    'ginnak': 'sinhala_ginnak_',
+    'anathurak': 'sinhala_anathurak_',
+    'karadarayak': 'sinhala_karadarayak_',
+    'balagena': 'sinhala_balagena_',
+    'ehata_wenna': 'sinhala_ehata_wenna_',
+    'parissamin': 'sinhala_parissamin_',
+    'ambulance_siren': 'ambulance',
+    'fire_truck': 'fire_truck',
+    'vehicle_horn': 'vehicle horns',
+    'baby_crying': 'baby crying',
+    'dog_barking': 'dog_bark_dataset',
+    'background_traffic': 'traffic',
+  };
+
   Timer? _visualizerTicker;
 
   Future<void> init() async {
     try {
-      _speechAvailable = await _speech.initialize(
-        onError: (val) => _onSpeechError(val.errorMsg),
-        onStatus: (val) {
-          if ((val == 'done' || val == 'notListening') && _isListening) {
-            _onSpeechDone();
-          }
-        },
-      );
-
-      if (_speechAvailable) {
-        try {
-          final locales = await _speech.locales();
-          for (var loc in locales) {
-            final id = loc.localeId.toLowerCase().replaceAll('-', '_');
-            if (id == 'si_lk' || id.startsWith('si_') || id.contains('sinhala')) {
-              _selectedLocaleId = loc.localeId;
-              break;
-            }
-          }
-        } catch (_) {}
-      }
-    } catch (_) {
-      _speechAvailable = false;
-    }
+      await _neuralClassifier.loadModel();
+    } catch (_) {}
   }
 
   void _updateWaveformVolume(double newVol) {
@@ -130,133 +161,6 @@ class AudioClassifierService {
     });
   }
 
-  int _lastSttInitAttemptMs = 0;
-
-  Future<bool> _ensureSpeechInitialized() async {
-    if (_speechAvailable) return true;
-    final int nowMs = DateTime.now().millisecondsSinceEpoch;
-    if (nowMs - _lastSttInitAttemptMs < 4000 && _lastSttInitAttemptMs != 0) {
-      return false;
-    }
-    _lastSttInitAttemptMs = nowMs;
-    try {
-      _speechAvailable = await _speech.initialize(
-        onError: (val) => _onSpeechError(val.errorMsg),
-        onStatus: (val) {
-          if ((val == 'done' || val == 'notListening') && _isListening) {
-            _onSpeechDone();
-          }
-        },
-      );
-    } catch (_) {
-      _speechAvailable = false;
-    }
-
-    if (!_speechAvailable) {
-      _setSttStatus('Speech-to-text not available on this device');
-      return false;
-    }
-
-    if (_selectedLocaleId == null && !_sinhalaLocaleRejected) {
-      try {
-        final locales = await _speech.locales();
-        for (var loc in locales) {
-          final id = loc.localeId.toLowerCase().replaceAll('-', '_');
-          if (id == 'si_lk' || id.startsWith('si_')) {
-            _selectedLocaleId = loc.localeId;
-            break;
-          }
-        }
-      } catch (_) {}
-    }
-    return true;
-  }
-
-  void _safeListenSpeech() async {
-    if (!_isListening || _isRestartingStt) return;
-    if (_speech.isListening) return;
-
-    _isRestartingStt = true;
-    try {
-      final bool ok = await _ensureSpeechInitialized();
-      if (!ok || !_isListening) return;
-
-      final String? targetLocale =
-          _sinhalaLocaleRejected ? null : _selectedLocaleId;
-
-      await _speech.listen(
-        onResult: (result) {
-          if (!_isListening) return;
-          final String rawWords = result.recognizedWords.trim();
-          if (rawWords.isNotEmpty) {
-            _setSttStatus('Listening (Live speech active)');
-
-            // 1. Immediately display live words in the Live Speech box
-            final String formatted = _formatTranscriptWithSinhala(rawWords);
-            _transcriptController.add(
-                formatted == rawWords ? rawWords : '$rawWords  →  $formatted');
-
-            // 2. Check for emergency keywords based on recognized words
-            _processSpeechText(rawWords.toLowerCase());
-          }
-        },
-        onSoundLevelChange: (level) {
-          if (!_isListening) return;
-          double soundVol =
-              (0.25 + (level.clamp(-2.0, 10.0) / 10.0)).clamp(0.18, 1.0);
-          _updateWaveformVolume(soundVol);
-        },
-        listenOptions: stt.SpeechListenOptions(
-          listenMode: stt.ListenMode.deviceDefault,
-          partialResults: true,
-          cancelOnError: false,
-          pauseFor: const Duration(seconds: 15),
-          listenFor: const Duration(minutes: 30),
-          localeId: targetLocale,
-        ),
-      );
-
-      _setSttStatus(targetLocale == null
-          ? 'Listening for speech (Device Language)…'
-          : 'Listening for speech (Sinhala $targetLocale)…');
-    } catch (e) {
-      _onSpeechError(e.toString());
-    } finally {
-      _isRestartingStt = false;
-    }
-  }
-
-  void _onSpeechDone() {
-    if (!_isListening) return;
-    Timer(const Duration(milliseconds: 250), () {
-      if (_isListening && !_speech.isListening && !_isRestartingStt) {
-        _safeListenSpeech();
-      }
-    });
-  }
-
-  void _onSpeechError(String errorMsg) {
-    if (!_isListening) return;
-    final String err = errorMsg.toLowerCase();
-
-    if (err.contains('language') ||
-        err.contains('unsupported') ||
-        err.contains('unavailable') ||
-        err.contains('server')) {
-      if (!_sinhalaLocaleRejected) {
-        _sinhalaLocaleRejected = true;
-        _selectedLocaleId = null;
-        _setSttStatus('Listening (Device Language fallback)');
-      }
-    }
-
-    Timer(const Duration(milliseconds: 350), () {
-      if (_isListening && !_speech.isListening && !_isRestartingStt) {
-        _safeListenSpeech();
-      }
-    });
-  }
-
   Future<bool> startListening() async {
     if (_isListening) return true;
 
@@ -267,496 +171,243 @@ class AudioClassifierService {
       ].request();
     } catch (_) {}
 
-    _isListening = true;
-    _isRestartingStt = false;
-    _latestSoundVolume = 0.25;
+    // Ensure offline neural model is loaded
+    if (!_neuralClassifier.isLoaded) {
+      await _neuralClassifier.loadModel();
+    }
 
-    // Start 50 FPS smooth visualizer animation ticker
+    _isListening = true;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    _listeningStartTimeMs = nowMs;
+    _rollingIdx = 0;
+    _total16kPushed = 0;
+    _lastMlTimeMs = 0;
+    _latestSoundVolume = 0.25;
+    _noiseFloor = 0.008;
+    _lastVoteLabel = null;
+    _voteCount = 0;
+
     _startVisualizerTicker();
 
-    _speechAvailable = false;
-    _lastSttInitAttemptMs = 0;
-    _sttStatus = '';
-    _setSttStatus('Starting Live Speech Detection…');
+    _setSttStatus('100% Offline Mode Active (No Internet Needed)');
 
-    // Continuous Speech Engine for transcribing live speech (Sinhala & English) in real time
-    _safeListenSpeech();
-
-    // Watchdog timer to ensure speech recognition stays continuously listening
-    _sttWatchdogTimer?.cancel();
-    _sttWatchdogTimer =
-        Timer.periodic(const Duration(milliseconds: 1000), (timer) {
-      if (!_isListening) {
-        timer.cancel();
-        return;
-      }
-      if (!_speech.isListening && !_isRestartingStt) {
-        _safeListenSpeech();
-      }
-    });
+    // Start continuous hardware microphone stream
+    _startAudioStreamer();
 
     return true;
   }
 
-  int _levenshtein(String s1, String s2) {
-    if (s1 == s2) return 0;
-    if (s1.isEmpty) return s2.length;
-    if (s2.isEmpty) return s1.length;
+  void _startAudioStreamer() async {
+    try {
+      _pcmStreamSubscription?.cancel();
+      _pcmStreamSubscription = null;
+      _audioStreamer = AudioStreamer();
 
-    List<int> v0 = List<int>.generate(s2.length + 1, (i) => i);
-    List<int> v1 = List<int>.filled(s2.length + 1, 0);
-
-    for (int i = 0; i < s1.length; i++) {
-      v1[0] = i + 1;
-      for (int j = 0; j < s2.length; j++) {
-        int cost = (s1[i] == s2[j]) ? 0 : 1;
-        v1[j + 1] = math.min(v1[j] + 1, math.min(v0[j + 1] + 1, v0[j] + cost));
-      }
-      for (int j = 0; j <= s2.length; j++) {
-        v0[j] = v1[j];
-      }
+      _pcmStreamSubscription = _audioStreamer!.audioStream.listen(
+        (buffer) {
+          if (!_isListening || buffer.isEmpty) return;
+          _processPcmBuffer(buffer);
+        },
+        onError: (error) {
+          _setSttStatus('Microphone stream error: $error');
+        },
+        cancelOnError: false,
+      );
+    } catch (e) {
+      _setSttStatus('Microphone stream initialization error: $e');
     }
-    return v0[s2.length];
   }
 
-  bool _isKeywordMatch(String text, String pattern) {
-    final textLower = text.toLowerCase().trim();
-    final patternLower = pattern.toLowerCase().trim();
+  void _processPcmBuffer(List<double> rawBuffer) {
+    if (rawBuffer.isEmpty) return;
 
-    if (textLower.isEmpty || patternLower.isEmpty) return false;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
 
-    // 1. Direct equality or sentence contains exact phrase
-    if (textLower == patternLower || textLower.contains(patternLower)) {
-      return true;
+    // 1. Measure raw peak amplitude
+    double maxRaw = 0.0;
+    for (int i = 0; i < rawBuffer.length; i++) {
+      final a = rawBuffer[i].abs();
+      if (a > maxRaw) maxRaw = a;
     }
 
-    // 2. Concatenated clean text match (ignores spaces and hyphens)
-    final textClean = textLower.replaceAll(RegExp(r'[^\w\u0D80-\u0DFF]'), '');
-    final patternClean =
-        patternLower.replaceAll(RegExp(r'[^\w\u0D80-\u0DFF]'), '');
-
-    if (textClean.isNotEmpty && patternClean.isNotEmpty) {
-      if (textClean == patternClean || textClean.contains(patternClean)) {
-        return true;
-      }
-      if (patternClean.length >= 5 &&
-          textClean.length >= 4 &&
-          patternClean.startsWith(textClean)) {
-        return true;
-      }
-    }
-
-    // 3. Word-by-word token analysis with fuzzy matching
-    final words = textLower
-        .split(RegExp(r'[^\w\u0D80-\u0DFF]+'))
-        .where((w) => w.isNotEmpty)
-        .toList();
-
-    for (final word in words) {
-      if (word == patternClean) return true;
-
-      // Only compare words of substantial length (>= 3 chars) to avoid matching short stop words
-      if (word.length >= 3 && patternClean.length >= 3) {
-        if (word.startsWith(patternClean)) return true;
-        if (patternClean.length >= 5 &&
-            word.length >= 4 &&
-            patternClean.startsWith(word)) {
-          return true;
-        }
-
-        // Fuzzy Levenshtein Distance
-        if ((word.length - patternClean.length).abs() <= 2) {
-          final int dist = _levenshtein(word, patternClean);
-          final int maxDist = (patternClean.length <= 4) ? 1 : 2;
-          if (dist <= maxDist) {
-            return true;
-          }
+    // Determine hardware sample rate dynamically
+    if (_lastPcmTimeMs > 0) {
+      final deltaMs = nowMs - _lastPcmTimeMs;
+      if (deltaMs > 5 && deltaMs < 200) {
+        final estimatedRate = (rawBuffer.length * 1000.0) / deltaMs;
+        if (estimatedRate > 38000 && estimatedRate < 46000) {
+          _hardwareSampleRate = 44100;
+        } else if (estimatedRate >= 46000 && estimatedRate < 56000) {
+          _hardwareSampleRate = 48000;
+        } else if (estimatedRate >= 12000 && estimatedRate <= 24000) {
+          _hardwareSampleRate = 16000;
         }
       }
     }
+    _lastPcmTimeMs = nowMs;
 
-    return false;
-  }
+    // Normalize 16-bit signed PCM if needed
+    final double normScale = maxRaw > 2.0 ? (1.0 / 32768.0) : 1.0;
 
-  String _formatTranscriptWithSinhala(String rawWords) {
-    final String lower = rawWords.toLowerCase();
-
-    final Map<String, String> wordToSinhala = {
-      'udaw': 'උදව් (Udaw - Help)',
-      'udau': 'උදව් (Udaw - Help)',
-      'udaww': 'උදව් (Udaw - Help)',
-      'uda': 'උදව් (Udaw - Help)',
-      'udav': 'උදව් (Udaw - Help)',
-      'help': 'උදව් (Udaw - Help)',
-      'උදව්': 'උදව් (Udaw - Help)',
-      'උදවු': 'උදව් (Udaw - Help)',
-      'උදව්වක්': 'උදව් (Udaw - Help)',
-      'beraganna': 'බේරගන්න (Beraganna - Save Me)',
-      'beeraganna': 'බේරගන්න (Beraganna - Save Me)',
-      'beeragana': 'බේරගන්න (Beraganna - Save Me)',
-      'beragana': 'බේරගන්න (Beraganna - Save Me)',
-      'bera ganna': 'බේරගන්න (Beraganna - Save Me)',
-      'beera ganna': 'බේරගන්න (Beraganna - Save Me)',
-      'save me': 'බේරගන්න (Beraganna - Save Me)',
-      'බේරගන්න': 'බේරගන්න (Beraganna - Save Me)',
-      'බේරාගන්න': 'බේරගන්න (Beraganna - Save Me)',
-      'ginnak': 'ගින්නක් (Ginnak - Fire)',
-      'ginna': 'ගින්නක් (Ginnak - Fire)',
-      'fire': 'ගින්නක් (Ginnak - Fire)',
-      'ගින්නක්': 'ගින්නක් (Ginnak - Fire)',
-      'ගින්න': 'ගින්නක් (Ginnak - Fire)',
-      'anathurak': 'අනතුරක් (Anathurak - Danger)',
-      'anatura': 'අනතුරක් (Anathurak - Danger)',
-      'danger': 'අනතුරක් (Anathurak - Danger)',
-      'accident': 'අනතුරක් (Anathurak - Danger)',
-      'අනතුරක්': 'අනතුරක් (Anathurak - Danger)',
-      'karadarayak': 'කරදරයක් (Karadarayak - Trouble)',
-      'karadara': 'කරදරයක් (Karadarayak - Trouble)',
-      'trouble': 'කරදරයක් (Karadarayak - Trouble)',
-      'කරදරයක්': 'කරදරයක් (Karadarayak - Trouble)',
-      'balagena': 'බලාගෙන (Balaagena - Watch Out)',
-      'watch out': 'බලාගෙන (Balaagena - Watch Out)',
-      'look out': 'බලාගෙන (Balaagena - Watch Out)',
-      'බලාගෙන': 'බලාගෙන (Balaagena - Watch Out)',
-      'ehata wenna': 'එහාට වෙන්න (Ehata Wenna - Move Aside)',
-      'ehata': 'එහාට වෙන්න (Ehata Wenna - Move Aside)',
-      'move aside': 'එහාට වෙන්න (Ehata Wenna - Move Aside)',
-      'එහාට වෙන්න': 'එහාට වෙන්න (Ehata Wenna - Move Aside)',
-      'parissamin': 'පරිස්සමින් (Parissamin - Be Careful)',
-      'parisamin': 'පරිස්සමින් (Parissamin - Be Careful)',
-      'parissamen': 'පරිස්සමින් (Parissamin - Be Careful)',
-      'be careful': 'පරිස්සමින් (Parissamin - Be Careful)',
-      'careful': 'පරිස්සමින් (Parissamin - Be Careful)',
-      'පරිස්සමින්': 'පරිස්සමින් (Parissamin - Be Careful)',
-      'kohomada': 'කොහොමද (Kohomada - How are you)',
-      'කොහොමද': 'කොහොමද (Kohomada - How are you)',
-      'ayubowan': 'ආයුබෝවන් (Ayubowan - Welcome)',
-      'ආයුබෝවන්': 'ආයුබෝවන් (Ayubowan - Welcome)',
-      'sthuthiyi': 'ස්තූතියි (Sthuthiyi - Thank you)',
-      'ස්තූතියි': 'ස්තූතියි (Sthuthiyi - Thank you)',
-      'subha dawasak': 'සුබ දවසක් (Subha Dawasak - Have a nice day)',
-      'සුබ දවසක්': 'සුබ දවසක් (Subha Dawasak - Have a nice day)',
-      'hello': 'හලෝ (Hello)',
-      'halo': 'හලෝ (Hello)',
-      'හලෝ': 'හලෝ (Hello)',
-      'hari': 'හරි (Hari - Okay)',
-      'හරි': 'හරි (Hari - Okay)',
-      'hondayi': 'හොඳයි (Hondayi - Good)',
-      'හොඳයි': 'හොඳයි (Hondayi - Good)',
-      'ow': 'ඔව් (Ow - Yes)',
-      'ඔව්': 'ඔව් (Ow - Yes)',
-      'naa': 'නෑ (Naa - No)',
-      'නෑ': 'නෑ (Naa - No)',
-      'mokakda': 'මොකක්ද (Mokakda - What)',
-      'මොකක්ද': 'මොකක්ද (Mokakda - What)',
-      'kauda': 'කවුද (Kauda - Who)',
-      'කවුද': 'කවුද (Kauda - Who)',
-      'koheda': 'කොහෙද (Koheda - Where)',
-      'කොහෙද': 'කොහෙද (Koheda - Where)',
-      'ambulance': 'ගිලන් රථය (Ambulance)',
-      'siren': 'සයිරන් (Siren)',
-    };
-
-    for (var entry in wordToSinhala.entries) {
-      if (_isKeywordMatch(lower, entry.key)) {
-        return entry.value;
+    // Resample to 16,000 Hz for the neural network
+    List<double> packet16k;
+    if (_hardwareSampleRate == 16000) {
+      packet16k = List<double>.generate(
+        rawBuffer.length,
+        (i) => (rawBuffer[i] * normScale).clamp(-1.0, 1.0),
+      );
+    } else {
+      final int targetCount =
+          ((rawBuffer.length * 16000) / _hardwareSampleRate).round();
+      if (targetCount <= 0) return;
+      packet16k = List<double>.filled(targetCount, 0.0);
+      final double step = rawBuffer.length / targetCount.toDouble();
+      for (int i = 0; i < targetCount; i++) {
+        final int startIdx = (i * step).floor();
+        final int endIdx = math.min(rawBuffer.length, ((i + 1) * step).floor());
+        double sum = 0.0;
+        int count = 0;
+        for (int j = startIdx; j < endIdx; j++) {
+          sum += rawBuffer[j] * normScale;
+          count++;
+        }
+        double val = count > 0
+            ? (sum / count)
+            : (rawBuffer[startIdx.clamp(0, rawBuffer.length - 1)] * normScale);
+        packet16k[i] = val.clamp(-1.0, 1.0);
       }
     }
 
-    return rawWords;
-  }
+    // Push into 16,000 Hz circular rolling buffer
+    double sumSquares = 0.0;
+    double maxAmp = 0.0;
+    for (int i = 0; i < packet16k.length; i++) {
+      final s = packet16k[i];
+      final absS = s.abs();
+      if (absS > maxAmp) maxAmp = absS;
+      sumSquares += s * s;
 
-  void _processSpeechText(String rawText) {
-    final String sanitized = rawText
-        .replaceAll(RegExp(r'[\u200B-\u200D\uFEFF]'), '')
-        .replaceAll(RegExp(r'[^\w\s\u0D80-\u0DFF-]'), ' ')
-        .toLowerCase()
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
+      _rollingBuf16k[_rollingIdx] = s;
+      _rollingIdx = (_rollingIdx + 1) % 16000;
+      _total16kPushed++;
+    }
 
-    if (sanitized.isEmpty) return;
+    final double rms =
+        math.sqrt(sumSquares / (packet16k.isEmpty ? 1 : packet16k.length));
 
-    final Map<String, List<String>> keywordPatterns = {
-      'sinhala_udaw_': [
-        'udaw',
-        'udaww',
-        'udau',
-        'uda',
-        'udaa',
-        'udawwa',
-        'udawwak',
-        'udauwa',
-        'udav',
-        'udavv',
-        'help',
-        'udawu',
-        'udauw',
-        'sos',
-        'emergency',
-        'wood how',
-        'you down',
-        'who do',
-        'උදව්',
-        'උදව්වක්',
-        'උදවු',
-        'උදවු කරන්න',
-        'උදව් කරන්න',
-        'උදව්ව',
-        'උදව්ක්',
-        'උදව'
-      ],
-      'sinhala_beraganna_': [
-        'beraganna',
-        'beeraganna',
-        'beeragana',
-        'beragana',
-        'mawa beraganna',
-        'mawa beeraganna',
-        'bcraganna',
-        'beragannako',
-        'berannako',
-        'bera ganna',
-        'beera ganna',
-        'beera gana',
-        'bera gana',
-        'biragana',
-        'biraganna',
-        'save me',
-        'save',
-        'rescue',
-        'beer gonna',
-        'better gonna',
-        'bear gonna',
-        'bare gonna',
-        'බේරගන්න',
-        'බේරාගන්න',
-        'බේරාගන්නකෝ',
-        'බේරගන්නකෝ',
-        'බේරන්න',
-        'මාව බේරගන්න',
-        'මාව බේරාගන්න'
-      ],
-      'sinhala_ginnak_': [
-        'ginnak',
-        'ginna',
-        'ginnaki',
-        'ginnac',
-        'fire',
-        'ginak',
-        'burning',
-        'green neck',
-        'ගින්නක්',
-        'ගින්න',
-        'ගිනි',
-        'ගිණි'
-      ],
-      'sinhala_anathurak_': [
-        'anathurak',
-        'anatura',
-        'anathura',
-        'anathurai',
-        'anaturak',
-        'anaturai',
-        'anathurac',
-        'accident',
-        'anatur',
-        'anathur',
-        'danger',
-        'warning',
-        'අනතුරක්',
-        'අනතුර',
-        'අනතුරයි'
-      ],
-      'sinhala_karadarayak_': [
-        'karadarayak',
-        'karadara',
-        'karadarai',
-        'karadarayac',
-        'karadarak',
-        'karadhara',
-        'trouble',
-        'problem',
-        'distress',
-        'කරදරයක්',
-        'කරදර',
-        'කරදරයි',
-        'කරදරේ'
-      ],
-      'sinhala_balagena_': [
-        'balagena',
-        'balagenna',
-        'balaagena',
-        'balaganna',
-        'watch out',
-        'look out',
-        'bala gena',
-        'balagen',
-        'ballerina',
-        'caution',
-        'onna balagena',
-        'ඔන්න බලාගෙන',
-        'බලාගෙන',
-        'බලන්',
-        'බලාගෙනම',
-        'බලාගෙන ඉන්න'
-      ],
-      'sinhala_ehata_wenna_': [
-        'ehata wenna',
-        'eheta wenna',
-        'ehatawenna',
-        'ehetawenna',
-        'ehata',
-        'eheta',
-        'move aside',
-        'step back',
-        'get away',
-        'ehata wenda',
-        'eheta wenda',
-        'එහාට වෙන්න',
-        'එහාටවෙන්න',
-        'එහාට',
-        'එහාට වෙනවා'
-      ],
-      'sinhala_parissamin_': [
-        'parissamin',
-        'parisamin',
-        'parissamen',
-        'parisamen',
-        'parissam',
-        'parisam',
-        'be careful',
-        'take care',
-        'careful',
-        'paris am in',
-        'parissameng',
-        'parissaming',
-        'prissin',
-        'parissin',
-        'prissamin',
-        'prissamen',
-        'පරිස්සමින්',
-        'පරිස්සමෙන්',
-        'පරිසමින්',
-        'පරිස්සම්',
-        'පරිස්සම් වෙන්න'
-      ],
-      'ambulance': [
-        'wee-ow',
-        'weeow',
-        'wee ow',
-        'nee-naw',
-        'neenaw',
-        'nee naw',
-        'siren',
-        'sirens',
-        'ambulance',
-        'ambulance siren',
-        'wee oo',
-        'weeoo',
-        'wail',
-        'wailing',
-        'සයිරන්',
-        'ගිලන් රථ',
-        'ගිලන්'
-      ],
-      'fire_truck': [
-        'fire truck',
-        'fire engine',
-        'fire siren',
-        'ගිනි නිවන',
-        'ගිනි නිවන රථ'
-      ],
-      'vehicle horns': [
-        'beep-beep',
-        'beepbeep',
-        'beep beep',
-        'honk-honk',
-        'honkhonk',
-        'honk honk',
-        'honk',
-        'honks',
-        'honking',
-        'beep',
-        'beeps',
-        'beeping',
-        'car horn',
-        'vehicle horn',
-        'horn sound',
-        'horn',
-        'horns',
-        'හොන්',
-        'පීප්',
-        'බීප්',
-        'බීප් බීප්',
-        'වාහන හොන්'
-      ],
-      'baby crying': [
-        'waa-waa',
-        'waawaa',
-        'waa waa',
-        'wah-wah',
-        'wahwah',
-        'wah wah',
-        'cry',
-        'crying',
-        'cries',
-        'baby',
-        'babies',
-        'baby crying',
-        'baby cry',
-        'weeping',
-        'ළදරු',
-        'හැඬීම',
-        'අඬනවා',
-        'අඬන',
-        'ළදරු හැඬීම'
-      ],
-      'dog_bark_dataset': [
-        'woof-woof',
-        'woofwoof',
-        'woof woof',
-        'arf-arf',
-        'arfarf',
-        'ruff-ruff',
-        'ruffruff',
-        'woof',
-        'bark',
-        'barks',
-        'barking',
-        'dog barking',
-        'dog bark',
-        'බල්ලා',
-        'බුරනවා',
-        'බුරන',
-        'බල්ලා බුරනවා'
-      ],
-      'traffic': [
-        'traffic',
-        'traffic noise',
-        'road noise',
-        'car noise',
-        'vroom',
-        'rumble',
-        'වාහන තදබදය'
-      ],
-    };
+    // Update adaptive background noise floor
+    if (rms < _noiseFloor) {
+      _noiseFloor = _noiseFloor * 0.90 + rms * 0.10;
+    } else {
+      _noiseFloor = _noiseFloor * 0.995 + rms * 0.005;
+    }
 
-    final now = DateTime.now();
+    // Update real-time bouncing wave visualizer
+    final double soundVol = (maxAmp * 4.0 + rms * 10.0).clamp(0.04, 1.0);
+    _updateWaveformVolume(soundVol);
 
-    for (var entry in keywordPatterns.entries) {
-      final key = entry.key;
-      for (var pattern in entry.value) {
-        if (_isKeywordMatch(sanitized, pattern)) {
-          final lastTime = _lastKeywordTriggerTimes[key];
-          if (lastTime != null &&
-              now.difference(lastTime).inMilliseconds < 1800) {
-            return;
+    // Run Offline Neural Network Inference when sound energy is present
+    final bool hasSoundEnergy =
+        (rms >= math.max(_noiseFloor * 1.6, 0.005) && maxAmp >= 0.012);
+    final bool startupGraceOver = (nowMs - _listeningStartTimeMs >= 300);
+
+    if (_total16kPushed >= 8000 &&
+        startupGraceOver &&
+        hasSoundEnergy &&
+        (nowMs - _lastMlTimeMs >= 100)) {
+      _lastMlTimeMs = nowMs;
+
+      // Extract 1-second window
+      final List<double> window1s = List<double>.filled(16000, 0.0);
+      double windowMax = 0.0;
+      for (int i = 0; i < 16000; i++) {
+        final s = _rollingBuf16k[(_rollingIdx - 16000 + i + 16000) % 16000];
+        window1s[i] = s;
+        final absS = s.abs();
+        if (absS > windowMax) windowMax = absS;
+      }
+
+      // Dynamic peak normalization: ensures distant/far speech (quiet) receives
+      // sufficient gain so feature vectors match near speech accurately!
+      final List<double> normalizedWindow = List<double>.filled(16000, 0.0);
+      final double gain =
+          windowMax > 0.005 ? (0.45 / windowMax).clamp(1.0, 10.0) : 1.0;
+      for (int i = 0; i < 16000; i++) {
+        normalizedWindow[i] = (window1s[i] * gain).clamp(-1.0, 1.0);
+      }
+
+      // Run pure Dart offline neural model
+      final pred = _neuralClassifier.predict(normalizedWindow);
+      if (pred != null) {
+        final topLabel = pred.label;
+        final topProb = pred.probability;
+
+        // Calculate margin over second-best class
+        double secondProb = 0.0;
+        for (final e in pred.top5Probabilities.entries) {
+          if (e.key != topLabel && e.value > secondProb) {
+            secondProb = e.value;
           }
-          _lastKeywordTriggerTimes[key] = now;
+        }
+        final double margin = topProb - secondProb;
 
-          // Trigger emergency alert card directly based on recognized speech
-          simulateSoundDetection(key, confidence: 0.99, overrideCooldown: true);
-          return;
+        const speechClasses = {
+          'udaw',
+          'beeraganna',
+          'ginnak',
+          'anathurak',
+          'karadarayak',
+          'balagena',
+          'parissamin',
+          'ehata_wenna',
+        };
+
+        final bool isSpeech = speechClasses.contains(topLabel);
+        final bool confident = isSpeech
+            ? (topProb >= 0.48 && margin >= 0.08)
+            : (topProb >= 0.58 && margin >= 0.12);
+
+        if (confident) {
+          if (_lastVoteLabel == topLabel && (nowMs - _lastVoteMs <= 350)) {
+            _voteCount++;
+          } else {
+            _lastVoteLabel = topLabel;
+            _voteCount = 1;
+          }
+          _lastVoteMs = nowMs;
+
+          // Trigger on 2 consecutive matching frames (~100-200ms) or single high-confidence frame
+          final bool shouldTrigger = (_voteCount >= 2) || (topProb >= 0.85);
+
+          if (shouldTrigger) {
+            final soundKey = _classToSoundKey[topLabel] ?? topLabel;
+            final lastAlert = _lastKeywordTriggerTimes[soundKey];
+            final bool cooldownPassed = lastAlert == null ||
+                nowMs - lastAlert.millisecondsSinceEpoch >= 1800;
+
+            if (cooldownPassed) {
+              _lastKeywordTriggerTimes[soundKey] =
+                  DateTime.fromMillisecondsSinceEpoch(nowMs);
+
+              final displayName =
+                  _labelToSinhalaDisplay[topLabel] ?? topLabel;
+
+              // 1. Display recognized Sinhala word in the Live Speech box immediately!
+              _transcriptController.add(displayName);
+
+              // 2. Pop up emergency alert card immediately!
+              simulateSoundDetection(
+                soundKey,
+                confidence: topProb,
+                overrideCooldown: true,
+              );
+            }
+            _voteCount = 0;
+          }
+        } else {
+          if (nowMs - _lastVoteMs > 300) {
+            _voteCount = 0;
+          }
         }
       }
     }
@@ -764,16 +415,14 @@ class AudioClassifierService {
 
   void stopListening() {
     _isListening = false;
-    _sttWatchdogTimer?.cancel();
-    _sttWatchdogTimer = null;
     _visualizerTicker?.cancel();
     _visualizerTicker = null;
     _latestSoundVolume = 0.02;
     _waveformController.add([]);
 
-    if (_speech.isListening) {
-      _speech.stop();
-    }
+    _pcmStreamSubscription?.cancel();
+    _pcmStreamSubscription = null;
+    _audioStreamer = null;
   }
 
   Future<void> simulateSoundDetection(String soundKey,
@@ -783,11 +432,11 @@ class AudioClassifierService {
     if (!overrideCooldown) {
       final lastSoundTime = _lastSoundAlertTimes[soundKey];
       if (lastSoundTime != null &&
-          now.difference(lastSoundTime).inMilliseconds < 3000) {
+          now.difference(lastSoundTime).inMilliseconds < 2500) {
         return;
       }
       if (_lastEmittedAlertTime != null &&
-          now.difference(_lastEmittedAlertTime!).inMilliseconds < 1200) {
+          now.difference(_lastEmittedAlertTime!).inMilliseconds < 1000) {
         return;
       }
     }
@@ -830,3 +479,4 @@ class AudioClassifierService {
     _sttStatusController.close();
   }
 }
+
