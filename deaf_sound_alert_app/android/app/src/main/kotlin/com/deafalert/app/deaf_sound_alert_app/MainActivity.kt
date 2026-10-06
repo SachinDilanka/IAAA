@@ -126,7 +126,7 @@ class MainActivity : FlutterActivity(), RecognitionListener {
                     // Android's normal speech provider when the phone has no
                     // downloaded offline pack. Without this fallback the
                     // recognizer can fail silently on many devices.
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
                         SpeechRecognizer.isOnDeviceRecognitionAvailable(this@MainActivity)) {
                         putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
                     }
