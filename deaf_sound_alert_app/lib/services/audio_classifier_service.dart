@@ -37,10 +37,10 @@ class AudioClassifierService {
   int _lastSpeechTimeMs = 0;
   int _keywordLockUntilMs = 0;
 
-  // Speech utterance buffer aligned to voice onset (captures clean spoken word from onset)
-  final List<double> _speechUtteranceBuf = [];
-  bool _inSpeechUtterance = false;
-  int _speechSilenceChunks = 0;
+  String? _currentDisplayedKeyword;
+  double _currentDisplayedProb = 0.0;
+  String? _pendingSpeechClass;
+  int _pendingSpeechVotes = 0;
 
   final Map<String, DateTime> _lastSoundAlertTimes = {};
   DateTime? _lastEmittedAlertTime;
@@ -175,10 +175,11 @@ class AudioClassifierService {
     _lastMlTimeMs = 0;
     _pendingEnvironmentSound = null;
     _pendingEnvironmentVotes = 0;
+    _currentDisplayedKeyword = null;
+    _currentDisplayedProb = 0.0;
+    _pendingSpeechClass = null;
+    _pendingSpeechVotes = 0;
     _latestSoundVolume = 0.25;
-    _inSpeechUtterance = false;
-    _speechUtteranceBuf.clear();
-    _speechSilenceChunks = 0;
     _rollingBuf16k.fillRange(0, 16000, 0.0);
 
     _startVisualizerTicker();
@@ -288,77 +289,34 @@ class AudioClassifierService {
       'background_traffic': 'traffic',
     };
 
-    // Voice activity detection (accepts near voice and far/soft voice)
-    final bool hasVoiceEnergy = (maxAmp >= 0.0035 || rms >= 0.0009);
-    final bool startupGraceOver = (nowMs - _listeningStartTimeMs >= 1000);
+    final bool startupGraceOver = (nowMs - _listeningStartTimeMs >= 800);
 
-    // === PATH 1: Voice-Onset Utterance Accumulator (100% accurate keyword recognition) ===
-    if (startupGraceOver) {
-      if (!_inSpeechUtterance) {
-        if (hasVoiceEnergy) {
-          _inSpeechUtterance = true;
-          _speechSilenceChunks = 0;
-          _speechUtteranceBuf.clear();
-          _speechUtteranceBuf.addAll(currentChunkSamples);
-        }
-      } else {
-        _speechUtteranceBuf.addAll(currentChunkSamples);
-        if (!hasVoiceEnergy) {
-          _speechSilenceChunks++;
-        } else {
-          _speechSilenceChunks = 0;
-        }
-
-        // When 16,000 samples (1.0 full sec) accumulated OR speech ended (>= 8000 samples + silence pause)
-        final bool utteranceReady = _speechUtteranceBuf.length >= 16000 ||
-            (_speechUtteranceBuf.length >= 8000 && _speechSilenceChunks >= 2);
-
-        if (utteranceReady) {
-          final List<double> speechWindow =
-              _speechUtteranceBuf.take(16000).toList();
-          while (speechWindow.length < 16000) {
-            speechWindow.add(0.0);
-          }
-          _inSpeechUtterance = false;
-          _speechUtteranceBuf.clear();
-          _speechSilenceChunks = 0;
-
-          _classifySpeechWindow(
-            speechWindow,
-            nowMs,
-            speechClasses,
-            envSoundMap,
-          );
-        }
-      }
-    }
-
-    // === PATH 2: Continuous Rolling Buffer (instant trigger & environmental sounds) ===
-    if (_total16kPushed >= 16000 &&
+    // Run inference every 140ms once buffer has initial samples
+    if (_total16kPushed >= 8000 &&
         startupGraceOver &&
         (nowMs - _lastMlTimeMs >= 140)) {
       _lastMlTimeMs = nowMs;
 
       final List<double> window16k = List<double>.filled(16000, 0.0);
       double windowMax = 0.0;
-      double windowSumSq = 0.0;
       for (int i = 0; i < 16000; i++) {
         final s = _rollingBuf16k[(_rollingIdx - 16000 + i + 16000) % 16000];
         window16k[i] = s;
         final absS = s.abs();
         if (absS > windowMax) windowMax = absS;
-        windowSumSq += absS * absS;
       }
-      final double windowRms = math.sqrt(windowSumSq / 16000);
 
-      if (windowMax < 0.0025 && windowRms < 0.0007) {
+      // Skip electronic silence floor
+      if (windowMax < 0.001) {
         _pendingEnvironmentSound = null;
         _pendingEnvironmentVotes = 0;
+        _pendingSpeechClass = null;
+        _pendingSpeechVotes = 0;
         return;
       }
 
-      final double gain =
-          windowMax > 0.0002 ? (0.50 / windowMax).clamp(1.0, 50.0) : 1.0;
+      // Dynamic Automatic Gain Control (AGC) - amplifies near and far voice/sounds up to 50x
+      final double gain = (0.50 / windowMax).clamp(1.0, 50.0);
       final List<double> normWindow = List<double>.filled(16000, 0.0);
       for (int i = 0; i < 16000; i++) {
         normWindow[i] = (window16k[i] * gain).clamp(-1.0, 1.0);
@@ -368,6 +326,7 @@ class AudioClassifierService {
       if (pred == null) return;
       final allP = pred.allProbabilities;
 
+      // Find top Sinhala speech class
       String? topSpeechClass;
       double topSpeechProb = 0.0;
       for (final s in speechClasses) {
@@ -378,6 +337,7 @@ class AudioClassifierService {
         }
       }
 
+      // Find top environmental class
       String? topEnvClass;
       double topEnvProb = 0.0;
       for (final e in envSoundMap.keys) {
@@ -388,60 +348,84 @@ class AudioClassifierService {
         }
       }
 
-      // Fast-trigger if rolling buffer sees very high confidence keyword (>= 0.70)
-      if (topSpeechClass != null &&
-          topSpeechProb >= 0.70 &&
-          topSpeechProb >= topEnvProb * 0.65) {
+      // === 1. SINHALA EMERGENCY KEYWORDS ===
+      // Evaluated whenever a Sinhala keyword candidate has significant probability
+      if (topSpeechClass != null && topSpeechProb >= 0.40) {
         _lastSpeechTimeMs = nowMs;
         _pendingEnvironmentSound = null;
         _pendingEnvironmentVotes = 0;
 
-        if (nowMs >= _keywordLockUntilMs) {
-          _keywordLockUntilMs = nowMs + 3500;
-          _inSpeechUtterance = false;
-          _speechUtteranceBuf.clear();
-          final soundKey = _classToSoundKey[topSpeechClass];
-          if (soundKey != null) {
-            final displayText =
-                _sinhalaLiveSpeechWord[soundKey] ?? topSpeechClass;
-            _transcriptController.add(displayText);
-            unawaited(simulateSoundDetection(
-              soundKey,
-              confidence: math.max(topSpeechProb, 0.95),
-              overrideCooldown: true,
-            ));
+        if (_pendingSpeechClass == topSpeechClass) {
+          _pendingSpeechVotes++;
+        } else {
+          _pendingSpeechClass = topSpeechClass;
+          _pendingSpeechVotes = 1;
+        }
+
+        final bool shouldTrigger = (topSpeechProb >= 0.85) ||
+            (_pendingSpeechVotes >= 2 && topSpeechProb >= 0.50);
+
+        if (shouldTrigger) {
+          final bool isLocked = (nowMs < _keywordLockUntilMs);
+          // If locked, allow upgrade if confidence is higher (e.g. onset -> full word)
+          final bool canUpgrade = !isLocked ||
+              (topSpeechClass != _currentDisplayedKeyword &&
+                  topSpeechProb > _currentDisplayedProb + 0.05);
+
+          if (canUpgrade) {
+            _currentDisplayedKeyword = topSpeechClass;
+            _currentDisplayedProb = topSpeechProb;
+            _keywordLockUntilMs = nowMs + 2500; // Hold card & live speech for 2.5s
+
+            final soundKey = _classToSoundKey[topSpeechClass];
+            if (soundKey != null) {
+              final displayText =
+                  _sinhalaLiveSpeechWord[soundKey] ?? topSpeechClass;
+              _transcriptController.add(displayText);
+              unawaited(simulateSoundDetection(
+                soundKey,
+                confidence: math.max(topSpeechProb, 0.98),
+                overrideCooldown: true,
+              ));
+            }
           }
         }
-        return; // Speech never triggers environmental sounds!
+        return; // Speech active: NEVER trigger environmental sounds!
+      } else {
+        _pendingSpeechClass = null;
+        _pendingSpeechVotes = 0;
       }
 
-      // Environmental sounds branch:
-      // STRICT conditions:
-      // 1. User has NOT spoken for at least 8.0 seconds
-      // 2. Keyword lock has expired (nowMs >= _keywordLockUntilMs)
-      // 3. Not in speech utterance
-      // 4. Real acoustic emergency volume (windowMax >= 0.09 and windowRms >= 0.015)
-      // 5. Speech probability is negligible (< 0.18)
-      // 6. High sustained confidence (>= 0.80)
-      // 7. Requires multiple consecutive voting windows
-      final bool userSpokeRecently = (nowMs - _lastSpeechTimeMs < 8000);
+      // === 2. BACKGROUND ENVIRONMENTAL SOUNDS ===
+      // Quickly identifies baby crying, ambulance, fire truck, horn, dog barking, traffic
+      // Evaluated when user is not actively speaking (at least 2.0s since speech)
+      final bool userSpokeRecently = (nowMs - _lastSpeechTimeMs < 2000);
       final bool keywordActive = (nowMs < _keywordLockUntilMs);
-      final bool hasRealEmergencyEnergy =
-          (windowMax >= 0.09 && windowRms >= 0.015);
 
-      if (!userSpokeRecently &&
-          !keywordActive &&
-          !_inSpeechUtterance &&
-          hasRealEmergencyEnergy &&
-          topSpeechProb < 0.18 &&
-          topEnvClass != null &&
-          topEnvProb >= 0.80) {
+      if (!userSpokeRecently && !keywordActive && topEnvClass != null) {
         final candidateSound = envSoundMap[topEnvClass];
         if (candidateSound != null) {
+          const envThresholds = {
+            'ambulance_siren': 0.60,
+            'fire_truck': 0.65,
+            'vehicle_horn': 0.55,
+            'baby_crying': 0.60,
+            'dog_barking': 0.55,
+            'background_traffic': 0.70,
+          };
+          final double reqProb = envThresholds[topEnvClass] ?? 0.60;
           final bool trafficValid = (topEnvClass != 'background_traffic') ||
-              (topEnvProb >= 0.88 && windowRms >= 0.035 && windowMax >= 0.15);
+              (rms >= 0.020 && maxAmp >= 0.08);
 
-          if (trafficValid) {
+          final bool isValid = topEnvProb >= reqProb &&
+              topEnvProb >= topSpeechProb * 1.30 &&
+              trafficValid;
+
+          if (isValid) {
+            final lastAlert = _lastSoundAlertTimes[candidateSound];
+            final bool cooldownPassed = lastAlert == null ||
+                nowMs - lastAlert.millisecondsSinceEpoch >= 2000;
+
             if (_pendingEnvironmentSound == candidateSound) {
               _pendingEnvironmentVotes++;
             } else {
@@ -449,84 +433,19 @@ class AudioClassifierService {
               _pendingEnvironmentVotes = 1;
             }
 
-            final int reqVotes = (topEnvProb >= 0.90) ? 4 : 5;
-            if (_pendingEnvironmentVotes >= reqVotes) {
-              _pendingEnvironmentVotes = 0;
+            // High confidence (>= 0.80) triggers immediately in 1 window (~140ms); otherwise 2 windows (~280ms)
+            final int requiredVotes = (topEnvProb >= 0.80) ? 1 : 2;
+            if (cooldownPassed && _pendingEnvironmentVotes >= requiredVotes) {
+              _lastSoundAlertTimes[candidateSound] =
+                  DateTime.fromMillisecondsSinceEpoch(nowMs);
               simulateSoundDetection(candidateSound, confidence: topEnvProb);
+              _pendingEnvironmentVotes = 0;
             }
           } else {
+            _pendingEnvironmentSound = null;
             _pendingEnvironmentVotes = 0;
           }
         }
-      } else {
-        _pendingEnvironmentVotes = 0;
-        _pendingEnvironmentSound = null;
-      }
-    }
-  }
-
-  void _classifySpeechWindow(
-    List<double> speechWindow,
-    int nowMs,
-    Set<String> speechClasses,
-    Map<String, String> envSoundMap,
-  ) {
-    double windowMax = 0.0;
-    for (int i = 0; i < 16000; i++) {
-      final absS = speechWindow[i].abs();
-      if (absS > windowMax) windowMax = absS;
-    }
-    if (windowMax < 0.0025) return;
-
-    final double gain = (0.50 / windowMax).clamp(1.0, 50.0);
-    final List<double> normWindow = List<double>.filled(16000, 0.0);
-    for (int i = 0; i < 16000; i++) {
-      normWindow[i] = (speechWindow[i] * gain).clamp(-1.0, 1.0);
-    }
-
-    final pred = _neuralClassifier.predict(normWindow);
-    if (pred == null) return;
-    final allP = pred.allProbabilities;
-
-    String? topSpeechClass;
-    double topSpeechProb = 0.0;
-    for (final s in speechClasses) {
-      final p = allP[s] ?? 0.0;
-      if (p > topSpeechProb) {
-        topSpeechProb = p;
-        topSpeechClass = s;
-      }
-    }
-
-    double topEnvProb = 0.0;
-    for (final e in envSoundMap.keys) {
-      final p = allP[e] ?? 0.0;
-      if (p > topEnvProb) {
-        topEnvProb = p;
-      }
-    }
-
-    if (topSpeechClass != null &&
-        topSpeechProb >= 0.28 &&
-        topSpeechProb >= topEnvProb * 0.50) {
-      _lastSpeechTimeMs = nowMs;
-      _pendingEnvironmentSound = null;
-      _pendingEnvironmentVotes = 0;
-
-      if (nowMs < _keywordLockUntilMs) {
-        return;
-      }
-
-      _keywordLockUntilMs = nowMs + 3500;
-      final soundKey = _classToSoundKey[topSpeechClass];
-      if (soundKey != null) {
-        final displayText = _sinhalaLiveSpeechWord[soundKey] ?? topSpeechClass;
-        _transcriptController.add(displayText);
-        unawaited(simulateSoundDetection(
-          soundKey,
-          confidence: math.max(topSpeechProb, 0.95),
-          overrideCooldown: true,
-        ));
       }
     }
   }
@@ -539,9 +458,10 @@ class AudioClassifierService {
     _visualizerTicker = null;
     _latestSoundVolume = 0.02;
     _waveformController.add([]);
-    _inSpeechUtterance = false;
-    _speechUtteranceBuf.clear();
-    _speechSilenceChunks = 0;
+    _currentDisplayedKeyword = null;
+    _currentDisplayedProb = 0.0;
+    _pendingSpeechClass = null;
+    _pendingSpeechVotes = 0;
 
     _recordStreamSub?.cancel();
     _recordStreamSub = null;
