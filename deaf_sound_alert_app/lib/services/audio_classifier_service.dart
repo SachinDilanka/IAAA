@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
-import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import '../models/detected_sound.dart';
@@ -29,8 +28,8 @@ class AudioClassifierService {
   double _latestSoundVolume = 0.02;
   final List<double> _visualizerBars = List<double>.filled(40, 0.15);
 
-  // 16,000 Hz circular rolling audio buffer (1 second = 16,000 samples)
-  final List<double> _rollingBuf16k = List<double>.filled(16000, 0.0);
+  // 16,000 Hz circular rolling audio buffer (2 seconds = 32,000 samples)
+  final List<double> _rollingBuf32k = List<double>.filled(32000, 0.0);
   int _rollingIdx = 0;
   int _total16kPushed = 0;
   int _lastMlTimeMs = 0;
@@ -177,7 +176,7 @@ class AudioClassifierService {
     _pendingEnvironmentSound = null;
     _pendingEnvironmentVotes = 0;
     _latestSoundVolume = 0.25;
-    _rollingBuf16k.fillRange(0, 16000, 0.0);
+    _rollingBuf32k.fillRange(0, 32000, 0.0);
 
     _startVisualizerTicker();
 
@@ -252,8 +251,8 @@ class AudioClassifierService {
       if (absS > maxAmp) maxAmp = absS;
       sumSquares += sampleNorm * sampleNorm;
 
-      _rollingBuf16k[_rollingIdx] = sampleNorm;
-      _rollingIdx = (_rollingIdx + 1) % 16000;
+      _rollingBuf32k[_rollingIdx] = sampleNorm;
+      _rollingIdx = (_rollingIdx + 1) % 32000;
       _total16kPushed++;
     }
 
@@ -263,37 +262,35 @@ class AudioClassifierService {
     final double soundVol = (maxAmp * 4.0 + rms * 10.0).clamp(0.04, 1.0);
     _updateWaveformVolume(soundVol);
 
-    // Filter out silence and ambient room noise (Real speech / audio has MaxAmp >= 0.012 or RMS >= 0.004)
-    final bool hasSoundEnergy = (maxAmp >= 0.012 || rms >= 0.004);
-    // Give the recorder and microphone AGC time to settle. The initial
-    // rolling window often contains startup clicks or device noise.
-    final bool startupGraceOver = (nowMs - _listeningStartTimeMs >= 1500);
+    // Filter out pure silence while accepting far and quiet speech (MaxAmp >= 0.0030 or RMS >= 0.0008)
+    final bool hasSoundEnergy = (maxAmp >= 0.0030 || rms >= 0.0008);
+    final bool startupGraceOver = (nowMs - _listeningStartTimeMs >= 1000);
 
     if (_total16kPushed >= 6000 &&
         startupGraceOver &&
         hasSoundEnergy &&
-        // The offline model performs a full 16 kHz FFT and neural inference.
-        // Keep the rolling model responsive without processing every audio
-        // packet. A shorter cadence reduces the gap between consecutive words.
-        (nowMs - _lastMlTimeMs >= 180)) {
+        (nowMs - _lastMlTimeMs >= 160)) {
       _lastMlTimeMs = nowMs;
 
-      // Extract 1-second rolling window
-      final List<double> window1s = List<double>.filled(16000, 0.0);
-      double windowMax = 0.0;
-      double windowSumSquares = 0.0;
-      for (int i = 0; i < 16000; i++) {
-        final s = _rollingBuf16k[(_rollingIdx - 16000 + i + 16000) % 16000];
-        window1s[i] = s;
-        final absS = s.abs();
-        if (absS > windowMax) windowMax = absS;
-        windowSumSquares += s * s;
+      // Linear unroll of latest 32,000 samples (2.0 seconds)
+      final List<double> linearBuf = List<double>.filled(32000, 0.0);
+      for (int i = 0; i < 32000; i++) {
+        linearBuf[i] =
+            _rollingBuf32k[(_rollingIdx - 32000 + i + 32000) % 32000];
       }
-      final double windowRms = math.sqrt(windowSumSquares / window1s.length);
 
-      // Do not classify silence, microphone self-noise, or AGC-amplified room
-      // noise. This gate is based on the original samples, before gain.
-      if (windowRms < 0.0035 || windowMax < 0.015) {
+      // Check signal level in the recent 16,000 samples
+      double recentMax = 0.0;
+      double recentSumSq = 0.0;
+      for (int i = 16000; i < 32000; i++) {
+        final absS = linearBuf[i].abs();
+        if (absS > recentMax) recentMax = absS;
+        recentSumSq += absS * absS;
+      }
+      final double recentRms = math.sqrt(recentSumSq / 16000);
+
+      // Gate out electronic silence floor
+      if (recentMax < 0.0025 || recentRms < 0.0007) {
         _pendingSpeechClass = null;
         _pendingSpeechVotes = 0;
         _pendingEnvironmentSound = null;
@@ -301,16 +298,73 @@ class AudioClassifierService {
         return;
       }
 
-      // Dynamic Automatic Gain Control (AGC) up to 30x for far speech or sounds
-      final List<double> normalizedWindow = List<double>.filled(16000, 0.0);
-      final double gain =
-          windowMax > 0.001 ? (0.60 / windowMax).clamp(1.0, 30.0) : 1.0;
-      for (int i = 0; i < 16000; i++) {
-        normalizedWindow[i] = (window1s[i] * gain).clamp(-1.0, 1.0);
+      // 1. Candidate Window A: Voice Onset Aligned Window
+      // Search in recent samples (from index 12000 to 32000) for sound energy peak
+      double maxLocalEnergy = 0.0;
+      int peakLocalIdx = 24000;
+      for (int i = 12000; i < 32000 - 400; i += 200) {
+        double e = 0.0;
+        for (int k = 0; k < 400; k++) {
+          e += linearBuf[i + k].abs();
+        }
+        if (e > maxLocalEnergy) {
+          maxLocalEnergy = e;
+          peakLocalIdx = i;
+        }
       }
 
-      // Run 100% offline pure-Dart neural network
-      final pred = _neuralClassifier.predict(normalizedWindow);
+      // Trace backwards to find onset where sound energy starts
+      final double onsetThreshold = (maxLocalEnergy / 400.0) * 0.15;
+      int voiceStart = peakLocalIdx;
+      while (voiceStart > 12000) {
+        double e = 0.0;
+        for (int k = 0; k < 200; k++) {
+          e += linearBuf[voiceStart - k].abs();
+        }
+        if (e / 200.0 < onsetThreshold) break;
+        voiceStart -= 200;
+      }
+      voiceStart = math.max(0, voiceStart - 200);
+
+      final List<double> onsetWindow = List<double>.filled(16000, 0.0);
+      double onsetMax = 0.0;
+      for (int i = 0; i < 16000 && (voiceStart + i) < 32000; i++) {
+        final s = linearBuf[voiceStart + i];
+        onsetWindow[i] = s;
+        if (s.abs() > onsetMax) onsetMax = s.abs();
+      }
+
+      // Dynamic AGC up to 60x for near/far voice
+      final double onsetGain =
+          onsetMax > 0.0002 ? (0.60 / onsetMax).clamp(1.0, 60.0) : 1.0;
+      for (int i = 0; i < 16000; i++) {
+        onsetWindow[i] = (onsetWindow[i] * onsetGain).clamp(-1.0, 1.0);
+      }
+
+      // 2. Candidate Window B: Standard Latest 1-Second Window
+      final List<double> latestWindow = List<double>.filled(16000, 0.0);
+      double latestMax = 0.0;
+      for (int i = 0; i < 16000; i++) {
+        final s = linearBuf[16000 + i];
+        latestWindow[i] = s;
+        if (s.abs() > latestMax) latestMax = s.abs();
+      }
+      final double latestGain =
+          latestMax > 0.0002 ? (0.60 / latestMax).clamp(1.0, 60.0) : 1.0;
+      for (int i = 0; i < 16000; i++) {
+        latestWindow[i] = (latestWindow[i] * latestGain).clamp(-1.0, 1.0);
+      }
+
+      // Run prediction on Onset Window first
+      var pred = _neuralClassifier.predict(onsetWindow);
+      // If onset window prediction is moderate, also evaluate latest window
+      if (pred == null || pred.probability < 0.45) {
+        final predB = _neuralClassifier.predict(latestWindow);
+        if (predB != null &&
+            (pred == null || predB.probability > pred.probability)) {
+          pred = predB;
+        }
+      }
       if (pred != null) {
         final allP = pred.allProbabilities;
 
