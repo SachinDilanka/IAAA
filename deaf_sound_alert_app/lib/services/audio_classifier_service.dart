@@ -298,8 +298,8 @@ class AudioClassifierService {
       'background_traffic': 'traffic',
     };
 
-    // Voice Activity Detection (VAD)
-    final bool isVoiceChunk = (maxAmp >= 0.015 || rms >= 0.003);
+    // Voice Activity Detection (VAD) - sensitive for near and far microphone
+    final bool isVoiceChunk = (maxAmp >= 0.008 || rms >= 0.0015);
 
     if (isVoiceChunk) {
       _lastSpeechTimeMs = nowMs;
@@ -326,8 +326,9 @@ class AudioClassifierService {
     }
 
     // === UTTERANCE EVALUATION (Exact Spoken Sinhala Keyword) ===
+    // Evaluates ONLY when the user has actually finished speaking the complete word!
     final bool utteranceFinished = _inSpeechUtterance &&
-        ((_speechSilenceChunks >= 3 && _utteranceSamples.length >= 4800) ||
+        ((_speechSilenceChunks >= 2 && _utteranceSamples.length >= 3200) ||
             _utteranceSamples.length >= 16000);
 
     if (utteranceFinished) {
@@ -341,7 +342,7 @@ class AudioClassifierService {
         if (absS > uMax) uMax = absS;
       }
 
-      if (uMax >= 0.005) {
+      if (uMax >= 0.004) {
         final double uGain = (0.50 / uMax).clamp(1.0, 50.0);
         final List<double> uNorm = List<double>.filled(16000, 0.0);
         for (int i = 0; i < 16000; i++) {
@@ -360,9 +361,7 @@ class AudioClassifierService {
             }
           }
 
-          if (nowMs >= _keywordLockUntilMs &&
-              bestSpeechClass != null &&
-              bestSpeechProb >= 0.35) {
+          if (nowMs >= _keywordLockUntilMs && bestSpeechClass != null) {
             _keywordLockUntilMs = nowMs + 4000; // Lock for 4.0 seconds!
             _lastSpeechTimeMs = nowMs;
             _currentDisplayedKeyword = bestSpeechClass;
@@ -388,9 +387,17 @@ class AudioClassifierService {
 
     final bool startupGraceOver = (nowMs - _listeningStartTimeMs >= 800);
 
-    // === CONTINUOUS STREAMING BACKUP & ENVIRONMENTAL DETECTION ===
+    // === BACKGROUND ENVIRONMENTAL SOUNDS ONLY (WHEN USER IS NOT SPEAKING) ===
+    final bool userSpokeRecently = (nowMs - _lastSpeechTimeMs < 5000);
+    final bool keywordActive = (nowMs < _keywordLockUntilMs);
+    final bool inSpeech = _inSpeechUtterance || isVoiceChunk;
+
+    // Environmental inference runs ONLY when user has been completely silent for >= 5.0s
     if (_total16kPushed >= 8000 &&
         startupGraceOver &&
+        !userSpokeRecently &&
+        !keywordActive &&
+        !inSpeech &&
         (nowMs - _lastMlTimeMs >= 140)) {
       _lastMlTimeMs = nowMs;
 
@@ -403,7 +410,8 @@ class AudioClassifierService {
         if (absS > windowMax) windowMax = absS;
       }
 
-      if (windowMax < 0.002) {
+      final bool hasRealEnergy = (windowMax >= 0.045 && rms >= 0.010);
+      if (!hasRealEnergy) {
         _pendingEnvironmentSound = null;
         _pendingEnvironmentVotes = 0;
         return;
@@ -419,13 +427,11 @@ class AudioClassifierService {
       if (pred == null) return;
       final allP = pred.allProbabilities;
 
-      String? topSpeechClass;
       double topSpeechProb = 0.0;
       for (final s in speechClasses) {
         final p = allP[s] ?? 0.0;
         if (p > topSpeechProb) {
           topSpeechProb = p;
-          topSpeechClass = s;
         }
       }
 
@@ -439,44 +445,7 @@ class AudioClassifierService {
         }
       }
 
-      // === 1. STREAMING SPEECH BACKUP ===
-      if (topSpeechClass != null && topSpeechProb >= 0.75) {
-        _lastSpeechTimeMs = nowMs;
-        _pendingEnvironmentSound = null;
-        _pendingEnvironmentVotes = 0;
-
-        if (nowMs >= _keywordLockUntilMs) {
-          _keywordLockUntilMs = nowMs + 4000;
-          _currentDisplayedKeyword = topSpeechClass;
-
-          final soundKey = _classToSoundKey[topSpeechClass];
-          if (soundKey != null) {
-            final displayText =
-                _sinhalaLiveSpeechWord[soundKey] ?? topSpeechClass;
-            _transcriptController.add(displayText);
-            unawaited(simulateSoundDetection(
-              soundKey,
-              confidence: math.max(topSpeechProb, 0.99),
-              overrideCooldown: true,
-            ));
-          }
-          _inSpeechUtterance = false;
-          _utteranceSamples.clear();
-        }
-        return; // Speech active: NEVER trigger environmental sounds!
-      }
-
-      // === 2. BACKGROUND ENVIRONMENTAL SOUNDS ===
-      final bool userSpokeRecently = (nowMs - _lastSpeechTimeMs < 5000);
-      final bool keywordActive = (nowMs < _keywordLockUntilMs);
-      final bool inSpeech = _inSpeechUtterance;
-      final bool hasRealEnergy = (maxAmp >= 0.045 && rms >= 0.010);
-
-      if (!userSpokeRecently &&
-          !keywordActive &&
-          !inSpeech &&
-          hasRealEnergy &&
-          topEnvClass != null) {
+      if (topEnvClass != null) {
         final candidateSound = envSoundMap[topEnvClass];
         if (candidateSound != null) {
           const envThresholds = {
@@ -489,7 +458,7 @@ class AudioClassifierService {
           };
           final double reqProb = envThresholds[topEnvClass] ?? 0.60;
           final bool trafficValid = (topEnvClass != 'background_traffic') ||
-              (rms >= 0.035 && maxAmp >= 0.15);
+              (rms >= 0.035 && windowMax >= 0.15);
 
           final bool isValid = topEnvProb >= reqProb &&
               topEnvProb >= topSpeechProb * 1.40 &&
