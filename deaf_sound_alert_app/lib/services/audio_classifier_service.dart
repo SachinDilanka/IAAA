@@ -540,16 +540,16 @@ class AudioClassifierService {
         return;
       }
 
-      // Silence floor check
+      // Silence floor check (speech offset)
       if (windowMax < 0.003) {
-        _resetSpeechAccumulator();
+        _checkAndTriggerOffsetSpeech(nowMs);
         _pendingEnvClass = null;
         _pendingEnvVotes = 0;
         return;
       }
 
-      // Gentle AGC: normalizes voice volume smoothly without creating high-frequency spectral artifacts
-      final double gain = (0.35 / windowMax).clamp(1.0, 2.5);
+      // Smooth AGC for both near and far voice detection
+      final double gain = (0.35 / windowMax).clamp(1.0, 4.5);
       final List<double> normWindow = List<double>.filled(16000, 0.0);
       for (int i = 0; i < 16000; i++) {
         normWindow[i] = (window16k[i] * gain).clamp(-1.0, 1.0);
@@ -624,7 +624,7 @@ class AudioClassifierService {
 
       // === 2. ALL 8 SINHALA EMERGENCY KEYWORDS (NEAR & FAR VOICE) ===
       if (totalSpeechProb > totalEnvProb &&
-          (totalSpeechProb >= 0.35 || topSpeechProb >= 0.40)) {
+          (totalSpeechProb >= 0.25 || topSpeechProb >= 0.30)) {
         _pendingEnvClass = null;
         _pendingEnvVotes = 0;
         _speechFramesCount++;
@@ -651,30 +651,68 @@ class AudioClassifierService {
         final double bestPeak = _speechMaxProbs[bestCandidate] ?? 0.0;
 
         // Utterance trigger conditions:
-        // A) High-confidence trigger: 3 frames (~405ms) with peak >= 0.88 and dominant sum
-        // B) Utterance completion trigger: 5-6 frames (~675-810ms, full human word length) with peak >= 0.60
+        // A) Instant Fast-Path: single frame with peak >= 0.80 and topSpeechProb >= 0.80
+        // B) Multi-frame confirmation: 2 or more frames (~270ms) with peak >= 0.65 and sum >= 1.15
         final bool shouldTriggerSpeech =
-            (_speechFramesCount >= 3 && bestPeak >= 0.88 && bestSum >= 2.0) ||
-            (_speechFramesCount >= 5 && bestPeak >= 0.60 && bestSum >= 2.2);
+            (topSpeechProb >= 0.80 && bestPeak >= 0.80) ||
+            (_speechFramesCount >= 2 && bestPeak >= 0.65 && bestSum >= 1.15);
 
         if (shouldTriggerSpeech) {
           _triggerKeywordAlert(bestCandidate, bestPeak, nowMs);
-          _resetSpeechAccumulator();
+        } else if (_speechFramesCount == 1 && nowMs > _keywordLockUntilMs) {
+          _transcriptController.add('Speaking...');
         }
         return;
       }
 
-      // Background room silence / road noise check
-      if (bgTrafficProb >= 0.70 && totalSpeechProb < 0.20) {
-        _resetSpeechAccumulator();
+      // Background room silence / road noise check (speech offset)
+      if (bgTrafficProb >= 0.65 && totalSpeechProb < 0.25) {
+        _checkAndTriggerOffsetSpeech(nowMs);
         _pendingEnvClass = null;
         _pendingEnvVotes = 0;
         return;
       }
 
+      // If speech energy drops after an utterance, check accumulated speech
+      if (_speechFramesCount > 0 && totalSpeechProb < 0.25) {
+        _checkAndTriggerOffsetSpeech(nowMs);
+      }
+
       _pendingEnvClass = null;
       _pendingEnvVotes = 0;
     }
+  }
+
+  void _checkAndTriggerOffsetSpeech(int nowMs) {
+    if (_speechFramesCount >= 1 && nowMs >= _keywordLockUntilMs) {
+      const speechClasses = [
+        'udaw',
+        'beeraganna',
+        'ginnak',
+        'anathurak',
+        'karadarayak',
+        'balagena',
+        'parissamin',
+        'ehata_wenna',
+      ];
+      String bestCandidate = speechClasses.first;
+      double bestSum = 0.0;
+      for (final s in speechClasses) {
+        final sSum = _speechSumProbs[s] ?? 0.0;
+        if (sSum > bestSum) {
+          bestSum = sSum;
+          bestCandidate = s;
+        }
+      }
+      final double bestPeak = _speechMaxProbs[bestCandidate] ?? 0.0;
+
+      // Word offset evaluation: short or soft keywords trigger on utterance completion
+      if (bestPeak >= 0.50 && bestSum >= 0.55) {
+        _triggerKeywordAlert(bestCandidate, bestPeak, nowMs);
+        return;
+      }
+    }
+    _resetSpeechAccumulator();
   }
 
   void _triggerKeywordAlert(String speechClass, double confidence, int nowMs) {

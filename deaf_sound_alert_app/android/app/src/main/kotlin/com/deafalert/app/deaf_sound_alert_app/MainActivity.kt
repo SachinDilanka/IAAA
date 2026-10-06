@@ -107,31 +107,22 @@ class MainActivity : FlutterActivity(), RecognitionListener {
             if (!isListening) return@post
             try {
                 if (speechRecognizer == null) {
-                    speechRecognizer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(this)) {
-                        SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
-                    } else {
-                        SpeechRecognizer.createSpeechRecognizer(this)
-                    }
+                    speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
                     speechRecognizer?.setRecognitionListener(this)
                 }
                 val intent = android.content.Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                     putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 10)
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
                     putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, "si-LK")
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "si-LK")
-                    putExtra("android.speech.extra.DICTATION_MODE", true)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-                        SpeechRecognizer.isOnDeviceRecognitionAvailable(this@MainActivity)) {
-                        putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
-                    }
                 }
                 speechRecognizer?.startListening(intent)
             } catch (error: Exception) {
                 handler.postDelayed({
                     if (isListening) startSpeechRecognizer()
-                }, 400)
+                }, 1000)
             }
         }
     }
@@ -200,9 +191,9 @@ class MainActivity : FlutterActivity(), RecognitionListener {
             } catch (_: Exception) {}
             speechRecognizer = null
             val delay = if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
-                80L
+                150L
             } else {
-                300L
+                1200L
             }
             handler.postDelayed({
                 if (isListening) startSpeechRecognizer()
