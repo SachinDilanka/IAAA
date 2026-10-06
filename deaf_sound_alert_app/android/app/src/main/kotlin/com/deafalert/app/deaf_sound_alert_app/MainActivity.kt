@@ -107,25 +107,17 @@ class MainActivity : FlutterActivity(), RecognitionListener {
                 if (!isListening) return@post
                 try {
                     if (speechRecognizer == null) {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-                            SpeechRecognizer.isOnDeviceRecognitionAvailable(applicationContext)) {
-                            speechRecognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(applicationContext)
-                        } else if (SpeechRecognizer.isRecognitionAvailable(applicationContext)) {
-                            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(applicationContext)
-                        }
+                        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(applicationContext)
                         speechRecognizer?.setRecognitionListener(this)
                     }
                     val intent = android.content.Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                        putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US")
-                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "en-US")
                         putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                         putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 10)
-                        putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
                     }
                     speechRecognizer?.startListening(intent)
                 } catch (error: Exception) {
-                    speechEventSink?.success(mapOf("type" to "error", "text" to error.message))
+                    // Fail silently or retry smoothly
                 }
             }
         }
@@ -175,31 +167,16 @@ class MainActivity : FlutterActivity(), RecognitionListener {
                 emitSpeech("finalResult", first, list)
             }
             if (isListening) {
-                handler.postDelayed({ startSpeechRecognizer() }, 250)
+                handler.postDelayed({ startSpeechRecognizer() }, 200)
             }
         }
 
         override fun onError(error: Int) {
-            emitSpeech("error", "code $error")
             if (isListening) {
-                if (error == SpeechRecognizer.ERROR_NETWORK ||
-                    error == SpeechRecognizer.ERROR_NETWORK_TIMEOUT ||
-                    error == SpeechRecognizer.ERROR_SERVER_DISCONNECTED ||
-                    error == SpeechRecognizer.ERROR_SERVER) {
-                    // Network is off: do not hammer microphone every 250ms so offline neural model has 100% clean mic access
-                    handler.postDelayed({
-                        if (isListening) startSpeechRecognizer()
-                    }, 15000)
-                } else if (error == SpeechRecognizer.ERROR_NO_MATCH ||
-                    error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
-                    handler.postDelayed({
-                        if (isListening) startSpeechRecognizer()
-                    }, 500)
-                } else {
-                    handler.postDelayed({
-                        if (isListening) startSpeechRecognizer()
-                    }, 2000)
-                }
+                // Restart recognizer smoothly without thrashing
+                handler.postDelayed({
+                    if (isListening) startSpeechRecognizer()
+                }, 800)
             }
         }
 

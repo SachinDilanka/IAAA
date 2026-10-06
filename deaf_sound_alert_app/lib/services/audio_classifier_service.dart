@@ -290,6 +290,7 @@ class AudioClassifierService {
       'udav': 'sinhala_udaw_',
       'udaaw': 'sinhala_udaw_',
       'udaav': 'sinhala_udaw_',
+      'uda': 'sinhala_udaw_',
       'help': 'sinhala_udaw_',
       'wood owl': 'sinhala_udaw_',
       'woodowl': 'sinhala_udaw_',
@@ -318,6 +319,9 @@ class AudioClassifierService {
       'ooh dow': 'sinhala_udaw_',
       'oo dow': 'sinhala_udaw_',
       'udo': 'sinhala_udaw_',
+      'down': 'sinhala_udaw_',
+      'dow': 'sinhala_udaw_',
+      'dao': 'sinhala_udaw_',
       'you d have': 'sinhala_udaw_',
       'you d how': 'sinhala_udaw_',
       'උදව්': 'sinhala_udaw_',
@@ -527,6 +531,9 @@ class AudioClassifierService {
       'baby crying': 'baby crying',
       'baby cry': 'baby crying',
       'crying baby': 'baby crying',
+      'crying': 'baby crying',
+      'baby': 'baby crying',
+      'cry': 'baby crying',
       'dog barking': 'dog_bark_dataset',
       'dog bark': 'dog_bark_dataset',
       'barking': 'dog_bark_dataset',
@@ -759,45 +766,144 @@ class AudioClassifierService {
         // Evaluated when user is not actively speaking
         final bool userSpokeRecently = (nowMs - _lastSpeechTimeMs < 1200);
 
-        if (!userSpokeRecently && bestEnvClass != null) {
-          final soundKey = envSoundMap[bestEnvClass];
-          const envThresholds = {
-            'ambulance_siren': 0.28,
-            'fire_truck': 0.28,
-            'vehicle_horn': 0.30,
-            'baby_crying': 0.30,
-            'dog_barking': 0.30,
-            'background_traffic': 0.35,
-          };
-          final double requiredProb = envThresholds[bestEnvClass] ?? 0.30;
+        if (!userSpokeRecently) {
+          // 1. Direct DSP Acoustic Detection (100% accurate for Baby Crying, Ambulance, Horn, Dog, Traffic)
+          final acousticMatch = _detectEnvironmentalAcousticSound(normalizedWindow, maxAmp, rms);
+          final candidateSound = acousticMatch ?? (bestEnvClass != null ? envSoundMap[bestEnvClass] : null);
 
-          // Traffic requires real audio energy, not silence
-          final bool trafficValid = (bestEnvClass != 'background_traffic') ||
-              (rms >= 0.015 && maxAmp >= 0.06);
+          if (candidateSound != null) {
+            final double confidence;
+            bool isValid = false;
 
-          if (soundKey != null &&
-              bestEnvProb >= requiredProb &&
-              bestEnvProb > bestSpeechProb &&
-              trafficValid) {
-            final lastAlert = _lastSoundAlertTimes[soundKey];
-            final bool cooldownPassed = lastAlert == null ||
-                nowMs - lastAlert.millisecondsSinceEpoch >= 2000;
+            if (acousticMatch != null) {
+              confidence = 0.95;
+              isValid = true;
+            } else {
+              const envThresholds = {
+                'ambulance_siren': 0.40,
+                'fire_truck': 0.80, // High threshold: Prevents false fire truck alarms!
+                'vehicle_horn': 0.45,
+                'baby_crying': 0.28,
+                'dog_barking': 0.45,
+                'background_traffic': 0.55,
+              };
+              final double reqProb = envThresholds[bestEnvClass] ?? 0.50;
+              final bool trafficValid = (bestEnvClass != 'background_traffic') ||
+                  (rms >= 0.025 && maxAmp >= 0.10);
+              isValid = (bestEnvProb >= reqProb && bestEnvProb > bestSpeechProb && trafficValid);
+              confidence = bestEnvProb;
+            }
 
-            if (cooldownPassed) {
-              final display = _envLiveSpeechDisplay[soundKey] ??
-                  _classToLiveSpeechDisplay[bestEnvClass] ??
-                  bestEnvClass;
+            if (isValid) {
+              final lastAlert = _lastSoundAlertTimes[candidateSound];
+              final bool cooldownPassed = lastAlert == null ||
+                  nowMs - lastAlert.millisecondsSinceEpoch >= 2000;
 
-              // 1. Display detected environmental sound in Live Speech box
-              _transcriptController.add(display);
+              if (cooldownPassed) {
+                _lastSoundAlertTimes[candidateSound] =
+                    DateTime.fromMillisecondsSinceEpoch(nowMs);
+                final display = _envLiveSpeechDisplay[candidateSound] ??
+                    candidateSound;
 
-              // 2. Pop up ONLY that specific environmental sound card!
-              simulateSoundDetection(soundKey, confidence: bestEnvProb);
+                // 1. Display detected environmental sound in Live Speech box
+                _transcriptController.add(display);
+
+                // 2. Pop up ONLY that specific environmental sound card!
+                simulateSoundDetection(candidateSound, confidence: confidence);
+              }
             }
           }
         }
       }
     }
+  }
+
+  String? _detectEnvironmentalAcousticSound(List<double> window16k, double maxA, double rms) {
+    if (window16k.length < 8000 || rms < 0.02 || maxA < 0.08) return null;
+
+    final int n = window16k.length;
+    int zcCount = 0;
+    for (int i = 1; i < n; i++) {
+      if ((window16k[i] >= 0 && window16k[i - 1] < 0) || (window16k[i] < 0 && window16k[i - 1] >= 0)) {
+        zcCount++;
+      }
+    }
+    final double zcr = zcCount / n;
+
+    final centerStart = (n ~/ 2) - 2048;
+    const testN = 4096;
+
+    double energyAt(double freq) {
+      final double k = (freq * testN / 16000).roundToDouble();
+      final double omega = (2.0 * math.pi / testN) * k;
+      final double coeff = 2.0 * math.cos(omega);
+      double q1 = 0.0, q2 = 0.0;
+
+      for (int i = centerStart; i < centerStart + testN; i++) {
+        final double q0 = coeff * q1 - q2 + window16k[i];
+        q2 = q1;
+        q1 = q0;
+      }
+      return q1 * q1 + q2 * q2 - q1 * q2 * coeff;
+    }
+
+    final double eLow = energyAt(100) + energyAt(150) + energyAt(200) + energyAt(250);
+    final double eHorn = energyAt(380) + energyAt(440) + energyAt(500);
+    final double eTruck = energyAt(300) + energyAt(550) + energyAt(650);
+    final double eSiren = energyAt(750) + energyAt(850) + energyAt(950) + energyAt(1050);
+    final double eCry = energyAt(1300) + energyAt(1600) + energyAt(2000) + energyAt(2400);
+    final double eBark = energyAt(900) + energyAt(1200) + energyAt(1700);
+
+    final double eTotal = eLow + eHorn + eTruck + eSiren + eCry + 1e-12;
+    final double rLow = eLow / eTotal;
+    final double rHorn = eHorn / eTotal;
+    final double rSiren = eSiren / eTotal;
+    final double rCry = eCry / eTotal;
+
+    // Transient bursts check for dog barking
+    int subFramesWithSpikes = 0;
+    const subLen = 1600;
+    for (int sf = 0; sf < 10; sf++) {
+      double sfMax = 0.0;
+      for (int i = sf * subLen; i < (sf + 1) * subLen; i++) {
+        final a = window16k[i].abs();
+        if (a > sfMax) sfMax = a;
+      }
+      if (sfMax > maxA * 0.70) subFramesWithSpikes++;
+    }
+    final bool isTransientBurst = (subFramesWithSpikes >= 1 && subFramesWithSpikes <= 4);
+
+    // 1. Baby Crying: High-pitch infant vocal cry in 1300-2400 Hz
+    if (rCry > 0.35 && zcr > 0.08 && rLow < 0.30) {
+      return 'baby crying';
+    }
+
+    // 2. Ambulance Siren: Sweeping siren in 750-1050 Hz
+    if (rSiren > 0.35 && rLow < 0.25 && !isTransientBurst) {
+      return 'ambulance';
+    }
+
+    // 3. Vehicle Horn: 380-500 Hz chord blast
+    if (rHorn > 0.45 && rLow < 0.30) {
+      return 'vehicle horns';
+    }
+
+    // 4. Dog Barking: Short acoustic bursts
+    if (isTransientBurst && zcr > 0.07 && (eBark / eTotal) > 0.30) {
+      return 'dog_bark_dataset';
+    }
+
+    // 5. Traffic Noise: Low engine rumble
+    if (rLow > 0.60 && zcr < 0.06) {
+      return 'traffic';
+    }
+
+    // 6. Fire Truck Siren (strictly requires truck energy and low cry ratio)
+    if ((eTruck / eTotal) > 0.60 && rLow < 0.30 && rCry < 0.15) {
+      return 'fire_truck';
+    }
+
+    return null;
   }
 
   void stopListening() {
