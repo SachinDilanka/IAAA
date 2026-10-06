@@ -37,10 +37,10 @@ class AudioClassifierService {
   int _lastSpeechTimeMs = 0;
   int _keywordLockUntilMs = 0;
 
+  final List<double> _utteranceSamples = [];
+  bool _inSpeechUtterance = false;
+  int _speechSilenceChunks = 0;
   String? _currentDisplayedKeyword;
-  double _currentDisplayedProb = 0.0;
-  String? _pendingSpeechClass;
-  int _pendingSpeechVotes = 0;
 
   final Map<String, DateTime> _lastSoundAlertTimes = {};
   DateTime? _lastEmittedAlertTime;
@@ -60,6 +60,7 @@ class AudioClassifierService {
   Stream<String> get onTranscriptUpdated => _transcriptController.stream;
   Stream<String> get onSttStatus => _sttStatusController.stream;
   String get sttStatus => _sttStatus;
+  String? get currentDisplayedKeyword => _currentDisplayedKeyword;
 
   void _setSttStatus(String status) {
     if (status == _sttStatus) return;
@@ -76,6 +77,15 @@ class AudioClassifierService {
     'sinhala_balagena_': 'බලාගෙන (Balaagena - Watch Out)',
     'sinhala_ehata_wenna_': 'එහාට වෙන්න (Ehata Wenna - Move Aside)',
     'sinhala_parissamin_': 'පරිස්සමින් (Parissamin - Be Careful)',
+  };
+
+  static const Map<String, String> _envLiveSpeechDisplay = {
+    'ambulance': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
+    'fire_truck': 'ගිනි නිවන රථ ශබ්දය (Fire Truck Siren)',
+    'vehicle horns': 'වාහන හෝන් (Vehicle Horn)',
+    'baby crying': 'ළදරුවාගේ හැඬීම (Baby Crying)',
+    'dog_bark_dataset': 'බල්ලා බුරන හඬ (Dog Barking)',
+    'traffic': 'මාර්ග තදබදය (Traffic Noise)',
   };
 
   static const Map<String, String> _classToSoundKey = {
@@ -175,10 +185,9 @@ class AudioClassifierService {
     _lastMlTimeMs = 0;
     _pendingEnvironmentSound = null;
     _pendingEnvironmentVotes = 0;
-    _currentDisplayedKeyword = null;
-    _currentDisplayedProb = 0.0;
-    _pendingSpeechClass = null;
-    _pendingSpeechVotes = 0;
+    _inSpeechUtterance = false;
+    _utteranceSamples.clear();
+    _speechSilenceChunks = 0;
     _latestSoundVolume = 0.25;
     _rollingBuf16k.fillRange(0, 16000, 0.0);
 
@@ -289,9 +298,97 @@ class AudioClassifierService {
       'background_traffic': 'traffic',
     };
 
+    // Voice Activity Detection (VAD)
+    final bool isVoiceChunk = (maxAmp >= 0.015 || rms >= 0.003);
+
+    if (isVoiceChunk) {
+      _lastSpeechTimeMs = nowMs;
+      _pendingEnvironmentSound = null;
+      _pendingEnvironmentVotes = 0;
+
+      if (!_inSpeechUtterance) {
+        _inSpeechUtterance = true;
+        _speechSilenceChunks = 0;
+        _utteranceSamples.clear();
+        // Include up to 800 pre-onset samples (~50ms) to preserve onset consonants
+        final preCount = math.min(800, _total16kPushed);
+        for (int i = 0; i < preCount; i++) {
+          final s = _rollingBuf16k[(_rollingIdx - preCount + i + 16000) % 16000];
+          _utteranceSamples.add(s);
+        }
+      } else {
+        _speechSilenceChunks = 0;
+      }
+      _utteranceSamples.addAll(currentChunkSamples);
+    } else if (_inSpeechUtterance) {
+      _speechSilenceChunks++;
+      _utteranceSamples.addAll(currentChunkSamples);
+    }
+
+    // === UTTERANCE EVALUATION (Exact Spoken Sinhala Keyword) ===
+    final bool utteranceFinished = _inSpeechUtterance &&
+        ((_speechSilenceChunks >= 3 && _utteranceSamples.length >= 4800) ||
+            _utteranceSamples.length >= 16000);
+
+    if (utteranceFinished) {
+      final List<double> uWindow16k = List<double>.filled(16000, 0.0);
+      final int uCount = math.min(16000, _utteranceSamples.length);
+      double uMax = 0.0;
+      for (int i = 0; i < uCount; i++) {
+        final s = _utteranceSamples[i];
+        uWindow16k[i] = s;
+        final absS = s.abs();
+        if (absS > uMax) uMax = absS;
+      }
+
+      if (uMax >= 0.005) {
+        final double uGain = (0.50 / uMax).clamp(1.0, 50.0);
+        final List<double> uNorm = List<double>.filled(16000, 0.0);
+        for (int i = 0; i < 16000; i++) {
+          uNorm[i] = (uWindow16k[i] * uGain).clamp(-1.0, 1.0);
+        }
+
+        final uPred = _neuralClassifier.predict(uNorm);
+        if (uPred != null) {
+          String? bestSpeechClass;
+          double bestSpeechProb = 0.0;
+          for (final sc in speechClasses) {
+            final p = uPred.allProbabilities[sc] ?? 0.0;
+            if (p > bestSpeechProb) {
+              bestSpeechProb = p;
+              bestSpeechClass = sc;
+            }
+          }
+
+          if (nowMs >= _keywordLockUntilMs &&
+              bestSpeechClass != null &&
+              bestSpeechProb >= 0.35) {
+            _keywordLockUntilMs = nowMs + 4000; // Lock for 4.0 seconds!
+            _lastSpeechTimeMs = nowMs;
+            _currentDisplayedKeyword = bestSpeechClass;
+
+            final soundKey = _classToSoundKey[bestSpeechClass];
+            if (soundKey != null) {
+              final displayText =
+                  _sinhalaLiveSpeechWord[soundKey] ?? bestSpeechClass;
+              _transcriptController.add(displayText);
+              unawaited(simulateSoundDetection(
+                soundKey,
+                confidence: math.max(bestSpeechProb, 0.99),
+                overrideCooldown: true,
+              ));
+            }
+          }
+        }
+      }
+      _inSpeechUtterance = false;
+      _utteranceSamples.clear();
+      _speechSilenceChunks = 0;
+    }
+
     final bool startupGraceOver = (nowMs - _listeningStartTimeMs >= 800);
 
-    // Run inference every 140ms once buffer has initial samples
+    // === CONTINUOUS STREAMING BACKUP & ENVIRONMENTAL DETECTION ===
     if (_total16kPushed >= 8000 &&
         startupGraceOver &&
         (nowMs - _lastMlTimeMs >= 140)) {
@@ -306,16 +403,12 @@ class AudioClassifierService {
         if (absS > windowMax) windowMax = absS;
       }
 
-      // Skip electronic silence floor
-      if (windowMax < 0.001) {
+      if (windowMax < 0.002) {
         _pendingEnvironmentSound = null;
         _pendingEnvironmentVotes = 0;
-        _pendingSpeechClass = null;
-        _pendingSpeechVotes = 0;
         return;
       }
 
-      // Dynamic Automatic Gain Control (AGC) - amplifies near and far voice/sounds up to 50x
       final double gain = (0.50 / windowMax).clamp(1.0, 50.0);
       final List<double> normWindow = List<double>.filled(16000, 0.0);
       for (int i = 0; i < 16000; i++) {
@@ -326,7 +419,6 @@ class AudioClassifierService {
       if (pred == null) return;
       final allP = pred.allProbabilities;
 
-      // Find top Sinhala speech class
       String? topSpeechClass;
       double topSpeechProb = 0.0;
       for (final s in speechClasses) {
@@ -337,7 +429,6 @@ class AudioClassifierService {
         }
       }
 
-      // Find top environmental class
       String? topEnvClass;
       double topEnvProb = 0.0;
       for (final e in envSoundMap.keys) {
@@ -348,83 +439,66 @@ class AudioClassifierService {
         }
       }
 
-      // === 1. SINHALA EMERGENCY KEYWORDS ===
-      // Evaluated whenever a Sinhala keyword candidate has significant probability
-      if (topSpeechClass != null && topSpeechProb >= 0.40) {
+      // === 1. STREAMING SPEECH BACKUP ===
+      if (topSpeechClass != null && topSpeechProb >= 0.75) {
         _lastSpeechTimeMs = nowMs;
         _pendingEnvironmentSound = null;
         _pendingEnvironmentVotes = 0;
 
-        if (_pendingSpeechClass == topSpeechClass) {
-          _pendingSpeechVotes++;
-        } else {
-          _pendingSpeechClass = topSpeechClass;
-          _pendingSpeechVotes = 1;
-        }
+        if (nowMs >= _keywordLockUntilMs) {
+          _keywordLockUntilMs = nowMs + 4000;
+          _currentDisplayedKeyword = topSpeechClass;
 
-        final bool shouldTrigger = (topSpeechProb >= 0.85) ||
-            (_pendingSpeechVotes >= 2 && topSpeechProb >= 0.50);
-
-        if (shouldTrigger) {
-          final bool isLocked = (nowMs < _keywordLockUntilMs);
-          // If locked, allow upgrade if confidence is higher (e.g. onset -> full word)
-          final bool canUpgrade = !isLocked ||
-              (topSpeechClass != _currentDisplayedKeyword &&
-                  topSpeechProb > _currentDisplayedProb + 0.05);
-
-          if (canUpgrade) {
-            _currentDisplayedKeyword = topSpeechClass;
-            _currentDisplayedProb = topSpeechProb;
-            _keywordLockUntilMs = nowMs + 2500; // Hold card & live speech for 2.5s
-
-            final soundKey = _classToSoundKey[topSpeechClass];
-            if (soundKey != null) {
-              final displayText =
-                  _sinhalaLiveSpeechWord[soundKey] ?? topSpeechClass;
-              _transcriptController.add(displayText);
-              unawaited(simulateSoundDetection(
-                soundKey,
-                confidence: math.max(topSpeechProb, 0.98),
-                overrideCooldown: true,
-              ));
-            }
+          final soundKey = _classToSoundKey[topSpeechClass];
+          if (soundKey != null) {
+            final displayText =
+                _sinhalaLiveSpeechWord[soundKey] ?? topSpeechClass;
+            _transcriptController.add(displayText);
+            unawaited(simulateSoundDetection(
+              soundKey,
+              confidence: math.max(topSpeechProb, 0.99),
+              overrideCooldown: true,
+            ));
           }
+          _inSpeechUtterance = false;
+          _utteranceSamples.clear();
         }
         return; // Speech active: NEVER trigger environmental sounds!
-      } else {
-        _pendingSpeechClass = null;
-        _pendingSpeechVotes = 0;
       }
 
       // === 2. BACKGROUND ENVIRONMENTAL SOUNDS ===
-      // Quickly identifies baby crying, ambulance, fire truck, horn, dog barking, traffic
-      // Evaluated when user is not actively speaking (at least 2.0s since speech)
-      final bool userSpokeRecently = (nowMs - _lastSpeechTimeMs < 2000);
+      final bool userSpokeRecently = (nowMs - _lastSpeechTimeMs < 5000);
       final bool keywordActive = (nowMs < _keywordLockUntilMs);
+      final bool inSpeech = _inSpeechUtterance;
+      final bool hasRealEnergy = (maxAmp >= 0.045 && rms >= 0.010);
 
-      if (!userSpokeRecently && !keywordActive && topEnvClass != null) {
+      if (!userSpokeRecently &&
+          !keywordActive &&
+          !inSpeech &&
+          hasRealEnergy &&
+          topEnvClass != null) {
         final candidateSound = envSoundMap[topEnvClass];
         if (candidateSound != null) {
           const envThresholds = {
             'ambulance_siren': 0.60,
-            'fire_truck': 0.65,
+            'fire_truck': 0.70,
             'vehicle_horn': 0.55,
-            'baby_crying': 0.60,
+            'baby_crying': 0.55,
             'dog_barking': 0.55,
-            'background_traffic': 0.70,
+            'background_traffic': 0.80,
           };
           final double reqProb = envThresholds[topEnvClass] ?? 0.60;
           final bool trafficValid = (topEnvClass != 'background_traffic') ||
-              (rms >= 0.020 && maxAmp >= 0.08);
+              (rms >= 0.035 && maxAmp >= 0.15);
 
           final bool isValid = topEnvProb >= reqProb &&
-              topEnvProb >= topSpeechProb * 1.30 &&
+              topEnvProb >= topSpeechProb * 1.40 &&
               trafficValid;
 
           if (isValid) {
             final lastAlert = _lastSoundAlertTimes[candidateSound];
             final bool cooldownPassed = lastAlert == null ||
-                nowMs - lastAlert.millisecondsSinceEpoch >= 2000;
+                nowMs - lastAlert.millisecondsSinceEpoch >= 3000;
 
             if (_pendingEnvironmentSound == candidateSound) {
               _pendingEnvironmentVotes++;
@@ -433,24 +507,27 @@ class AudioClassifierService {
               _pendingEnvironmentVotes = 1;
             }
 
-            // High confidence (>= 0.80) triggers immediately in 1 window (~140ms); otherwise 2 windows (~280ms)
-            final int requiredVotes = (topEnvProb >= 0.80) ? 1 : 2;
-            if (cooldownPassed && _pendingEnvironmentVotes >= requiredVotes) {
+            if (cooldownPassed && _pendingEnvironmentVotes >= 2) {
               _lastSoundAlertTimes[candidateSound] =
                   DateTime.fromMillisecondsSinceEpoch(nowMs);
+              final display =
+                  _envLiveSpeechDisplay[candidateSound] ?? candidateSound;
+              _transcriptController.add(display);
               simulateSoundDetection(candidateSound, confidence: topEnvProb);
               _pendingEnvironmentVotes = 0;
+              _pendingEnvironmentSound = null;
             }
           } else {
             _pendingEnvironmentSound = null;
             _pendingEnvironmentVotes = 0;
           }
         }
+      } else {
+        _pendingEnvironmentSound = null;
+        _pendingEnvironmentVotes = 0;
       }
     }
   }
-
-
 
   void stopListening() {
     _isListening = false;
@@ -458,10 +535,11 @@ class AudioClassifierService {
     _visualizerTicker = null;
     _latestSoundVolume = 0.02;
     _waveformController.add([]);
-    _currentDisplayedKeyword = null;
-    _currentDisplayedProb = 0.0;
-    _pendingSpeechClass = null;
-    _pendingSpeechVotes = 0;
+    _inSpeechUtterance = false;
+    _utteranceSamples.clear();
+    _speechSilenceChunks = 0;
+    _pendingEnvironmentSound = null;
+    _pendingEnvironmentVotes = 0;
 
     _recordStreamSub?.cancel();
     _recordStreamSub = null;
