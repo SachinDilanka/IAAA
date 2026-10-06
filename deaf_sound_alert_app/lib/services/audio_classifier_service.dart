@@ -67,22 +67,16 @@ class AudioClassifierService {
     _sttStatusController.add(status);
   }
 
-  // Display names in Sinhala script with English transliteration and meaning
-  final Map<String, String> _labelToSinhalaDisplay = {
-    'udaw': 'උදව් (Udaw - Help)',
-    'beeraganna': 'බේරගන්න (Beraganna - Save Me)',
-    'ginnak': 'ගින්නක් (Ginnak - Fire)',
-    'anathurak': 'අනතුරක් (Anathurak - Danger)',
-    'karadarayak': 'කරදරයක් (Karadarayak - Trouble)',
-    'balagena': 'බලාගෙන (Balaagena - Watch Out)',
-    'ehata_wenna': 'එහාට වෙන්න (Ehata Wenna - Move Aside)',
-    'parissamin': 'පරිස්සමින් (Parissamin - Be Careful)',
-    'ambulance_siren': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
-    'fire_truck': 'ගිනි නිවන රථ ශබ්දය (Fire Truck Siren)',
-    'vehicle_horn': 'වාහන හොන් (Vehicle Horns)',
-    'baby_crying': 'ළදරු හැඬීම (Baby Crying)',
-    'dog_barking': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
-    'background_traffic': 'වාහන තදබදය (Traffic Noise)',
+  // Exact Live Speech display strings matching user specification
+  final Map<String, String> _labelToLiveSpeechDisplay = {
+    'udaw': 'udaw  →  උදව් (Udaw - Help)',
+    'beeraganna': 'beeraganna  →  බේරගන්න (Beraganna - Save Me)',
+    'ginnak': 'ginnak  →  ගින්නක් (Ginnak - Fire)',
+    'anathurak': 'anathurak  →  අනතුරක් (Anathurak - Danger)',
+    'karadarayak': 'karadarayak  →  කරදරයක් (Karadarayak - Trouble)',
+    'balagena': 'balagena  →  බලාගෙන (Balaagena - Watch Out)',
+    'ehata_wenna': 'ehata wenna  →  එහාට වෙන්න (Ehata Wenna - Move Aside)',
+    'parissamin': 'parissamin  →  පරිස්සමින් (Parissamin - Be Careful)',
   };
 
   // Maps neural network class names to SoundConfig service keys
@@ -186,6 +180,7 @@ class AudioClassifierService {
     _noiseFloor = 0.008;
     _lastVoteLabel = null;
     _voteCount = 0;
+    _rollingBuf16k.fillRange(0, 16000, 0.0);
 
     _startVisualizerTicker();
 
@@ -203,6 +198,9 @@ class AudioClassifierService {
       _pcmStreamSubscription = null;
       _audioStreamer = AudioStreamer();
 
+      // AudioStreamer on Android defaults to 44100 Hz
+      _hardwareSampleRate = 44100;
+
       _pcmStreamSubscription = _audioStreamer!.audioStream.listen(
         (buffer) {
           if (!_isListening || buffer.isEmpty) return;
@@ -213,6 +211,14 @@ class AudioClassifierService {
         },
         cancelOnError: false,
       );
+
+      // Verify the actual hardware sample rate reported by Android AudioRecord
+      try {
+        final actual = await _audioStreamer!.actualSampleRate;
+        if (actual >= 8000 && actual <= 96000) {
+          _hardwareSampleRate = actual;
+        }
+      } catch (_) {}
     } catch (e) {
       _setSttStatus('Microphone stream initialization error: $e');
     }
@@ -230,26 +236,24 @@ class AudioClassifierService {
       if (a > maxRaw) maxRaw = a;
     }
 
-    // Determine hardware sample rate dynamically
+    // Dynamic hardware rate fallback check
     if (_lastPcmTimeMs > 0) {
       final deltaMs = nowMs - _lastPcmTimeMs;
-      if (deltaMs > 5 && deltaMs < 200) {
+      if (deltaMs > 20 && deltaMs < 400) {
         final estimatedRate = (rawBuffer.length * 1000.0) / deltaMs;
-        if (estimatedRate > 38000 && estimatedRate < 46000) {
+        if (estimatedRate > 38000 && estimatedRate < 52000) {
           _hardwareSampleRate = 44100;
-        } else if (estimatedRate >= 46000 && estimatedRate < 56000) {
-          _hardwareSampleRate = 48000;
-        } else if (estimatedRate >= 12000 && estimatedRate <= 24000) {
+        } else if (estimatedRate >= 12000 && estimatedRate <= 22000) {
           _hardwareSampleRate = 16000;
         }
       }
     }
     _lastPcmTimeMs = nowMs;
 
-    // Normalize 16-bit signed PCM if needed
+    // Normalize 16-bit signed PCM if needed (audio_streamer already provides [-1.0, 1.0])
     final double normScale = maxRaw > 2.0 ? (1.0 / 32768.0) : 1.0;
 
-    // Resample to 16,000 Hz for the neural network
+    // Resample to 16,000 Hz using high-quality linear interpolation
     List<double> packet16k;
     if (_hardwareSampleRate == 16000) {
       packet16k = List<double>.generate(
@@ -261,20 +265,17 @@ class AudioClassifierService {
           ((rawBuffer.length * 16000) / _hardwareSampleRate).round();
       if (targetCount <= 0) return;
       packet16k = List<double>.filled(targetCount, 0.0);
-      final double step = rawBuffer.length / targetCount.toDouble();
+      final double ratio =
+          (rawBuffer.length - 1) / (targetCount > 1 ? (targetCount - 1) : 1);
       for (int i = 0; i < targetCount; i++) {
-        final int startIdx = (i * step).floor();
-        final int endIdx = math.min(rawBuffer.length, ((i + 1) * step).floor());
-        double sum = 0.0;
-        int count = 0;
-        for (int j = startIdx; j < endIdx; j++) {
-          sum += rawBuffer[j] * normScale;
-          count++;
-        }
-        double val = count > 0
-            ? (sum / count)
-            : (rawBuffer[startIdx.clamp(0, rawBuffer.length - 1)] * normScale);
-        packet16k[i] = val.clamp(-1.0, 1.0);
+        final double srcPos = i * ratio;
+        final int idx = srcPos.floor();
+        final double frac = srcPos - idx;
+        final double s0 = rawBuffer[idx] * normScale;
+        final double s1 = (idx + 1 < rawBuffer.length)
+            ? rawBuffer[idx + 1] * normScale
+            : s0;
+        packet16k[i] = (s0 + (s1 - s0) * frac).clamp(-1.0, 1.0);
       }
     }
 
@@ -306,9 +307,8 @@ class AudioClassifierService {
     final double soundVol = (maxAmp * 4.0 + rms * 10.0).clamp(0.04, 1.0);
     _updateWaveformVolume(soundVol);
 
-    // Run Offline Neural Network Inference when sound energy is present
-    final bool hasSoundEnergy =
-        (rms >= math.max(_noiseFloor * 1.6, 0.005) && maxAmp >= 0.012);
+    // Run Offline Neural Network Inference when sound energy is present (sensitive to far speech!)
+    final bool hasSoundEnergy = (maxAmp >= 0.0025 || rms >= 0.001);
     final bool startupGraceOver = (nowMs - _listeningStartTimeMs >= 300);
 
     if (_total16kPushed >= 8000 &&
@@ -317,7 +317,7 @@ class AudioClassifierService {
         (nowMs - _lastMlTimeMs >= 100)) {
       _lastMlTimeMs = nowMs;
 
-      // Extract 1-second window
+      // Extract 1-second rolling window
       final List<double> window1s = List<double>.filled(16000, 0.0);
       double windowMax = 0.0;
       for (int i = 0; i < 16000; i++) {
@@ -327,30 +327,18 @@ class AudioClassifierService {
         if (absS > windowMax) windowMax = absS;
       }
 
-      // Dynamic peak normalization: ensures distant/far speech (quiet) receives
-      // sufficient gain so feature vectors match near speech accurately!
+      // Dynamic Automatic Gain Control (AGC):
+      // Boost quiet / far speech up to 50x so normalized window matches the training dataset amplitude!
       final List<double> normalizedWindow = List<double>.filled(16000, 0.0);
       final double gain =
-          windowMax > 0.005 ? (0.45 / windowMax).clamp(1.0, 10.0) : 1.0;
+          windowMax > 0.001 ? (0.55 / windowMax).clamp(1.0, 50.0) : 1.0;
       for (int i = 0; i < 16000; i++) {
         normalizedWindow[i] = (window1s[i] * gain).clamp(-1.0, 1.0);
       }
 
-      // Run pure Dart offline neural model
+      // Run 100% offline pure-Dart neural network
       final pred = _neuralClassifier.predict(normalizedWindow);
       if (pred != null) {
-        final topLabel = pred.label;
-        final topProb = pred.probability;
-
-        // Calculate margin over second-best class
-        double secondProb = 0.0;
-        for (final e in pred.top5Probabilities.entries) {
-          if (e.key != topLabel && e.value > secondProb) {
-            secondProb = e.value;
-          }
-        }
-        final double margin = topProb - secondProb;
-
         const speechClasses = {
           'udaw',
           'beeraganna',
@@ -358,54 +346,74 @@ class AudioClassifierService {
           'anathurak',
           'karadarayak',
           'balagena',
-          'parissamin',
           'ehata_wenna',
+          'parissamin',
         };
 
-        final bool isSpeech = speechClasses.contains(topLabel);
-        final bool confident = isSpeech
-            ? (topProb >= 0.48 && margin >= 0.08)
-            : (topProb >= 0.58 && margin >= 0.12);
+        // Find the best Sinhala speech keyword candidate
+        String? bestSpeechClass;
+        double bestSpeechProb = 0.0;
+        double secondSpeechProb = 0.0;
 
-        if (confident) {
-          if (_lastVoteLabel == topLabel && (nowMs - _lastVoteMs <= 350)) {
-            _voteCount++;
-          } else {
-            _lastVoteLabel = topLabel;
-            _voteCount = 1;
+        for (final cls in speechClasses) {
+          final p = pred.allProbabilities[cls] ?? 0.0;
+          if (p > bestSpeechProb) {
+            secondSpeechProb = bestSpeechProb;
+            bestSpeechProb = p;
+            bestSpeechClass = cls;
+          } else if (p > secondSpeechProb) {
+            secondSpeechProb = p;
           }
-          _lastVoteMs = nowMs;
+        }
 
-          // Trigger on 2 consecutive matching frames (~100-200ms) or single high-confidence frame
-          final bool shouldTrigger = (_voteCount >= 2) || (topProb >= 0.85);
+        // STRICT POLICY:
+        // 1. Only Sinhala speech keywords can trigger. Environmental sounds NEVER pop up alert cards automatically.
+        // 2. Alert cards only pop up AFTER Live Speech box displays the recognized word.
+        if (bestSpeechClass != null && bestSpeechProb >= 0.38) {
+          final bool dominant = (bestSpeechProb >= 0.50) ||
+              (bestSpeechProb - secondSpeechProb >= 0.08);
 
-          if (shouldTrigger) {
-            final soundKey = _classToSoundKey[topLabel] ?? topLabel;
-            final lastAlert = _lastKeywordTriggerTimes[soundKey];
-            final bool cooldownPassed = lastAlert == null ||
-                nowMs - lastAlert.millisecondsSinceEpoch >= 1800;
-
-            if (cooldownPassed) {
-              _lastKeywordTriggerTimes[soundKey] =
-                  DateTime.fromMillisecondsSinceEpoch(nowMs);
-
-              final displayName =
-                  _labelToSinhalaDisplay[topLabel] ?? topLabel;
-
-              // 1. Display recognized Sinhala word in the Live Speech box immediately!
-              _transcriptController.add(displayName);
-
-              // 2. Pop up emergency alert card immediately!
-              simulateSoundDetection(
-                soundKey,
-                confidence: topProb,
-                overrideCooldown: true,
-              );
+          if (dominant) {
+            if (_lastVoteLabel == bestSpeechClass && (nowMs - _lastVoteMs <= 400)) {
+              _voteCount++;
+            } else {
+              _lastVoteLabel = bestSpeechClass;
+              _voteCount = 1;
             }
-            _voteCount = 0;
+            _lastVoteMs = nowMs;
+
+            final bool shouldTrigger =
+                (_voteCount >= 2) || (bestSpeechProb >= 0.65);
+
+            if (shouldTrigger) {
+              final soundKey =
+                  _classToSoundKey[bestSpeechClass] ?? bestSpeechClass;
+              final lastAlert = _lastKeywordTriggerTimes[soundKey];
+              final bool cooldownPassed = lastAlert == null ||
+                  nowMs - lastAlert.millisecondsSinceEpoch >= 2000;
+
+              if (cooldownPassed) {
+                _lastKeywordTriggerTimes[soundKey] =
+                    DateTime.fromMillisecondsSinceEpoch(nowMs);
+
+                final liveSpeechText =
+                    _labelToLiveSpeechDisplay[bestSpeechClass] ?? bestSpeechClass;
+
+                // 1. Display recognized Sinhala word in the Live Speech box FIRST
+                _transcriptController.add(liveSpeechText);
+
+                // 2. Pop up the matching Sinhala emergency alert card immediately AFTER Live Speech box updates!
+                simulateSoundDetection(
+                  soundKey,
+                  confidence: bestSpeechProb,
+                  overrideCooldown: true,
+                );
+              }
+              _voteCount = 0;
+            }
           }
         } else {
-          if (nowMs - _lastVoteMs > 300) {
+          if (nowMs - _lastVoteMs > 350) {
             _voteCount = 0;
           }
         }
