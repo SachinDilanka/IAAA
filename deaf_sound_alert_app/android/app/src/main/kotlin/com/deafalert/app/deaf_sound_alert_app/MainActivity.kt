@@ -107,35 +107,24 @@ class MainActivity : FlutterActivity(), RecognitionListener {
             if (!isListening) return@post
             try {
                 if (speechRecognizer == null) {
-                    speechRecognizer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(this)) {
-                        SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
-                    } else {
-                        SpeechRecognizer.createSpeechRecognizer(this)
-                    }
+                    speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
                     speechRecognizer?.setRecognitionListener(this)
                 }
+                val localeTag = java.util.Locale.getDefault().toLanguageTag()
                 val intent = android.content.Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                     putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 10)
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 15)
                     putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US")
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "en-US")
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, localeTag)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, localeTag)
                     putExtra("android.speech.extra.DICTATION_MODE", true)
-                    // Prefer on-device recognition when available, but allow
-                    // Android's normal speech provider when the phone has no
-                    // downloaded offline pack. Without this fallback the
-                    // recognizer can fail silently on many devices.
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-                        SpeechRecognizer.isOnDeviceRecognitionAvailable(this@MainActivity)) {
-                        putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
-                    }
                 }
                 speechRecognizer?.startListening(intent)
             } catch (error: Exception) {
                 handler.postDelayed({
                     if (isListening) startSpeechRecognizer()
-                }, 500)
+                }, 300)
             }
         }
     }
