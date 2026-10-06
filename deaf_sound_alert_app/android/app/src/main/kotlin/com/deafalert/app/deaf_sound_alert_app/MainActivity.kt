@@ -73,17 +73,13 @@ class MainActivity : FlutterActivity(), RecognitionListener {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SPEECH_CHANNEL)
                 .setMethodCallHandler { call, result ->
                     when (call.method) {
-                        "isAvailable" -> result.success(
-                            SpeechRecognizer.isRecognitionAvailable(applicationContext)
-                        )
+                        "isAvailable" -> result.success(false)
                         "startListening" -> {
-                            isListening = true
-                            startSpeechRecognizer()
+                            isListening = false
                             result.success(true)
                         }
                         "stopListening" -> {
                             isListening = false
-                            stopSpeechRecognizer()
                             result.success(true)
                         }
                         else -> result.notImplemented()
@@ -100,43 +96,6 @@ class MainActivity : FlutterActivity(), RecognitionListener {
                         speechEventSink = null
                     }
                 })
-    }
-
-    private fun startSpeechRecognizer() {
-        handler.post {
-            if (!isListening) return@post
-            try {
-                if (speechRecognizer == null) {
-                    speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
-                    speechRecognizer?.setRecognitionListener(this)
-                }
-                val localeTag = java.util.Locale.getDefault().toLanguageTag()
-                val intent = android.content.Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 15)
-                    putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, localeTag)
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, localeTag)
-                    putExtra("android.speech.extra.DICTATION_MODE", true)
-                }
-                speechRecognizer?.startListening(intent)
-            } catch (error: Exception) {
-                handler.postDelayed({
-                    if (isListening) startSpeechRecognizer()
-                }, 300)
-            }
-        }
-    }
-
-    private fun stopSpeechRecognizer() {
-        handler.post {
-            try {
-                speechRecognizer?.cancel()
-                speechRecognizer?.destroy()
-            } catch (_: Exception) {}
-            speechRecognizer = null
-        }
     }
 
     private fun emitSpeech(type: String, text: String, candidates: List<String> = emptyList()) {
@@ -172,34 +131,11 @@ class MainActivity : FlutterActivity(), RecognitionListener {
         if (!first.isNullOrBlank()) {
             emitSpeech("finalResult", first, list)
         }
-        if (isListening) {
-            try {
-                speechRecognizer?.cancel()
-                speechRecognizer?.destroy()
-            } catch (_: Exception) {}
-            speechRecognizer = null
-            handler.postDelayed({
-                if (isListening) startSpeechRecognizer()
-            }, 100)
-        }
     }
 
     override fun onError(error: Int) {
         if (isListening) {
             emitSpeech("error", recognitionErrorText(error))
-            try {
-                speechRecognizer?.cancel()
-                speechRecognizer?.destroy()
-            } catch (_: Exception) {}
-            speechRecognizer = null
-            val delay = if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
-                100L
-            } else {
-                350L
-            }
-            handler.postDelayed({
-                if (isListening) startSpeechRecognizer()
-            }, delay)
         }
     }
 
