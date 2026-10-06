@@ -207,10 +207,10 @@ class AudioClassifierService {
 
     _setSttStatus('100% Offline Deep Audio Awareness Active (Zero Internet)');
 
-    await _startSpeechRecognition();
-
-    // Start 100% offline native 16kHz audio stream via AudioRecorder
+    // Start 100% offline native 16kHz audio stream via AudioRecorder FIRST
     _startAudioCapture();
+
+    await _startSpeechRecognition();
 
     return true;
   }
@@ -648,11 +648,11 @@ class AudioClassifierService {
     final double soundVol = (maxAmp * 4.0 + rms * 10.0).clamp(0.04, 1.0);
     _updateWaveformVolume(soundVol);
 
-    // Filter out silence and ambient room noise (Real speech / audio has MaxAmp >= 0.035 or RMS >= 0.012)
-    final bool hasSoundEnergy = (maxAmp >= 0.035 || rms >= 0.012);
-    final bool startupGraceOver = (nowMs - _listeningStartTimeMs >= 350);
+    // Filter out silence and ambient room noise (Real speech / audio has MaxAmp >= 0.012 or RMS >= 0.004)
+    final bool hasSoundEnergy = (maxAmp >= 0.012 || rms >= 0.004);
+    final bool startupGraceOver = (nowMs - _listeningStartTimeMs >= 300);
 
-    if (_total16kPushed >= 8000 &&
+    if (_total16kPushed >= 6000 &&
         startupGraceOver &&
         hasSoundEnergy &&
         (nowMs - _lastMlTimeMs >= 100)) {
@@ -726,8 +726,8 @@ class AudioClassifierService {
         // === DECISION ENGINE ===
         // Case A: Sinhala Speech Keyword Detected (ABSOLUTE PRIORITY OVER ENVIRONMENTAL SOUNDS)
         if (bestSpeechClass != null &&
-            bestSpeechProb >= 0.35 &&
-            bestSpeechProb >= bestEnvProb * 0.90) {
+            bestSpeechProb >= 0.28 &&
+            bestSpeechProb >= bestEnvProb * 0.85) {
           final soundKey = _classToSoundKey[bestSpeechClass] ?? bestSpeechClass;
           final lastAlert = _lastKeywordTriggerTimes[soundKey];
           final bool cooldownPassed = lastAlert == null ||
@@ -762,18 +762,18 @@ class AudioClassifierService {
         if (!userSpokeRecently && bestEnvClass != null) {
           final soundKey = envSoundMap[bestEnvClass];
           const envThresholds = {
-            'ambulance_siren': 0.32,
-            'fire_truck': 0.32,
-            'vehicle_horn': 0.35,
-            'baby_crying': 0.35,
-            'dog_barking': 0.35,
-            'background_traffic': 0.40,
+            'ambulance_siren': 0.28,
+            'fire_truck': 0.28,
+            'vehicle_horn': 0.30,
+            'baby_crying': 0.30,
+            'dog_barking': 0.30,
+            'background_traffic': 0.35,
           };
-          final double requiredProb = envThresholds[bestEnvClass] ?? 0.35;
+          final double requiredProb = envThresholds[bestEnvClass] ?? 0.30;
 
           // Traffic requires real audio energy, not silence
           final bool trafficValid = (bestEnvClass != 'background_traffic') ||
-              (rms >= 0.025 && maxAmp >= 0.10);
+              (rms >= 0.015 && maxAmp >= 0.06);
 
           if (soundKey != null &&
               bestEnvProb >= requiredProb &&
