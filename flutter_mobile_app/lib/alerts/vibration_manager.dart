@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:vibration/vibration.dart';
 import '../models/alert_level.dart';
+import 'flashlight_service.dart';
 
 class VibrationManager {
   static final VibrationManager _instance = VibrationManager._internal();
@@ -85,6 +86,9 @@ class VibrationManager {
         }
         await HapticFeedback.mediumImpact();
       }
+
+      // Simultaneously trigger flashlight strobe pattern synced with vibration
+      FlashlightService().triggerFlashlightPattern(priority);
     } catch (e) {
       try {
         await HapticFeedback.heavyImpact();

@@ -17,7 +17,7 @@ if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
 # Dataset path and target configuration
-DATASET_DIR = "dataset"
+DATASET_DIR = "../dataset" if os.path.exists("../dataset") else "dataset"
 MODEL_SAVE_PATH = "sound_model.keras"
 TFLITE_SAVE_PATH = "sound_model.tflite"
 LABELS_SAVE_PATH = "labels.json"
@@ -33,7 +33,6 @@ CLASS_MAP = {
     "beraganna": "beeraganna",
     "ginnak": "ginnak",
     "fire": "ginnak",
-    "firetruck": "ginnak",
     "fire_alarm": "ginnak",
     "anathurak": "anathurak",
     "karadarayak": "karadarayak",
@@ -43,6 +42,10 @@ CLASS_MAP = {
     "ehata": "ehata_wenna",
     # Critical Environmental Emergency Sounds
     "ambulance": "ambulance_siren",
+    "firetruck": "fire_truck",
+    "fire_truck": "fire_truck",
+    "fire_engine": "fire_truck",
+    "fire_siren": "fire_truck",
     "vehicle horns": "vehicle_horn",
     "vehicle_horn": "vehicle_horn",
     "baby crying": "baby_crying",
@@ -74,6 +77,7 @@ CLASSES = [
     "parissamin",
     "ehata_wenna",
     "ambulance_siren",
+    "fire_truck",
     "vehicle_horn",
     "baby_crying",
     "dog_barking",
@@ -310,6 +314,7 @@ def main():
     import shutil
     targets = [
         "../flutter_mobile_app/assets/models",
+        "../deaf_sound_alert_app/assets/models",
         "../live-python-detector",
     ]
     for target in targets:
