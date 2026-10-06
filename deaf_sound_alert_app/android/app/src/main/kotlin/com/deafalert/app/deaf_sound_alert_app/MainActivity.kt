@@ -73,13 +73,17 @@ class MainActivity : FlutterActivity(), RecognitionListener {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SPEECH_CHANNEL)
                 .setMethodCallHandler { call, result ->
                     when (call.method) {
-                        "isAvailable" -> result.success(false)
+                        "isAvailable" -> result.success(
+                            SpeechRecognizer.isRecognitionAvailable(applicationContext)
+                        )
                         "startListening" -> {
-                            isListening = false
+                            isListening = true
+                            startSpeechRecognizer()
                             result.success(true)
                         }
                         "stopListening" -> {
                             isListening = false
+                            stopSpeechRecognizer()
                             result.success(true)
                         }
                         else -> result.notImplemented()
@@ -96,6 +100,50 @@ class MainActivity : FlutterActivity(), RecognitionListener {
                         speechEventSink = null
                     }
                 })
+    }
+
+    private fun startSpeechRecognizer() {
+        handler.post {
+            if (!isListening) return@post
+            try {
+                if (speechRecognizer == null) {
+                    speechRecognizer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(this)) {
+                        SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
+                    } else {
+                        SpeechRecognizer.createSpeechRecognizer(this)
+                    }
+                    speechRecognizer?.setRecognitionListener(this)
+                }
+                val intent = android.content.Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 10)
+                    putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "si-LK")
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "si-LK")
+                    putExtra("android.speech.extra.DICTATION_MODE", true)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                        SpeechRecognizer.isOnDeviceRecognitionAvailable(this@MainActivity)) {
+                        putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+                    }
+                }
+                speechRecognizer?.startListening(intent)
+            } catch (error: Exception) {
+                handler.postDelayed({
+                    if (isListening) startSpeechRecognizer()
+                }, 400)
+            }
+        }
+    }
+
+    private fun stopSpeechRecognizer() {
+        handler.post {
+            try {
+                speechRecognizer?.cancel()
+                speechRecognizer?.destroy()
+            } catch (_: Exception) {}
+            speechRecognizer = null
+        }
     }
 
     private fun emitSpeech(type: String, text: String, candidates: List<String> = emptyList()) {
@@ -131,11 +179,34 @@ class MainActivity : FlutterActivity(), RecognitionListener {
         if (!first.isNullOrBlank()) {
             emitSpeech("finalResult", first, list)
         }
+        if (isListening) {
+            try {
+                speechRecognizer?.cancel()
+                speechRecognizer?.destroy()
+            } catch (_: Exception) {}
+            speechRecognizer = null
+            handler.postDelayed({
+                if (isListening) startSpeechRecognizer()
+            }, 80)
+        }
     }
 
     override fun onError(error: Int) {
         if (isListening) {
             emitSpeech("error", recognitionErrorText(error))
+            try {
+                speechRecognizer?.cancel()
+                speechRecognizer?.destroy()
+            } catch (_: Exception) {}
+            speechRecognizer = null
+            val delay = if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
+                80L
+            } else {
+                300L
+            }
+            handler.postDelayed({
+                if (isListening) startSpeechRecognizer()
+            }, delay)
         }
     }
 
@@ -154,14 +225,14 @@ class MainActivity : FlutterActivity(), RecognitionListener {
         }
     }
 
-        override fun onReadyForSpeech(params: Bundle?) {}
-        override fun onBeginningOfSpeech() {}
-        override fun onRmsChanged(rmsdB: Float) {
-            emitRms(rmsdB)
-        }
-        override fun onBufferReceived(buffer: ByteArray?) {}
-        override fun onEndOfSpeech() {}
-        override fun onEvent(eventType: Int, params: Bundle?) {}
+    override fun onReadyForSpeech(params: Bundle?) {}
+    override fun onBeginningOfSpeech() {}
+    override fun onRmsChanged(rmsdB: Float) {
+        emitRms(rmsdB)
+    }
+    override fun onBufferReceived(buffer: ByteArray?) {}
+    override fun onEndOfSpeech() {}
+    override fun onEvent(eventType: Int, params: Bundle?) {}
 
     // Flashlight Helpers
     private fun setTorchMode(enabled: Boolean) {

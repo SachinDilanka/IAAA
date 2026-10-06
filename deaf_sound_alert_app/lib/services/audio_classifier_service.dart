@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import '../models/detected_sound.dart';
@@ -19,6 +20,12 @@ class AudioClassifierService {
 
   final NativeNeuralAudioClassifier _neuralClassifier =
       NativeNeuralAudioClassifier();
+
+  static const MethodChannel _speechChannel =
+      MethodChannel('com.deafalert.app/speech');
+  static const EventChannel _speechEvents =
+      EventChannel('com.deafalert.app/speech/events');
+  StreamSubscription? _speechSubscription;
 
   AudioRecorder? _audioRecorder;
   StreamSubscription<Uint8List>? _recordStreamSub;
@@ -105,6 +112,236 @@ class AudioClassifierService {
     'baby_crying': 'baby crying',
     'dog_barking': 'dog_bark_dataset',
   };
+
+  // Exact Live Speech display strings for Environmental sounds
+  static const Map<String, String> _envLiveSpeechDisplay = {
+    'ambulance': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
+    'fire_truck': 'ගිනි නිවන රථ ශබ්දය (Fire Truck Siren)',
+    'vehicle horns': 'වාහන හෝන් (Vehicle Horn)',
+    'baby crying': 'ළදරුවාගේ හැඬීම (Baby Crying)',
+    'dog_bark_dataset': 'බල්ලා බුරන හඬ (Dog Barking)',
+  };
+
+  // Comprehensive speech recognition patterns for all 8 Sinhala emergency keywords
+  // Covers Sinhala unicode, Romanized spellings, phonetic transcriptions, and English equivalents
+  static const Map<String, List<String>> _sinhalaKeywords = {
+    'sinhala_udaw_': [
+      'udaw', 'udau', 'udav', 'udaaw', 'udaav', 'uda', 'help', 'sos', 'emergency',
+      'wood owl', 'woodowl', 'you dow', 'ooh dow', 'who dow', 'you down', 'u down', 'u dow',
+      'you do', 'who do', 'you dive', 'you dial', 'you dough', 'you know', 'you have',
+      'you doll', 'you dumb', 'you dao', 'out down', 'how do', 'hudaw', 'hudau', 'oo dow',
+      'udo', 'dow', 'dao', 'you d have', 'you d how',
+      'උදව්', 'උදවු', 'උදව්ව', 'උදව් කරන්න', 'උදව්වක්', 'උදව්ක්'
+    ],
+    'sinhala_karadarayak_': [
+      'karadarayak', 'karadara', 'karadarai', 'karadarak', 'karadare', 'karadhara',
+      'kara darayak', 'karadara yak', 'trouble', 'problem', 'distress',
+      'kara da rai', 'kara da rak', 'car the rack', 'cardiac', 'car direct', 'care direct',
+      'color dark', 'car dark', 'color direct', 'current direct', 'character', 'canada act',
+      'car door act', 'corridor act', 'corridor', 'car the act', 'card direct', 'car react',
+      'can direct',
+      'කරදරයක්', 'කරදර', 'කරදරයි', 'කරදරේ', 'කරදරයක්ද'
+    ],
+    'sinhala_anathurak_': [
+      'anathurak', 'anatura', 'anathura', 'anathurai', 'anaturak', 'anaturai', 'anathurac',
+      'anatur', 'anathur', 'anaturu', 'danger', 'warning', 'accident',
+      'another act', 'another track', 'another rock', 'another rack', 'another truck',
+      'another hack', 'another pack', 'another back', 'another app', 'another attack',
+      'a natural act', 'another',
+      'අනතුරක්', 'අනතුර', 'අනතුරයි', 'අනතුරු', 'අනතුරක්ද'
+    ],
+    'sinhala_beraganna_': [
+      'beraganna', 'beeraganna', 'bera ganna', 'beera ganna', 'bcraganna', 'beera',
+      'beragan', 'beeragan', 'beragannako', 'beeragannako', 'beranna',
+      'save me', 'rescue', 'bear gonna', 'bare gonna', 'better gonna', 'beer gonna',
+      'baritone', 'para gonna', 'wear gonna', 'where gonna', 'there gonna', 'care gonna',
+      'fair gonna', 'bear gunner', 'bear gone', 'bare gone',
+      'බේරගන්න', 'බේරාගන්න', 'බේරගන්නකෝ', 'බේරාගන්නකෝ', 'බේරන්න'
+    ],
+    'sinhala_ginnak_': [
+      'ginnak', 'ginna', 'ginak', 'ginnaki', 'ginnac', 'gindara', 'ginnaa',
+      'fire', 'burning', 'blaze', 'gin knock', 'gin nac', 'get knock', 'good knock',
+      'give knock', 'game knock', 'in knock', 'kidnap', 'kin knock', 'key knock',
+      'knock', 'gin',
+      'ගින්නක්', 'ගින්න', 'ගිනි', 'ගිණි', 'ගින්දර', 'ගින්නක්ද'
+    ],
+    'sinhala_balagena_': [
+      'balagena', 'balagenna', 'balaagena', 'bala gena', 'balaganna', 'balang',
+      'balagene', 'bala gone', 'watch out', 'look out', 'caution',
+      'bala gonna', 'ballerina', 'baller gonna', 'body gonna', 'bottle gonna',
+      'by la gonna', 'follow gonna', 'hollow gonna', 'dollar gonna', 'roller gonna',
+      'බලාගෙන', 'බලන්', 'බලාගෙනම', 'බලන්න'
+    ],
+    'sinhala_ehata_wenna_': [
+      'ehata wenna', 'ehaata wenna', 'ehata', 'ehaata', 'ehatawenna', 'ehaatawenna',
+      'move aside', 'clear way', 'get back', 'step aside', 'ehata venna',
+      'a heart a winner', 'a hat a winner', 'hate a winner', 'a heart to winner',
+      'heart to winner', 'hat a winner', 'a hard to winner', 'a hat of winner',
+      'එහාට වෙන්න', 'එහාට', 'අහකට වෙන්න', 'අහකට'
+    ],
+    'sinhala_parissamin_': [
+      'parissamin', 'parissamen', 'parissama', 'parissaming', 'parisamin',
+      'be careful', 'take care', 'safe', 'safety', 'careful',
+      'paris a men', 'paris salmon', 'paris amen', 'paris in', 'paris men',
+      'perry sound', 'paris some', 'paris',
+      'පරිස්සමින්', 'පරිස්සමෙන්', 'පරිස්සම්', 'පරිස්සමට'
+    ],
+  };
+
+  static const Map<String, List<String>> _envKeywords = {
+    'ambulance': ['ambulance', 'siren', 'emergency vehicle', 'ගිලන් රථ', 'ගිලන්රථ'],
+    'fire_truck': ['fire truck', 'fire engine', 'fire brigade', 'ගිනි නිවන'],
+    'vehicle horns': ['horn', 'honk', 'beep', 'car horn', 'vehicle horn', 'හෝන්'],
+    'baby crying': ['baby crying', 'crying', 'baby cry', 'ළදරුවාගේ හැඬීම', 'අඬනවා'],
+    'dog_bark_dataset': ['dog barking', 'barking', 'dog bark', 'බුරනවා', 'බල්ලා'],
+  };
+
+  final Map<String, DateTime> _lastKeywordTriggerTimes = {};
+
+  String _normalizeText(String s) => s
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^\w\s\u0D80-\u0DFF]'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+
+  int _levenshtein(String s1, String s2) {
+    if (s1 == s2) return 0;
+    if (s1.isEmpty) return s2.length;
+    if (s2.isEmpty) return s1.length;
+    List<int> v0 = List<int>.generate(s2.length + 1, (i) => i);
+    List<int> v1 = List<int>.filled(s2.length + 1, 0);
+    for (int i = 0; i < s1.length; i++) {
+      v1[0] = i + 1;
+      for (int j = 0; j < s2.length; j++) {
+        int cost = (s1[i] == s2[j]) ? 0 : 1;
+        v1[j + 1] = math.min(v1[j] + 1, math.min(v0[j + 1] + 1, v0[j] + cost));
+      }
+      for (int j = 0; j < v0.length; j++) {
+        v0[j] = v1[j];
+      }
+    }
+    return v0[s2.length];
+  }
+
+  bool _matchesPattern(String target, String pattern) {
+    if (target == pattern) return true;
+    if (pattern.contains(' ')) {
+      if (target.contains(pattern)) return true;
+    } else {
+      final tokens = target.split(' ');
+      for (final token in tokens) {
+        if (token == pattern) return true;
+        if (pattern.length >= 4 && token.length >= 4) {
+          if (_levenshtein(token, pattern) <= 1) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  void _processSpeechText(String rawText, {List<String> candidates = const []}) {
+    final cleanMain = _normalizeText(rawText);
+    if (cleanMain.isEmpty) return;
+
+    final targets = [cleanMain, ...candidates.map(_normalizeText)]
+        .where((s) => s.isNotEmpty)
+        .toSet()
+        .toList();
+
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+
+    // 1. Check for Sinhala emergency keywords
+    for (final target in targets) {
+      for (final entry in _sinhalaKeywords.entries) {
+        final soundKey = entry.key;
+        for (final pattern in entry.value) {
+          if (_matchesPattern(target, pattern)) {
+            if (nowMs < _keywordLockUntilMs && soundKey != _currentDisplayedKeyword) {
+              return;
+            }
+
+            final previous = _lastKeywordTriggerTimes[soundKey];
+            if (previous != null && nowMs - previous.millisecondsSinceEpoch < 1500) {
+              return;
+            }
+
+            _lastKeywordTriggerTimes[soundKey] = DateTime.fromMillisecondsSinceEpoch(nowMs);
+            _keywordLockUntilMs = nowMs + 2500;
+            _currentDisplayedKeyword = soundKey;
+
+            // Formatted keyword in Live Speech box
+            final displayString = _sinhalaLiveSpeechDisplay[soundKey] ?? rawText;
+            final fullDisplay = (cleanMain.length > 20)
+                ? '$rawText  →  $displayString'
+                : displayString;
+            _transcriptController.add(fullDisplay);
+
+            // Pop up ONLY that matching emergency alert card!
+            unawaited(simulateSoundDetection(soundKey, confidence: 0.99, overrideCooldown: true));
+            return;
+          }
+        }
+      }
+    }
+
+    // 2. Check for Environmental keywords spoken
+    for (final target in targets) {
+      for (final entry in _envKeywords.entries) {
+        final envKey = entry.key;
+        for (final pattern in entry.value) {
+          if (_matchesPattern(target, pattern)) {
+            final lastTime = _lastSoundAlertTimes[envKey];
+            if (lastTime == null || nowMs - lastTime.millisecondsSinceEpoch >= 2500) {
+              _lastSoundAlertTimes[envKey] = DateTime.fromMillisecondsSinceEpoch(nowMs);
+              final display = _envLiveSpeechDisplay[envKey] ?? rawText;
+              _transcriptController.add(display);
+              unawaited(simulateSoundDetection(envKey, confidence: 0.95));
+              return;
+            }
+          }
+        }
+      }
+    }
+
+    // 3. Normal conversational words or sentences:
+    // Displayed in real-time in the Live Speech box with ZERO alert card popups!
+    _transcriptController.add(rawText);
+  }
+
+  Future<void> _startSpeechRecognition() async {
+    try {
+      await _speechSubscription?.cancel();
+      _speechSubscription = _speechEvents.receiveBroadcastStream().listen(
+        (event) {
+          if (!_isListening || event is! Map) return;
+          final type = (event['type'] ?? '').toString();
+          if (type == 'rms') {
+            final double rmsVal =
+                ((event['rms'] as num?)?.toDouble() ?? -2.0);
+            final double vol =
+                (0.20 + (rmsVal.clamp(-2.0, 10.0) / 10.0)).clamp(0.18, 1.0);
+            _updateWaveformVolume(vol);
+          } else if ((type == 'partialResult' || type == 'finalResult')) {
+            final text = (event['text'] ?? '').toString().trim();
+            final candidates = ((event['candidates'] as List?) ?? [])
+                .map((e) => e.toString())
+                .toList();
+            if (text.isNotEmpty) {
+              _processSpeechText(text, candidates: candidates);
+            }
+          }
+        },
+        onError: (_) {},
+        cancelOnError: false,
+      );
+
+      final available =
+          await _speechChannel.invokeMethod<bool>('isAvailable') ?? false;
+      if (available) {
+        await _speechChannel.invokeMethod('startListening');
+      }
+    } catch (_) {}
+  }
 
   Timer? _visualizerTicker;
 
@@ -194,15 +431,13 @@ class AudioClassifierService {
 
     _startVisualizerTicker();
 
-    final started = await _startAudioCapture();
-    if (!started) {
-      _isListening = false;
-      _visualizerTicker?.cancel();
-      _visualizerTicker = null;
-      return false;
-    }
+    // 1. Start Native Android Speech Recognition for live word-by-word Live Speech & Sinhala detection
+    await _startSpeechRecognition();
 
-    _setSttStatus('Listening offline for 8 Sinhala Keywords & Environmental Sounds');
+    // 2. Start hardware audio capture for visualizer & background sound processing
+    await _startAudioCapture();
+
+    _setSttStatus('Listening lively. Say any Sinhala word, sentence, or emergency keyword.');
     return true;
   }
 
@@ -470,6 +705,12 @@ class AudioClassifierService {
     _isListening = false;
     _visualizerTicker?.cancel();
     _visualizerTicker = null;
+    _speechSubscription?.cancel();
+    _speechSubscription = null;
+    try {
+      _speechChannel.invokeMethod('stopListening');
+    } catch (_) {}
+
     _latestSoundVolume = 0.02;
     _waveformController.add([]);
     _currentDisplayedKeyword = null;
