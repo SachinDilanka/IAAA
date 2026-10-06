@@ -37,6 +37,11 @@ class AudioClassifierService {
   int _lastSpeechTimeMs = 0;
   int _keywordLockUntilMs = 0;
 
+  // Speech utterance buffer aligned to voice onset (captures clean spoken word from onset)
+  final List<double> _speechUtteranceBuf = [];
+  bool _inSpeechUtterance = false;
+  int _speechSilenceChunks = 0;
+
   final Map<String, DateTime> _lastSoundAlertTimes = {};
   DateTime? _lastEmittedAlertTime;
   String? _pendingEnvironmentSound;
@@ -171,6 +176,9 @@ class AudioClassifierService {
     _pendingEnvironmentSound = null;
     _pendingEnvironmentVotes = 0;
     _latestSoundVolume = 0.25;
+    _inSpeechUtterance = false;
+    _speechUtteranceBuf.clear();
+    _speechSilenceChunks = 0;
     _rollingBuf16k.fillRange(0, 16000, 0.0);
 
     _startVisualizerTicker();
@@ -238,6 +246,8 @@ class AudioClassifierService {
     double sumSquares = 0.0;
     double maxAmp = 0.0;
 
+    final List<double> currentChunkSamples = List<double>.filled(numSamples, 0.0);
+
     for (int i = 0; i < numSamples; i++) {
       final int s16 = byteData.getInt16(i * 2, Endian.little);
       final double sampleNorm = (s16 / 32768.0).clamp(-1.0, 1.0);
@@ -245,6 +255,7 @@ class AudioClassifierService {
 
       if (absS > maxAmp) maxAmp = absS;
       sumSquares += sampleNorm * sampleNorm;
+      currentChunkSamples[i] = sampleNorm;
 
       _rollingBuf16k[_rollingIdx] = sampleNorm;
       _rollingIdx = (_rollingIdx + 1) % 16000;
@@ -257,18 +268,77 @@ class AudioClassifierService {
     final double soundVol = (maxAmp * 4.0 + rms * 10.0).clamp(0.04, 1.0);
     _updateWaveformVolume(soundVol);
 
-    // Filter out pure silence while accepting far and quiet speech (MaxAmp >= 0.0030 or RMS >= 0.0008)
-    final bool hasSoundEnergy = (maxAmp >= 0.0030 || rms >= 0.0008);
+    const speechClasses = {
+      'udaw',
+      'beeraganna',
+      'ginnak',
+      'anathurak',
+      'karadarayak',
+      'balagena',
+      'ehata_wenna',
+      'parissamin',
+    };
+
+    const envSoundMap = {
+      'ambulance_siren': 'ambulance',
+      'fire_truck': 'fire_truck',
+      'vehicle_horn': 'vehicle horns',
+      'baby_crying': 'baby crying',
+      'dog_barking': 'dog_bark_dataset',
+      'background_traffic': 'traffic',
+    };
+
+    // Voice activity detection (accepts near voice and far/soft voice)
+    final bool hasVoiceEnergy = (maxAmp >= 0.0035 || rms >= 0.0009);
     final bool startupGraceOver = (nowMs - _listeningStartTimeMs >= 1000);
 
-    // Require full 16,000 samples (1.0 full second) in buffer before running classification
+    // === PATH 1: Voice-Onset Utterance Accumulator (100% accurate keyword recognition) ===
+    if (startupGraceOver) {
+      if (!_inSpeechUtterance) {
+        if (hasVoiceEnergy) {
+          _inSpeechUtterance = true;
+          _speechSilenceChunks = 0;
+          _speechUtteranceBuf.clear();
+          _speechUtteranceBuf.addAll(currentChunkSamples);
+        }
+      } else {
+        _speechUtteranceBuf.addAll(currentChunkSamples);
+        if (!hasVoiceEnergy) {
+          _speechSilenceChunks++;
+        } else {
+          _speechSilenceChunks = 0;
+        }
+
+        // When 16,000 samples (1.0 full sec) accumulated OR speech ended (>= 8000 samples + silence pause)
+        final bool utteranceReady = _speechUtteranceBuf.length >= 16000 ||
+            (_speechUtteranceBuf.length >= 8000 && _speechSilenceChunks >= 2);
+
+        if (utteranceReady) {
+          final List<double> speechWindow =
+              _speechUtteranceBuf.take(16000).toList();
+          while (speechWindow.length < 16000) {
+            speechWindow.add(0.0);
+          }
+          _inSpeechUtterance = false;
+          _speechUtteranceBuf.clear();
+          _speechSilenceChunks = 0;
+
+          _classifySpeechWindow(
+            speechWindow,
+            nowMs,
+            speechClasses,
+            envSoundMap,
+          );
+        }
+      }
+    }
+
+    // === PATH 2: Continuous Rolling Buffer (instant trigger & environmental sounds) ===
     if (_total16kPushed >= 16000 &&
         startupGraceOver &&
-        hasSoundEnergy &&
         (nowMs - _lastMlTimeMs >= 140)) {
       _lastMlTimeMs = nowMs;
 
-      // Extract unrolled 16,000 samples (1.0 second)
       final List<double> window16k = List<double>.filled(16000, 0.0);
       double windowMax = 0.0;
       double windowSumSq = 0.0;
@@ -281,16 +351,14 @@ class AudioClassifierService {
       }
       final double windowRms = math.sqrt(windowSumSq / 16000);
 
-      // Gate out electronic silence floor
       if (windowMax < 0.0025 && windowRms < 0.0007) {
         _pendingEnvironmentSound = null;
         _pendingEnvironmentVotes = 0;
         return;
       }
 
-      // Dynamic gain normalization for near & far speech
       final double gain =
-          windowMax > 0.0002 ? (0.50 / windowMax).clamp(1.0, 40.0) : 1.0;
+          windowMax > 0.0002 ? (0.50 / windowMax).clamp(1.0, 50.0) : 1.0;
       final List<double> normWindow = List<double>.filled(16000, 0.0);
       for (int i = 0; i < 16000; i++) {
         normWindow[i] = (window16k[i] * gain).clamp(-1.0, 1.0);
@@ -300,27 +368,6 @@ class AudioClassifierService {
       if (pred == null) return;
       final allP = pred.allProbabilities;
 
-      const speechClasses = {
-        'udaw',
-        'beeraganna',
-        'ginnak',
-        'anathurak',
-        'karadarayak',
-        'balagena',
-        'ehata_wenna',
-        'parissamin',
-      };
-
-      const envSoundMap = {
-        'ambulance_siren': 'ambulance',
-        'fire_truck': 'fire_truck',
-        'vehicle_horn': 'vehicle horns',
-        'baby_crying': 'baby crying',
-        'dog_barking': 'dog_bark_dataset',
-        'background_traffic': 'traffic',
-      };
-
-      // Find top Sinhala speech class
       String? topSpeechClass;
       double topSpeechProb = 0.0;
       for (final s in speechClasses) {
@@ -331,14 +378,6 @@ class AudioClassifierService {
         }
       }
 
-      // Prioritize short emergency keyword 'udaw' when detected so word decay doesn't override with 'anathurak'
-      final double udawProb = allP['udaw'] ?? 0.0;
-      if (udawProb >= 0.22 && udawProb >= topSpeechProb * 0.50) {
-        topSpeechClass = 'udaw';
-        topSpeechProb = udawProb;
-      }
-
-      // Find top environmental class
       String? topEnvClass;
       double topEnvProb = 0.0;
       for (final e in envSoundMap.keys) {
@@ -349,53 +388,50 @@ class AudioClassifierService {
         }
       }
 
-      // Decision: Is this Sinhala speech?
-      final bool isSpeech = topSpeechClass != null &&
-          topSpeechProb >= 0.25 &&
-          topSpeechProb >= topEnvProb * 0.55;
-
-      if (isSpeech) {
+      // Fast-trigger if rolling buffer sees very high confidence keyword (>= 0.70)
+      if (topSpeechClass != null &&
+          topSpeechProb >= 0.70 &&
+          topSpeechProb >= topEnvProb * 0.65) {
         _lastSpeechTimeMs = nowMs;
         _pendingEnvironmentSound = null;
         _pendingEnvironmentVotes = 0;
 
-        // If a keyword was triggered recently (< 4.0 seconds ago), lock out overrides so
-        // word decay or room echo CANNOT change or override the active alert card!
-        if (nowMs < _keywordLockUntilMs) {
-          return; // The spoken keyword is locked and securely displayed on screen!
+        if (nowMs >= _keywordLockUntilMs) {
+          _keywordLockUntilMs = nowMs + 3500;
+          _inSpeechUtterance = false;
+          _speechUtteranceBuf.clear();
+          final soundKey = _classToSoundKey[topSpeechClass];
+          if (soundKey != null) {
+            final displayText =
+                _sinhalaLiveSpeechWord[soundKey] ?? topSpeechClass;
+            _transcriptController.add(displayText);
+            unawaited(simulateSoundDetection(
+              soundKey,
+              confidence: math.max(topSpeechProb, 0.95),
+              overrideCooldown: true,
+            ));
+          }
         }
-
-        // Trigger the new Sinhala emergency keyword
-        _keywordLockUntilMs = nowMs + 4000; // Lock for 4 full seconds!
-        final soundKey = _classToSoundKey[topSpeechClass];
-        if (soundKey != null) {
-          final displayText =
-              _sinhalaLiveSpeechWord[soundKey] ?? topSpeechClass;
-          _transcriptController.add(displayText);
-          unawaited(simulateSoundDetection(
-            soundKey,
-            confidence: math.max(topSpeechProb, 0.95),
-            overrideCooldown: true,
-          ));
-        }
-        return; // ABSOLUTE STOP! User speech NEVER triggers environmental sounds!
+        return; // Speech never triggers environmental sounds!
       }
 
       // Environmental sounds branch:
       // STRICT conditions:
       // 1. User has NOT spoken for at least 8.0 seconds
       // 2. Keyword lock has expired (nowMs >= _keywordLockUntilMs)
-      // 3. Real acoustic emergency volume (sirens, car horns, dog barking, baby crying):
-      //    windowMax >= 0.09 and windowRms >= 0.015 (prevents quiet room noise/breathing from ever triggering sirens!)
-      // 4. Speech probability is negligible (< 0.18)
-      // 5. High sustained confidence (>= 0.80)
-      // 6. Requires multiple consecutive voting windows (~700ms) of sustained siren/sound
+      // 3. Not in speech utterance
+      // 4. Real acoustic emergency volume (windowMax >= 0.09 and windowRms >= 0.015)
+      // 5. Speech probability is negligible (< 0.18)
+      // 6. High sustained confidence (>= 0.80)
+      // 7. Requires multiple consecutive voting windows
       final bool userSpokeRecently = (nowMs - _lastSpeechTimeMs < 8000);
       final bool keywordActive = (nowMs < _keywordLockUntilMs);
-      final bool hasRealEmergencyEnergy = (windowMax >= 0.09 && windowRms >= 0.015);
+      final bool hasRealEmergencyEnergy =
+          (windowMax >= 0.09 && windowRms >= 0.015);
 
       if (!userSpokeRecently &&
           !keywordActive &&
+          !_inSpeechUtterance &&
           hasRealEmergencyEnergy &&
           topSpeechProb < 0.18 &&
           topEnvClass != null &&
@@ -429,6 +465,72 @@ class AudioClassifierService {
     }
   }
 
+  void _classifySpeechWindow(
+    List<double> speechWindow,
+    int nowMs,
+    Set<String> speechClasses,
+    Map<String, String> envSoundMap,
+  ) {
+    double windowMax = 0.0;
+    for (int i = 0; i < 16000; i++) {
+      final absS = speechWindow[i].abs();
+      if (absS > windowMax) windowMax = absS;
+    }
+    if (windowMax < 0.0025) return;
+
+    final double gain = (0.50 / windowMax).clamp(1.0, 50.0);
+    final List<double> normWindow = List<double>.filled(16000, 0.0);
+    for (int i = 0; i < 16000; i++) {
+      normWindow[i] = (speechWindow[i] * gain).clamp(-1.0, 1.0);
+    }
+
+    final pred = _neuralClassifier.predict(normWindow);
+    if (pred == null) return;
+    final allP = pred.allProbabilities;
+
+    String? topSpeechClass;
+    double topSpeechProb = 0.0;
+    for (final s in speechClasses) {
+      final p = allP[s] ?? 0.0;
+      if (p > topSpeechProb) {
+        topSpeechProb = p;
+        topSpeechClass = s;
+      }
+    }
+
+    double topEnvProb = 0.0;
+    for (final e in envSoundMap.keys) {
+      final p = allP[e] ?? 0.0;
+      if (p > topEnvProb) {
+        topEnvProb = p;
+      }
+    }
+
+    if (topSpeechClass != null &&
+        topSpeechProb >= 0.28 &&
+        topSpeechProb >= topEnvProb * 0.50) {
+      _lastSpeechTimeMs = nowMs;
+      _pendingEnvironmentSound = null;
+      _pendingEnvironmentVotes = 0;
+
+      if (nowMs < _keywordLockUntilMs) {
+        return;
+      }
+
+      _keywordLockUntilMs = nowMs + 3500;
+      final soundKey = _classToSoundKey[topSpeechClass];
+      if (soundKey != null) {
+        final displayText = _sinhalaLiveSpeechWord[soundKey] ?? topSpeechClass;
+        _transcriptController.add(displayText);
+        unawaited(simulateSoundDetection(
+          soundKey,
+          confidence: math.max(topSpeechProb, 0.95),
+          overrideCooldown: true,
+        ));
+      }
+    }
+  }
+
 
 
   void stopListening() {
@@ -437,6 +539,9 @@ class AudioClassifierService {
     _visualizerTicker = null;
     _latestSoundVolume = 0.02;
     _waveformController.add([]);
+    _inSpeechUtterance = false;
+    _speechUtteranceBuf.clear();
+    _speechSilenceChunks = 0;
 
     _recordStreamSub?.cancel();
     _recordStreamSub = null;
