@@ -246,10 +246,10 @@ class AudioClassifierService {
 
     final nowMs = DateTime.now().millisecondsSinceEpoch;
 
-    // Do NOT start acoustic mic sampling during speech or within 800ms of speech.
+    // Do NOT start acoustic mic sampling during speech or within 1200ms of speech.
     // This gives SpeechRecognizer 100% full, zero-latency mic access for instant Live Speech display
     // and prevents human speech from being sampled into the environmental sound classifier!
-    if (nowMs - _lastSpeechTimeMs < 800) {
+    if (nowMs - _lastSpeechTimeMs < 1200) {
       _highVolumeStartTimeMs = 0;
       return;
     }
@@ -333,27 +333,22 @@ class AudioClassifierService {
             }
 
             // If the acoustic sample contains speech or a Sinhala word, NEVER trigger an environmental sound card!
-            if (speechProb >= 0.20 || mappedKey.startsWith('sinhala_')) {
+            if (speechProb >= 0.15 || mappedKey.startsWith('sinhala_')) {
               return;
             }
 
             final double dogProb = pred.allProbabilities['dog_barking'] ?? 0.0;
             final double babyProb = pred.allProbabilities['baby_crying'] ?? 0.0;
 
-            // Confident environmental sound detections (>= 0.60):
-            if (dogProb >= 0.60 && math.max(dogProb, topProb) >= 0.60) {
-              simulateSoundDetection('dog_bark_dataset', confidence: math.max(dogProb, topProb), overrideCooldown: true);
-              return;
-            }
-
-            if (babyProb >= 0.60 && math.max(babyProb, topProb) >= 0.60) {
-              simulateSoundDetection('baby crying', confidence: math.max(babyProb, topProb), overrideCooldown: true);
-              return;
-            }
-
-            if (mappedKey == 'traffic' || topLabel == 'background_traffic') {
-              if (topProb >= 0.60) {
-                simulateSoundDetection('traffic', confidence: topProb, overrideCooldown: true);
+            // Only trigger the exact matching environmental sound when played/heard:
+            if (mappedKey == 'dog_bark_dataset' || topLabel == 'dog_barking') {
+              if (math.max(dogProb, topProb) >= 0.60) {
+                simulateSoundDetection('dog_bark_dataset', confidence: math.max(dogProb, topProb), overrideCooldown: true);
+                return;
+              }
+            } else if (mappedKey == 'baby crying' || topLabel == 'baby_crying') {
+              if (math.max(babyProb, topProb) >= 0.60) {
+                simulateSoundDetection('baby crying', confidence: math.max(babyProb, topProb), overrideCooldown: true);
                 return;
               }
             } else if (mappedKey == 'ambulance' || topLabel == 'ambulance_siren') {
@@ -364,6 +359,11 @@ class AudioClassifierService {
             } else if (mappedKey == 'vehicle horns' || topLabel == 'vehicle_horn') {
               if (topProb >= 0.60) {
                 simulateSoundDetection('vehicle horns', confidence: topProb, overrideCooldown: true);
+                return;
+              }
+            } else if (mappedKey == 'traffic' || topLabel == 'background_traffic') {
+              if (topProb >= 0.60) {
+                simulateSoundDetection('traffic', confidence: topProb, overrideCooldown: true);
                 return;
               }
             }
@@ -403,10 +403,12 @@ class AudioClassifierService {
     if (_isListening) return true;
 
     try {
-      await [
-        Permission.microphone,
-        Permission.notification,
-      ].request();
+      if (!await Permission.microphone.isGranted) {
+        await [
+          Permission.microphone,
+          Permission.notification,
+        ].request();
+      }
     } catch (_) {}
 
     _isListening = true;
@@ -634,55 +636,6 @@ class AudioClassifierService {
       'parissamen': 'පරිස්සමින් (Parissamin - Be Careful)',
       'careful': 'පරිස්සමින් (Parissamin - Be Careful)',
       'take care': 'පරිස්සමින් (Parissamin - Be Careful)',
-
-      // Environmental Sounds & Audio Imitations
-      'wee-ow': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
-      'weeow': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
-      'nee-naw': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
-      'neenaw': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
-      'siren': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
-      'ambulance': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
-      'සයිරන්': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
-      'ගිලන්': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
-
-      'woof-woof': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
-      'woofwoof': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
-      'woof': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
-      'arf-arf': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
-      'ruff-ruff': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
-      'bark': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
-      'barking': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
-      'බල්ලා': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
-      'බුරනවා': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
-      'බුරන': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
-
-      'waa-waa': 'ළදරු හැඬීම (Baby Crying)',
-      'waawaa': 'ළදරු හැඬීම (Baby Crying)',
-      'wah-wah': 'ළදරු හැඬීම (Baby Crying)',
-      'wahwah': 'ළදරු හැඬීම (Baby Crying)',
-      'waa': 'ළදරු හැඬීම (Baby Crying)',
-      'wah': 'ළදරු හැඬීම (Baby Crying)',
-      'crying': 'ළදරු හැඬීම (Baby Crying)',
-      'cry': 'ළදරු හැඬීම (Baby Crying)',
-      'ළදරු': 'ළදරු හැඬීම (Baby Crying)',
-      'හැඬීම': 'ළදරු හැඬීම (Baby Crying)',
-      'අඬනවා': 'ළදරු හැඬීම (Baby Crying)',
-
-      'beep-beep': 'වාහන හොන් (Vehicle Horns)',
-      'beepbeep': 'වාහන හොන් (Vehicle Horns)',
-      'honk-honk': 'වාහන හොන් (Vehicle Horns)',
-      'honkhonk': 'වාහන හොන් (Vehicle Horns)',
-      'beep': 'වාහන හොන් (Vehicle Horns)',
-      'honk': 'වාහන හොන් (Vehicle Horns)',
-      'horn': 'වාහන හොන් (Vehicle Horns)',
-      'හොන්': 'වාහන හොන් (Vehicle Horns)',
-      'පීප්': 'වාහන හොන් (Vehicle Horns)',
-
-      'traffic': 'වාහන තදබදය (Traffic Noise)',
-      'vroom': 'වාහන තදබදය (Traffic Noise)',
-      'rumble': 'වාහන තදබදය (Traffic Noise)',
-      'තදබදය': 'වාහන තදබදය (Traffic Noise)',
-      'වාහන': 'වාහන තදබදය (Traffic Noise)',
     };
 
     for (var entry in wordToSinhala.entries) {
@@ -738,25 +691,6 @@ class AudioClassifierService {
       'sinhala_parissamin_': [
         'parissamin', 'parisamin', 'parissamen', 'parisamen', 'parissam', 'parisam', 'be careful', 'take care',
         'පරිස්සමින්', 'පරිස්සමෙන්', 'පරිසමින්', 'පරිස්සම්'
-      ],
-      'ambulance': [
-        'wee-ow', 'weeow', 'wee ow', 'nee-naw', 'neenaw', 'nee naw', 'siren', 'sirens', 'ambulance', 'ambulance siren', 'wee oo', 'weeoo', 'wail', 'wailing', 'wee', 'ow', 'naw',
-        'සයිරන්', 'ගිලන්', 'වී ඕ', 'වීඕ', 'නි නෝ', 'නිනෝ', 'සයිරන් එක', 'ගිලන් රථ'
-      ],
-      'dog_bark_dataset': [
-        'woof-woof', 'woofwoof', 'woof woof', 'arf-arf', 'arfarf', 'arf arf', 'ruff-ruff', 'ruffruff', 'ruff ruff', 'woof', 'woofs', 'arf', 'ruff', 'bark', 'barks', 'barking', 'dog', 'dogs', 'dog barking', 'dog bark', 'yap', 'yapping', 'bow bow', 'bau bau', 'bow', 'bau',
-        'බල්ලා', 'බුරනවා', 'බුරන', 'වුෆ්', 'වුෆ් වුෆ්', 'බෝ', 'බෝ බෝ', 'බල්ලන්', 'බල්ලා බුරනවා'
-      ],
-      'baby crying': [
-        'waa-waa', 'waawaa', 'waa waa', 'wah-wah', 'wahwah', 'wah wah', 'waa', 'wah', 'cry', 'crying', 'cries', 'baby', 'babies', 'baby crying', 'baby cry', 'weeping', 'screaming', 'whine', 'whining',
-        'ළදරු', 'හැඬීම', 'අඬනවා', 'අඬන', 'වා', 'වා වා', 'වහ්', 'බබා', 'ළමයා', 'ළදරු හැඬීම'
-      ],
-      'vehicle horns': [
-        'beep-beep', 'beepbeep', 'beep beep', 'honk-honk', 'honkhonk', 'honk honk', 'honk', 'honks', 'honking', 'beep', 'beeps', 'beeping', 'toot', 'pip', 'piip', 'car horn', 'vehicle horn', 'horn sound', 'horn', 'horns',
-        'හොන්', 'පීප්', 'බීප්', 'බීප් බීප්', 'හොන් එක', 'නාලාව', 'වාහන හොන්'
-      ],
-      'traffic': [
-        'traffic', 'traffic noise', 'road noise', 'car noise', 'vroom', 'rumble', 'street noise', 'highway', 'vehicles', 'තදබදය', 'වාහන', 'පාරේ'
       ],
     };
 
