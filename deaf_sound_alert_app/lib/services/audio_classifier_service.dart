@@ -207,7 +207,6 @@ class AudioClassifierService {
       await _speech.listen(
         onResult: (result) {
           if (!_isListening) return;
-          _highVolumeStartTimeMs = 0; // Reset acoustic timer immediately when speech is detected
           final String rawWords = result.recognizedWords.trim();
           if (rawWords.isNotEmpty) {
             _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
@@ -223,10 +222,10 @@ class AudioClassifierService {
           _checkAcousticAudioSampleNeeded(soundVol);
         },
         listenOptions: stt.SpeechListenOptions(
-          listenMode: stt.ListenMode.deviceDefault,
+          listenMode: stt.ListenMode.dictation,
           partialResults: true,
           cancelOnError: false,
-          pauseFor: const Duration(seconds: 3),
+          pauseFor: const Duration(seconds: 4),
           listenFor: const Duration(hours: 1),
         ),
         localeId: targetLocale,
@@ -246,13 +245,12 @@ class AudioClassifierService {
 
     final nowMs = DateTime.now().millisecondsSinceEpoch;
 
-    // Fast acoustic sound level detected (> 0.35)
-    // Sample environmental sounds quickly once sound is continuous for >= 500ms and no speech in last 1.5s
-    // (500ms is longer than a single spoken Sinhala word, so speech recognition is never interrupted)
-    if (soundVol >= 0.35) {
+    // Parallel acoustic sound level detected (> 0.30)
+    // Quickly samples environmental sounds in parallel after 250ms of sound without blocking speech
+    if (soundVol >= 0.30) {
       if (_highVolumeStartTimeMs == 0) {
         _highVolumeStartTimeMs = nowMs;
-      } else if (nowMs - _highVolumeStartTimeMs >= 500 && nowMs - _lastSpeechTimeMs >= 1500) {
+      } else if (nowMs - _highVolumeStartTimeMs >= 250) {
         _triggerAcousticNeuralSample();
       }
     } else {
@@ -266,10 +264,6 @@ class AudioClassifierService {
     _highVolumeStartTimeMs = 0;
 
     try {
-      if (_speech.isListening) {
-        await _speech.stop();
-      }
-
       final AudioRecorder sampleRecorder = AudioRecorder();
       if (await sampleRecorder.hasPermission()) {
         final stream = await sampleRecorder.startStream(
@@ -293,7 +287,7 @@ class AudioClassifierService {
             return val / 32768.0;
           });
           sampledPcm.addAll(samples);
-          if (sampledPcm.length >= 8000) {
+          if (sampledPcm.length >= 6400) {
             if (!sampleCompleter.isCompleted) sampleCompleter.complete();
           }
         }, onError: (_) {
@@ -301,7 +295,7 @@ class AudioClassifierService {
         });
 
         await sampleCompleter.future.timeout(
-          const Duration(milliseconds: 500),
+          const Duration(milliseconds: 400),
           onTimeout: () {},
         );
 
@@ -353,9 +347,6 @@ class AudioClassifierService {
       print('Acoustic neural sampling error: $e');
     } finally {
       _isSamplingAcousticPCM = false;
-      if (_isListening && !_speech.isListening && !_isRestartingStt) {
-        _safeListenSpeech();
-      }
     }
   }
 
