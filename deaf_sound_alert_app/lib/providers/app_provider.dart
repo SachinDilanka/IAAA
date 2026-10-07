@@ -59,6 +59,11 @@ class AppProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setFlashlightEnabled(bool enabled) async {
+    await FlashlightService().setEnabled(enabled);
+    notifyListeners();
+  }
+
   Future<void> toggleListening() async {
     _lastDetectedSound = null;
     _currentTranscript = "";
@@ -72,14 +77,8 @@ class AppProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setFlashlightEnabled(bool enabled) async {
-    await FlashlightService().setEnabled(enabled);
-    notifyListeners();
-  }
-
   void dismissLastSound() {
     _lastDetectedSound = null;
-    FlashlightService().cancelFlashlight();
     notifyListeners();
   }
 
