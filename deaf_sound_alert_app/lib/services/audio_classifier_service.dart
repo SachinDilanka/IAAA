@@ -50,7 +50,9 @@ class AudioClassifierService {
   Stream<String> get onTranscriptUpdated => _transcriptController.stream;
 
   final Map<String, String> _labelToSoundKey = {
-    'ambulance_siren': 'ambulance',
+    'siren': 'siren',
+    'siren_sound': 'siren',
+    'ambulance_siren': 'siren',
     'ambulance': 'ambulance',
     'vehicle_horn': 'vehicle horns',
     'vehicle horns': 'vehicle horns',
@@ -99,6 +101,7 @@ class AudioClassifierService {
     'sinhala_balagena_': 'බලාගෙන (Balaagena - Watch Out)',
     'sinhala_ehata_wenna_': 'එහාට වෙන්න (Ehata Wenna - Move Aside)',
     'sinhala_parissamin_': 'පරිස්සමින් (Parissamin - Be Careful)',
+    'siren': 'සයිරන් ශබ්දය (Siren Sound)',
     'ambulance': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
     'fire_truck': 'ගිනි අනතුරු ඇඟවීම / ගිනි නිවන රථය (Fire Alarm / Siren)',
     'baby crying': 'ළදරු හැඬීම (Baby Crying)',
@@ -496,12 +499,13 @@ class AudioClassifierService {
               }
             }
 
-            // Ambulance Siren
-            if (mappedKey == 'ambulance' || topLabel == 'ambulance_siren') {
+            // Siren Sound / Ambulance Siren
+            if (mappedKey == 'siren' || mappedKey == 'ambulance' || topLabel == 'ambulance_siren') {
               if (topProb >= 0.70 && (rms >= 0.018 || maxAmp >= 0.045)) {
-                final String displayName = _displayNames['ambulance'] ?? 'Ambulance Siren';
+                final String targetKey = SoundConfigService().getConfig('siren')?.isEnabled == true ? 'siren' : 'ambulance';
+                final String displayName = _displayNames[targetKey] ?? 'Siren Sound';
                 _transcriptController.add(displayName);
-                simulateSoundDetection('ambulance', confidence: topProb);
+                simulateSoundDetection(targetKey, confidence: topProb);
                 return;
               }
             }

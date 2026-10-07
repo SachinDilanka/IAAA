@@ -40,6 +40,9 @@ extension PriorityLevelExtension on PriorityLevel {
 extension DetectedSoundIconExtension on DetectedSound {
   IconData get soundIcon {
     switch (soundKey) {
+      case 'siren':
+      case 'siren_sound':
+        return Icons.notifications_active_rounded;
       case 'ambulance':
         return Icons.emergency_rounded;
       case 'fire_truck':
