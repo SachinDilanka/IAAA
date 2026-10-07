@@ -1,8 +1,6 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'dart:math' as math;
 import 'package:permission_handler/permission_handler.dart';
-import 'package:record/record.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:audio_streamer/audio_streamer.dart';
 import '../models/detected_sound.dart';
@@ -39,10 +37,8 @@ class AudioClassifierService {
   int _lastMlTimeMs = 0;
   int _listeningStartTimeMs = 0;
   int _lastSpeechTimeMs = 0;
-  DateTime? _lastGlobalAlertTime;
 
   final Map<String, DateTime> _lastKeywordTriggerTimes = {};
-  final Map<String, DateTime> _classCooldown = {};
 
   final _controller = StreamController<DetectedSound>.broadcast();
   final _waveformController = StreamController<List<double>>.broadcast();
@@ -89,9 +85,6 @@ class AudioClassifierService {
     'parissamin': 'sinhala_parissamin_',
     'sinhala_parissamin_': 'sinhala_parissamin_',
   };
-
-  int _lastSpeechAlertTimeMs = 0;
-  String? _activeSpeechAlertKey;
 
   final Map<String, String> _displayNames = {
     'sinhala_udaw_': 'උදව් (Udaw - Help)',
@@ -229,9 +222,6 @@ class AudioClassifierService {
         },
         onSoundLevelChange: (level) {
           if (!_isListening) return;
-          if (level > -8.0) {
-            _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
-          }
           double soundVol = (0.25 + (level.clamp(-2.0, 10.0) / 10.0)).clamp(0.18, 1.0);
           _updateWaveformVolume(soundVol);
         },
@@ -461,8 +451,8 @@ class AudioClassifierService {
             totalSpeechProb += (pred.allProbabilities[sc] ?? 0.0);
           }
 
-          // Whenever speech energy/probability is detected (far or near), update speech active timestamp
-          if (totalSpeechProb >= 0.06 || mappedKey.startsWith('sinhala_')) {
+          // Only update speech active timestamp when a Sinhala keyword prediction is confident
+          if (mappedKey.startsWith('sinhala_') && topProb >= 0.60) {
             _lastSpeechTimeMs = nowMs;
           }
 
@@ -482,8 +472,6 @@ class AudioClassifierService {
                 return;
               }
               _lastKeywordTriggerTimes[mappedKey] = DateTime.fromMillisecondsSinceEpoch(nowMs);
-              _lastSpeechAlertTimeMs = nowMs;
-              _activeSpeechAlertKey = mappedKey;
 
               final String displayName = _displayNames[mappedKey] ?? mappedKey;
               _transcriptController.add(displayName);
@@ -494,13 +482,13 @@ class AudioClassifierService {
           }
 
           // 2. ENVIRONMENTAL SOUNDS (Fire Truck, Dog Barking, Baby Crying, Ambulance Siren, Vehicle Horns, Traffic Noise)
-          // Environmental sounds evaluate ONLY when speech has been idle for >= 3000ms AND totalSpeechProb < 0.05
-          final bool isSpeechIdle = (nowMs - _lastSpeechTimeMs >= 3000);
+          // Environmental sounds evaluate promptly without speech delay gating
+          final bool isSpeechIdle = (nowMs - _lastSpeechTimeMs >= 800);
 
-          if (isSpeechIdle && totalSpeechProb < 0.05) {
+          if (isSpeechIdle && totalSpeechProb < 0.25) {
             // Vehicle Horns
             if (mappedKey == 'vehicle horns' || topLabel == 'vehicle_horn') {
-              if (topProb >= 0.75 && (rms >= 0.025 || maxAmp >= 0.060)) {
+              if (topProb >= 0.65 && (rms >= 0.015 || maxAmp >= 0.040)) {
                 final String displayName = _displayNames['vehicle horns'] ?? 'Vehicle Horns';
                 _transcriptController.add(displayName);
                 simulateSoundDetection('vehicle horns', confidence: topProb);
@@ -510,7 +498,7 @@ class AudioClassifierService {
 
             // Ambulance Siren
             if (mappedKey == 'ambulance' || topLabel == 'ambulance_siren') {
-              if (topProb >= 0.75 && (rms >= 0.025 || maxAmp >= 0.060)) {
+              if (topProb >= 0.65 && (rms >= 0.015 || maxAmp >= 0.040)) {
                 final String displayName = _displayNames['ambulance'] ?? 'Ambulance Siren';
                 _transcriptController.add(displayName);
                 simulateSoundDetection('ambulance', confidence: topProb);
@@ -520,7 +508,7 @@ class AudioClassifierService {
 
             // Fire Truck Siren / Fire Alarm
             if (mappedKey == 'fire_truck' || topLabel == 'fire_truck' || topLabel == 'fire_alarm') {
-              if (topProb >= 0.70 && (rms >= 0.020 || maxAmp >= 0.050)) {
+              if (topProb >= 0.65 && (rms >= 0.015 || maxAmp >= 0.040)) {
                 final String displayName = _displayNames['fire_truck'] ?? 'Fire Alarm / Siren';
                 _transcriptController.add(displayName);
                 simulateSoundDetection('fire_truck', confidence: topProb);
@@ -529,8 +517,8 @@ class AudioClassifierService {
             }
 
             // Dog Barking
-            if (mappedKey == 'dog_bark_dataset' || dogProb >= 0.75) {
-              if (math.max(dogProb, topProb) >= 0.75 && (rms >= 0.025 || maxAmp >= 0.060)) {
+            if (mappedKey == 'dog_bark_dataset' || dogProb >= 0.65) {
+              if (math.max(dogProb, topProb) >= 0.65 && (rms >= 0.015 || maxAmp >= 0.040)) {
                 final String displayName = _displayNames['dog_bark_dataset'] ?? 'Dog Barking';
                 _transcriptController.add(displayName);
                 simulateSoundDetection('dog_bark_dataset', confidence: math.max(dogProb, topProb));
@@ -539,8 +527,8 @@ class AudioClassifierService {
             }
 
             // Baby Crying
-            if (mappedKey == 'baby crying' || babyProb >= 0.75) {
-              if (math.max(babyProb, topProb) >= 0.75 && (rms >= 0.025 || maxAmp >= 0.060)) {
+            if (mappedKey == 'baby crying' || babyProb >= 0.65) {
+              if (math.max(babyProb, topProb) >= 0.65 && (rms >= 0.015 || maxAmp >= 0.040)) {
                 final String displayName = _displayNames['baby crying'] ?? 'Baby Crying';
                 _transcriptController.add(displayName);
                 simulateSoundDetection('baby crying', confidence: math.max(babyProb, topProb));
@@ -550,7 +538,7 @@ class AudioClassifierService {
 
             // Traffic Noise
             if (mappedKey == 'traffic' || topLabel == 'background_traffic') {
-              if (topProb >= 0.65 && (rms >= 0.020 || maxAmp >= 0.045)) {
+              if (topProb >= 0.65 && (rms >= 0.018 || maxAmp >= 0.040)) {
                 final String displayName = _displayNames['traffic'] ?? 'Traffic Noise';
                 _transcriptController.add(displayName);
                 simulateSoundDetection('traffic', confidence: topProb);
@@ -750,10 +738,7 @@ class AudioClassifierService {
             return;
           }
           _lastKeywordTriggerTimes[key] = now;
-          _lastGlobalAlertTime = now;
           _lastSpeechTimeMs = now.millisecondsSinceEpoch;
-          _lastSpeechAlertTimeMs = now.millisecondsSinceEpoch;
-          _activeSpeechAlertKey = key;
           final String displayName = _displayNames[key] ?? key;
           _transcriptController.add(displayName);
           simulateSoundDetection(key, confidence: 0.99, overrideCooldown: true);
