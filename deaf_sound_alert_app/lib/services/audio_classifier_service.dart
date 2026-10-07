@@ -504,8 +504,22 @@ class AudioClassifierService {
         return;
       }
 
-      // Smooth AGC for both near and far voice detection (boost soft/far speech cleanly)
-      final double gain = (0.55 / (windowMax + 1e-4)).clamp(1.0, 12.0);
+      // 1. Noise floor / silence gate: if room is quiet or low ambient noise, do not amplify or trigger
+      if (windowMax < 0.045 && rms < 0.010) {
+        if (_speechFramesCount > 0) {
+          _speechSilenceFrames++;
+          if (_speechSilenceFrames >= 2) {
+            _checkAndTriggerOffsetSpeech(nowMs);
+          }
+        } else {
+          _pendingEnvClass = null;
+          _pendingEnvVotes = 0;
+        }
+        return;
+      }
+
+      // Smooth AGC: only boost active signals, up to 4.0x (prevents amplifying room hiss into fake alerts)
+      final double gain = (windowMax >= 0.04) ? (0.55 / windowMax).clamp(1.0, 4.0) : 1.0;
       final List<double> normWindow = List<double>.filled(16000, 0.0);
       for (int i = 0; i < 16000; i++) {
         normWindow[i] = (window16k[i] * gain).clamp(-1.0, 1.0);
@@ -537,12 +551,41 @@ class AudioClassifierService {
 
       final double totalSpeechProb =
           speechClasses.fold(0.0, (sum, c) => sum + (allP[c] ?? 0.0));
-
-      // === 1. ENVIRONMENTAL EMERGENCY SOUNDS (Baby Crying, Ambulance, Fire Truck, Horn, Dog Barking) ===
       final double bgTrafficProb = allP['background_traffic'] ?? 0.0;
+
+      // === 1. ENVIRONMENTAL EMERGENCY SOUNDS (Baby Crying, Dog Barking, Vehicle Horn, Fire Truck, Ambulance, Traffic) ===
+      // Traffic noises: loud continuous traffic sound
+      if (windowMax >= 0.20 && rms >= 0.035 && bgTrafficProb >= 0.85 && totalSpeechProb < 0.15) {
+        final lastAlert = _lastSoundAlertTimes['traffic'];
+        final bool cooldownPassed = lastAlert == null ||
+            nowMs - lastAlert.millisecondsSinceEpoch >= 2500;
+
+        if (_pendingEnvClass == 'traffic') {
+          _pendingEnvVotes++;
+        } else {
+          _pendingEnvClass = 'traffic';
+          _pendingEnvVotes = 1;
+        }
+
+        if (cooldownPassed && _pendingEnvVotes >= 4) {
+          _lastSoundAlertTimes['traffic'] = DateTime.fromMillisecondsSinceEpoch(nowMs);
+          _keywordLockUntilMs = nowMs + 2000;
+          _pendingEnvVotes = 0;
+          _pendingEnvClass = null;
+          _resetSpeechAccumulator();
+
+          final envDisplay = _envLiveSpeechDisplay['traffic'] ?? 'traffic noise  →  වාහන තදබදය (Traffic Noise)';
+          _transcriptController.add(envDisplay);
+          simulateSoundDetection('traffic', confidence: 0.95, overrideCooldown: true);
+          return;
+        }
+      }
+
+      // Siren / Horn / Baby Crying / Dog Barking
       if (topEnvClass != null &&
-          topEnvProb > topSpeechProb &&
-          topEnvProb >= bgTrafficProb) {
+          topEnvProb >= 0.65 &&
+          topEnvProb > totalSpeechProb * 1.5 &&
+          topEnvProb > bgTrafficProb) {
         _resetSpeechAccumulator();
 
         final candidateSound = _envClassToSoundKey[topEnvClass];
@@ -562,7 +605,7 @@ class AudioClassifierService {
           if (cooldownPassed && _pendingEnvVotes >= 2) {
             _lastSoundAlertTimes[candidateSound] =
                 DateTime.fromMillisecondsSinceEpoch(nowMs);
-            _keywordLockUntilMs = nowMs + 1500;
+            _keywordLockUntilMs = nowMs + 1800;
             _pendingEnvVotes = 0;
             _pendingEnvClass = null;
 
@@ -582,8 +625,9 @@ class AudioClassifierService {
       }
 
       // === 2. ALL 8 SINHALA EMERGENCY KEYWORDS & CONVERSATIONAL SPEECH ===
-      final bool hasAudioSignal = (maxAmp >= 0.025 || rms >= 0.005);
-      final bool isSpeechOrVoice = hasAudioSignal && (totalSpeechProb > topEnvProb || bgTrafficProb >= 0.20);
+      // Human voice requires audio signal and speech probability mass (never noise!)
+      final bool isSpeechOrVoice = (windowMax >= 0.05 || rms >= 0.012) &&
+          (totalSpeechProb >= 0.30 && totalSpeechProb > topEnvProb);
 
       if (isSpeechOrVoice) {
         _pendingEnvClass = null;
@@ -597,16 +641,17 @@ class AudioClassifierService {
           if (p > (_speechMaxProbs[s] ?? 0.0)) {
             _speechMaxProbs[s] = p;
           }
-          if (p >= 0.25) {
+          if (p >= 0.35) {
             _speechVotes[s] = (_speechVotes[s] ?? 0) + 1;
           }
         }
 
-        // Fast instant trigger during speech on genuine keyword agreement (2 frames)
+        // Fast instant trigger during speech on genuine keyword agreement
         for (final s in speechClasses) {
           final p = allP[s] ?? 0.0;
+          final sSum = _speechSumProbs[s] ?? 0.0;
           final sVotes = _speechVotes[s] ?? 0;
-          if (p > topEnvProb && p >= bgTrafficProb && sVotes >= 2) {
+          if (p >= 0.55 && sSum >= 1.10 && sVotes >= 2) {
             _triggerKeywordAlert(s, p, nowMs);
             return;
           }
@@ -666,9 +711,9 @@ class AudioClassifierService {
       }
 
       // Identify whether user spoke one of the 8 Sinhala emergency keywords:
-      final bool isDominantKeyword = (bestVotes >= 1) &&
-          ((secondSum == 0.0) || (bestSum >= secondSum * 1.15)) &&
-          (bestPeak >= 0.25 || bestSum >= 0.45);
+      final bool isDominantKeyword = (bestVotes >= 2) &&
+          (bestPeak >= 0.45 && bestSum >= 0.85) &&
+          ((secondSum == 0.0) || (bestSum >= secondSum * 1.25));
 
       if (isDominantKeyword) {
         _triggerKeywordAlert(bestCandidate, bestPeak, nowMs);
@@ -685,7 +730,7 @@ class AudioClassifierService {
     final soundKey = _classToSoundKey[speechClass];
     if (soundKey == null) return;
 
-    _keywordLockUntilMs = nowMs + 1200; // Hold for 1.2s so user can test next word sequentially
+    _keywordLockUntilMs = nowMs + 1500; // Hold for 1.5s so user can test next word sequentially
     _currentDisplayedKeyword = soundKey;
     _resetSpeechAccumulator();
     _pendingEnvClass = null;
