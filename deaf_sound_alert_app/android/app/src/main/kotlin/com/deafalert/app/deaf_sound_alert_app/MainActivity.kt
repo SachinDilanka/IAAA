@@ -73,12 +73,9 @@ class MainActivity : FlutterActivity(), RecognitionListener {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SPEECH_CHANNEL)
                 .setMethodCallHandler { call, result ->
                     when (call.method) {
-                        "isAvailable" -> result.success(
-                            SpeechRecognizer.isRecognitionAvailable(applicationContext)
-                        )
+                        "isAvailable" -> result.success(false)
                         "startListening" -> {
-                            isListening = true
-                            startSpeechRecognizer()
+                            isListening = false
                             result.success(true)
                         }
                         "stopListening" -> {
