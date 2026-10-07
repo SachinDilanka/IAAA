@@ -15,18 +15,15 @@ class AppProvider with ChangeNotifier {
   DetectedSound? _lastDetectedSound;
   List<double> _currentWaveform = [];
   String _currentTranscript = "";
-  String _sttStatus = "";
   StreamSubscription? _soundSub;
   StreamSubscription? _waveSub;
   StreamSubscription? _transcriptSub;
-  StreamSubscription? _sttStatusSub;
 
   bool get isLoading => _isLoading;
   bool get isListening => _isListening;
   DetectedSound? get lastDetectedSound => _lastDetectedSound;
   List<double> get currentWaveform => _currentWaveform;
   String get currentTranscript => _currentTranscript;
-  String get sttStatus => _sttStatus;
   List<SoundConfig> get soundConfigs => SoundConfigService().configs;
   List<DetectedSound> get history => HistoryService().history;
   bool get isSmartwatchConnected => SmartwatchService().isConnected;
@@ -58,11 +55,6 @@ class AppProvider with ChangeNotifier {
       notifyListeners();
     });
 
-    _sttStatusSub = AudioClassifierService().onSttStatus.listen((status) {
-      _sttStatus = status;
-      notifyListeners();
-    });
-
     _isLoading = false;
     notifyListeners();
   }
@@ -79,7 +71,8 @@ class AppProvider with ChangeNotifier {
       AudioClassifierService().stopListening();
       _isListening = false;
     } else {
-      _isListening = await AudioClassifierService().startListening();
+      await AudioClassifierService().startListening();
+      _isListening = true;
     }
     notifyListeners();
   }
@@ -137,7 +130,6 @@ class AppProvider with ChangeNotifier {
     _soundSub?.cancel();
     _waveSub?.cancel();
     _transcriptSub?.cancel();
-    _sttStatusSub?.cancel();
     super.dispose();
   }
 }

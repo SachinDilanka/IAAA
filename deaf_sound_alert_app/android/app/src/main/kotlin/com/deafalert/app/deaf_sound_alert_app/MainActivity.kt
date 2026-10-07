@@ -7,14 +7,10 @@ import android.os.Handler
 import android.os.Looper
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
-import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private val FLASHLIGHT_CHANNEL = "com.deafalert.app/flashlight"
-    private val SPEECH_CHANNEL = "com.deafalert.app/speech"
-    private val SPEECH_EVENTS_CHANNEL = "com.deafalert.app/speech/events"
-
+    private val CHANNEL = "com.deafalert.app/flashlight"
     private var cameraManager: CameraManager? = null
     private var cameraId: String? = null
     private val handler = Handler(Looper.getMainLooper())
@@ -23,7 +19,6 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        // Flashlight Channel Setup
         try {
             cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
             val ids = cameraManager?.cameraIdList ?: emptyArray()
@@ -39,9 +34,11 @@ class MainActivity : FlutterActivity() {
             e.printStackTrace()
         }
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, FLASHLIGHT_CHANNEL).setMethodCallHandler { call, result ->
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
-                "hasFlashlight" -> result.success(cameraId != null)
+                "hasFlashlight" -> {
+                    result.success(cameraId != null)
+                }
                 "turnOn" -> {
                     cancelFlashing()
                     setTorchMode(true)
@@ -62,26 +59,8 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
-
-        // Speech Channel: Always handled by offline neural audio classifier in Dart
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SPEECH_CHANNEL)
-                .setMethodCallHandler { call, result ->
-                    when (call.method) {
-                        "isAvailable" -> result.success(false)
-                        "startListening" -> result.success(true)
-                        "stopListening" -> result.success(true)
-                        else -> result.notImplemented()
-                    }
-                }
-
-        EventChannel(flutterEngine.dartExecutor.binaryMessenger, SPEECH_EVENTS_CHANNEL)
-                .setStreamHandler(object : EventChannel.StreamHandler {
-                    override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {}
-                    override fun onCancel(arguments: Any?) {}
-                })
     }
 
-    // Flashlight Helpers
     private fun setTorchMode(enabled: Boolean) {
         try {
             if (cameraId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -117,6 +96,7 @@ class MainActivity : FlutterActivity() {
             isOn = !isOn
         }
 
+        // Final safety turn off after pattern finishes
         val finalOff = Runnable {
             setTorchMode(false)
         }
@@ -124,3 +104,4 @@ class MainActivity : FlutterActivity() {
         handler.postDelayed(finalOff, totalDelay)
     }
 }
+

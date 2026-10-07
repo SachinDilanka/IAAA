@@ -157,7 +157,7 @@ class DashboardScreen extends StatelessWidget {
                             const SizedBox(height: 4),
                             Text(
                               provider.isListening ? 'STOP' : 'START',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.w900,
                                 fontSize: 13,
@@ -170,41 +170,25 @@ class DashboardScreen extends StatelessWidget {
                     if (provider.isListening) ...[
                       const SizedBox(height: 16),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF132238),
+                          color: const Color(0xFF1E293B),
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: const Color(0xFF00E5FF).withValues(alpha: 0.6),
-                            width: 1.5,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF00E5FF).withValues(alpha: 0.15),
-                              blurRadius: 12,
-                              spreadRadius: 1,
-                            ),
-                          ],
+                          border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.4)),
                         ),
                         child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            const Icon(
-                              Icons.record_voice_over_rounded,
-                              color: Color(0xFF00E5FF),
-                              size: 26,
-                            ),
-                            const SizedBox(width: 14),
+                            const Icon(Icons.record_voice_over_rounded, color: Colors.cyanAccent, size: 22),
+                            const SizedBox(width: 10),
                             Expanded(
                               child: Text(
                                 provider.currentTranscript.isNotEmpty
                                     ? 'Live Speech: "${provider.currentTranscript}"'
-                                    : 'Live Speech: Listening...',
-                                style: const TextStyle(
-                                  color: Colors.white,
+                                    : 'Speak Sinhala keywords (Udaw, Ginnak...) or play sounds into mic',
+                                style: TextStyle(
+                                  color: provider.currentTranscript.isNotEmpty ? Colors.white : Colors.white60,
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 15,
-                                  height: 1.35,
+                                  fontSize: 13,
                                 ),
                               ),
                             ),
