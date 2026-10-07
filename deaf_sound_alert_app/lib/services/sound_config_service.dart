@@ -18,7 +18,7 @@ class SoundConfigService {
     SoundConfig(key: 'sinhala_beraganna_', name: 'බේරගන්න (Beraganna - Save Me)', category: 'Sinhala Keyword', priority: PriorityLevel.high),
     SoundConfig(key: 'sinhala_ginnak_', name: 'ගින්නක් (Ginnak - Fire)', category: 'Sinhala Keyword', priority: PriorityLevel.high),
     SoundConfig(key: 'ambulance', name: 'Ambulance Siren (ගිලන් රථ ශබ්දය)', category: 'Environmental Sound', priority: PriorityLevel.high),
-    SoundConfig(key: 'fire_truck', name: 'Fire Truck Siren (ගිනි නිවන රථ ශබ්දය)', category: 'Environmental Sound', priority: PriorityLevel.high),
+    SoundConfig(key: 'fire_truck', name: 'Fire Alarm / Siren (ගිනි අනතුරු ඇඟවීම / ගිනි නිවන රථ ශබ්දය)', category: 'Environmental Sound', priority: PriorityLevel.high),
     SoundConfig(key: 'vehicle horns', name: 'Vehicle Horns (වාහන නාලාව)', category: 'Environmental Sound', priority: PriorityLevel.high),
     
     SoundConfig(key: 'sinhala_karadarayak_', name: 'කරදරයක් (Karadarayak - Trouble)', category: 'Sinhala Keyword', priority: PriorityLevel.medium),

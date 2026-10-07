@@ -64,6 +64,9 @@ class AudioClassifierService {
     'fire_truck_dataset': 'fire_truck',
     'fire_engine': 'fire_truck',
     'fire_siren': 'fire_truck',
+    'fire_alarm': 'fire_truck',
+    'fire': 'fire_truck',
+    'smoke_alarm': 'fire_truck',
     'dog_barking': 'dog_bark_dataset',
     'dog_bark_dataset': 'dog_bark_dataset',
     'background_traffic': 'traffic',
@@ -100,7 +103,7 @@ class AudioClassifierService {
     'sinhala_ehata_wenna_': 'එහාට වෙන්න (Ehata Wenna - Move Aside)',
     'sinhala_parissamin_': 'පරිස්සමින් (Parissamin - Be Careful)',
     'ambulance': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
-    'fire_truck': 'ගිනි නිවන රථ ශබ්දය (Fire Truck Siren)',
+    'fire_truck': 'ගිනි අනතුරු ඇඟවීම / ගිනි නිවන රථය (Fire Alarm / Siren)',
     'baby crying': 'ළදරු හැඬීම (Baby Crying)',
     'vehicle horns': 'වාහන හොන් (Vehicle Horns)',
     'dog_bark_dataset': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
@@ -515,10 +518,10 @@ class AudioClassifierService {
               }
             }
 
-            // Fire Truck Siren
-            if (mappedKey == 'fire_truck' || topLabel == 'fire_truck') {
-              if (topProb >= 0.75 && (rms >= 0.025 || maxAmp >= 0.060)) {
-                final String displayName = _displayNames['fire_truck'] ?? 'Fire Truck Siren';
+            // Fire Truck Siren / Fire Alarm
+            if (mappedKey == 'fire_truck' || topLabel == 'fire_truck' || topLabel == 'fire_alarm') {
+              if (topProb >= 0.70 && (rms >= 0.020 || maxAmp >= 0.050)) {
+                final String displayName = _displayNames['fire_truck'] ?? 'Fire Alarm / Siren';
                 _transcriptController.add(displayName);
                 simulateSoundDetection('fire_truck', confidence: topProb);
                 return;
@@ -658,6 +661,7 @@ class AudioClassifierService {
       'ginnak': 'ගින්නක් (Ginnak - Fire)',
       'ginna': 'ගින්නක් (Ginnak - Fire)',
       'fire': 'ගින්නක් (Ginnak - Fire)',
+      'fire alarm': 'ගින්නක් (Ginnak - Fire / Alarm)',
       'burning': 'ගින්නක් (Ginnak - Fire)',
       'ගින්නක්': 'ගින්නක් (Ginnak - Fire)',
       'karadarayak': 'කරදරයක් (Karadarayak - Trouble)',
@@ -714,7 +718,7 @@ class AudioClassifierService {
         'බේරගන්න', 'බේරාගන්න', 'බේරාගන්නකෝ', 'බේරගන්නකෝ', 'බේරන්න'
       ],
       'sinhala_ginnak_': [
-        'ginnak', 'ginna', 'ginnaki', 'ginnac', 'fire', 'ginak', 'burning',
+        'ginnak', 'ginna', 'ginnaki', 'ginnac', 'fire', 'fire alarm', 'firealarm', 'smoke alarm', 'ginak', 'burning',
         'ගින්නක්', 'ගින්න', 'ගිනි', 'ගිණි'
       ],
       'sinhala_anathurak_': [
