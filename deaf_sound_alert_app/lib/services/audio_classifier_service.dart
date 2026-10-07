@@ -116,11 +116,11 @@ class AudioClassifierService {
 
   // Exact Live Speech display strings for Environmental sounds
   static const Map<String, String> _envLiveSpeechDisplay = {
-    'ambulance': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
-    'fire_truck': 'ගිනි නිවන රථ ශබ්දය (Fire Truck Siren)',
-    'vehicle horns': 'වාහන හෝන් (Vehicle Horn)',
-    'baby crying': 'ළදරුවාගේ හැඬීම (Baby Crying)',
-    'dog_bark_dataset': 'බල්ලා බුරන හඬ (Dog Barking)',
+    'ambulance': 'ambulance  →  ගිලන් රථ සයිරන් (Ambulance Siren)',
+    'fire_truck': 'fire truck  →  ගිනි නිවන රථ ශබ්දය (Fire Truck Siren)',
+    'vehicle horns': 'vehicle horn  →  වාහන හෝන් (Vehicle Horn)',
+    'baby crying': 'baby crying  →  ළදරුවාගේ හැඬීම (Baby Crying)',
+    'dog_bark_dataset': 'dog barking  →  බල්ලා බුරන හඬ (Dog Barking)',
   };
 
   // Comprehensive speech recognition patterns for all 8 Sinhala emergency keywords
@@ -537,14 +537,12 @@ class AudioClassifierService {
 
       final double totalSpeechProb =
           speechClasses.fold(0.0, (sum, c) => sum + (allP[c] ?? 0.0));
-      final double totalEnvProb =
-          _envClassToSoundKey.keys.fold(0.0, (sum, c) => sum + (allP[c] ?? 0.0));
 
       // === 1. ENVIRONMENTAL EMERGENCY SOUNDS (Baby Crying, Ambulance, Fire Truck, Horn, Dog Barking) ===
+      final double bgTrafficProb = allP['background_traffic'] ?? 0.0;
       if (topEnvClass != null &&
-          totalEnvProb > totalSpeechProb * 1.5 &&
-          totalEnvProb >= 0.65 &&
-          totalSpeechProb < 0.20) {
+          topEnvProb > topSpeechProb &&
+          topEnvProb >= bgTrafficProb) {
         _resetSpeechAccumulator();
 
         final candidateSound = _envClassToSoundKey[topEnvClass];
@@ -553,32 +551,41 @@ class AudioClassifierService {
           final bool cooldownPassed = lastAlert == null ||
               nowMs - lastAlert.millisecondsSinceEpoch >= 2000;
 
-          if (_pendingEnvClass == candidateSound && topEnvProb >= 0.65) {
+          if (_pendingEnvClass == candidateSound) {
             _pendingEnvVotes++;
           } else {
             _pendingEnvClass = candidateSound;
             _pendingEnvVotes = 1;
           }
 
-          // Trigger on 2 confirmation frames (~270ms) or high instant confidence
-          final bool shouldTriggerEnv =
-              (topEnvProb >= 0.88) || (_pendingEnvVotes >= 2 && topEnvProb >= 0.70);
-          if (cooldownPassed && shouldTriggerEnv) {
+          // Trigger on 2 confirmation frames (~270ms)
+          if (cooldownPassed && _pendingEnvVotes >= 2) {
             _lastSoundAlertTimes[candidateSound] =
                 DateTime.fromMillisecondsSinceEpoch(nowMs);
-            simulateSoundDetection(candidateSound, confidence: topEnvProb);
-            _keywordLockUntilMs = nowMs + 1000;
+            _keywordLockUntilMs = nowMs + 1500;
             _pendingEnvVotes = 0;
             _pendingEnvClass = null;
+
+            // 1. Display in Live Speech box with full English and Sinhala text
+            final envDisplay = _envLiveSpeechDisplay[candidateSound] ?? candidateSound;
+            _transcriptController.add(envDisplay);
+
+            // 2. Pop up suitable environmental alert card
+            simulateSoundDetection(
+              candidateSound,
+              confidence: math.max(topEnvProb, 0.95),
+              overrideCooldown: true,
+            );
           }
         }
         return;
       }
 
-      // === 2. ALL 8 SINHALA EMERGENCY KEYWORDS (NEAR & FAR VOICE) ===
-      final bool isSpeechFrame = (totalSpeechProb > totalEnvProb && totalSpeechProb >= 0.20);
+      // === 2. ALL 8 SINHALA EMERGENCY KEYWORDS & CONVERSATIONAL SPEECH ===
+      final bool hasAudioSignal = (maxAmp >= 0.025 || rms >= 0.005);
+      final bool isSpeechOrVoice = hasAudioSignal && (totalSpeechProb > topEnvProb || bgTrafficProb >= 0.20);
 
-      if (isSpeechFrame) {
+      if (isSpeechOrVoice) {
         _pendingEnvClass = null;
         _pendingEnvVotes = 0;
         _speechSilenceFrames = 0;
@@ -590,17 +597,16 @@ class AudioClassifierService {
           if (p > (_speechMaxProbs[s] ?? 0.0)) {
             _speechMaxProbs[s] = p;
           }
-          if (p >= 0.38) {
+          if (p >= 0.25) {
             _speechVotes[s] = (_speechVotes[s] ?? 0) + 1;
           }
         }
 
-        // Fast instant trigger on genuine keyword agreement during speech
+        // Fast instant trigger during speech on genuine keyword agreement (2 frames)
         for (final s in speechClasses) {
           final p = allP[s] ?? 0.0;
-          final sSum = _speechSumProbs[s] ?? 0.0;
           final sVotes = _speechVotes[s] ?? 0;
-          if (p >= 0.60 && sSum >= 1.10 && sVotes >= 2) {
+          if (p > topEnvProb && p >= bgTrafficProb && sVotes >= 2) {
             _triggerKeywordAlert(s, p, nowMs);
             return;
           }
@@ -659,13 +665,16 @@ class AudioClassifierService {
         }
       }
 
-      // Single utterance evaluation: user spoke keyword once (near or far)
-      final bool isDominant = (secondSum == 0.0) || (bestSum >= secondSum * 1.20);
-      if ((bestVotes >= 2 && bestPeak >= 0.40 && bestSum >= 0.70 && isDominant) ||
-          (bestPeak >= 0.65 && bestSum >= 0.85 && isDominant)) {
+      // Identify whether user spoke one of the 8 Sinhala emergency keywords:
+      final bool isDominantKeyword = (bestVotes >= 1) &&
+          ((secondSum == 0.0) || (bestSum >= secondSum * 1.15)) &&
+          (bestPeak >= 0.25 || bestSum >= 0.45);
+
+      if (isDominantKeyword) {
         _triggerKeywordAlert(bestCandidate, bestPeak, nowMs);
         return;
       } else if (_speechFramesCount >= 2) {
+        // Normal conversational speech: User said normal words or conversational sentence
         _transcriptController.add('Voice Heard (Normal Conversational Speech)');
       }
     }
@@ -676,13 +685,13 @@ class AudioClassifierService {
     final soundKey = _classToSoundKey[speechClass];
     if (soundKey == null) return;
 
-    _keywordLockUntilMs = nowMs + 1000; // Hold for 1.0s so user can test next word sequentially
+    _keywordLockUntilMs = nowMs + 1200; // Hold for 1.2s so user can test next word sequentially
     _currentDisplayedKeyword = soundKey;
     _resetSpeechAccumulator();
     _pendingEnvClass = null;
     _pendingEnvVotes = 0;
 
-    // 1. Display formatted keyword in Live Speech box
+    // 1. Immediately display in Live Speech box with full English and Sinhala text
     final displayText = _sinhalaLiveSpeechDisplay[soundKey] ?? speechClass;
     _transcriptController.add(displayText);
 
@@ -692,8 +701,6 @@ class AudioClassifierService {
       confidence: math.max(confidence, 0.98),
       overrideCooldown: true,
     ));
-
-    // Note: Do not fill buffer with zeros! Continuous microphone flow prevents artificial step artifacts.
   }
 
   void stopListening() {
