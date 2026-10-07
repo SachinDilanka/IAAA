@@ -1,8 +1,6 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'dart:math' as math;
 import 'package:permission_handler/permission_handler.dart';
-import 'package:record/record.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:audio_streamer/audio_streamer.dart';
 import '../models/detected_sound.dart';
@@ -38,10 +36,8 @@ class AudioClassifierService {
   int _lastMlTimeMs = 0;
   int _listeningStartTimeMs = 0;
   int _lastSpeechTimeMs = 0;
-  DateTime? _lastGlobalAlertTime;
 
   final Map<String, DateTime> _lastKeywordTriggerTimes = {};
-  final Map<String, DateTime> _classCooldown = {};
 
   final _controller = StreamController<DetectedSound>.broadcast();
   final _waveformController = StreamController<List<double>>.broadcast();
@@ -64,6 +60,13 @@ class AudioClassifierService {
     'background_traffic': 'traffic',
     'traffic': 'traffic',
     'road': 'road',
+    'fire_truck': 'fire_truck',
+    'fire_truck_dataset': 'fire_truck',
+    'fire_engine': 'fire_truck',
+    'fire_siren': 'fire_truck',
+    'fire_alarm': 'fire_truck',
+    'fire': 'fire_truck',
+    'smoke_alarm': 'fire_truck',
     'udaw': 'sinhala_udaw_',
     'sinhala_udaw_': 'sinhala_udaw_',
     'anathurak': 'sinhala_anathurak_',
@@ -95,6 +98,7 @@ class AudioClassifierService {
     'baby crying': 'ළදරු හැඬීම (Baby Crying)',
     'vehicle horns': 'වාහන හොන් (Vehicle Horns)',
     'dog_bark_dataset': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
+    'fire_truck': 'ගිනි අනතුරු ඇඟවීම / ගිනි නිවන රථය (Fire Alarm / Siren)',
     'traffic': 'වාහන තදබදය (Traffic Noise)',
     'road': 'පාරේ ශබ්දය (Road Sounds)',
   };
@@ -210,7 +214,6 @@ class AudioClassifierService {
           final String rawWords = result.recognizedWords.trim();
           if (rawWords.isNotEmpty) {
             _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
-            _highVolumeStartTimeMs = 0; // Speech detected: reset acoustic sound timer immediately
             final String formattedDisplay = _formatTranscriptWithSinhala(rawWords);
             _transcriptController.add(formattedDisplay);
             _processSpeechText(rawWords.toLowerCase());
@@ -220,10 +223,9 @@ class AudioClassifierService {
           if (!_isListening) return;
           double soundVol = (0.25 + (level.clamp(-2.0, 10.0) / 10.0)).clamp(0.18, 1.0);
           _updateWaveformVolume(soundVol);
-          _checkAcousticAudioSampleNeeded(soundVol);
         },
         listenOptions: stt.SpeechListenOptions(
-          listenMode: stt.ListenMode.deviceDefault,
+          listenMode: stt.ListenMode.dictation,
           partialResults: true,
           cancelOnError: false,
           pauseFor: const Duration(seconds: 3),
@@ -235,145 +237,6 @@ class AudioClassifierService {
       _onSpeechError(e.toString());
     } finally {
       _isRestartingStt = false;
-    }
-  }
-
-  bool _isSamplingAcousticPCM = false;
-  int _highVolumeStartTimeMs = 0;
-
-  void _checkAcousticAudioSampleNeeded(double soundVol) {
-    if (!_isListening || _isSamplingAcousticPCM) return;
-
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
-
-    // Do NOT start acoustic mic sampling during speech or within 1200ms of speech.
-    // This gives SpeechRecognizer 100% full, zero-latency mic access for instant Live Speech display
-    // and prevents human speech from being sampled into the environmental sound classifier!
-    if (nowMs - _lastSpeechTimeMs < 1200) {
-      _highVolumeStartTimeMs = 0;
-      return;
-    }
-
-    // High acoustic sound level detected (> 0.32)
-    // Quickly samples environmental sounds after 300ms of non-speech sound
-    if (soundVol >= 0.32) {
-      if (_highVolumeStartTimeMs == 0) {
-        _highVolumeStartTimeMs = nowMs;
-      } else if (nowMs - _highVolumeStartTimeMs >= 300) {
-        _triggerAcousticNeuralSample();
-      }
-    } else {
-      _highVolumeStartTimeMs = 0;
-    }
-  }
-
-  Future<void> _triggerAcousticNeuralSample() async {
-    if (_isSamplingAcousticPCM || !_isListening) return;
-    _isSamplingAcousticPCM = true;
-    _highVolumeStartTimeMs = 0;
-
-    try {
-      final AudioRecorder sampleRecorder = AudioRecorder();
-      if (await sampleRecorder.hasPermission()) {
-        final stream = await sampleRecorder.startStream(
-          const RecordConfig(
-            encoder: AudioEncoder.pcm16bits,
-            numChannels: 1,
-            sampleRate: 16000,
-          ),
-        );
-
-        final List<double> sampledPcm = [];
-        Completer<void> sampleCompleter = Completer<void>();
-
-        StreamSubscription? sub;
-        sub = stream.listen((bytes) {
-          final samples = List<double>.generate(bytes.length ~/ 2, (i) {
-            int byte0 = bytes[i * 2];
-            int byte1 = bytes[i * 2 + 1];
-            int val = (byte1 << 8) | byte0;
-            if (val >= 32768) val -= 65536;
-            return val / 32768.0;
-          });
-          sampledPcm.addAll(samples);
-          if (sampledPcm.length >= 6400) {
-            if (!sampleCompleter.isCompleted) sampleCompleter.complete();
-          }
-        }, onError: (_) {
-          if (!sampleCompleter.isCompleted) sampleCompleter.complete();
-        });
-
-        await sampleCompleter.future.timeout(
-          const Duration(milliseconds: 400),
-          onTimeout: () {},
-        );
-
-        await sub.cancel();
-        try {
-          await sampleRecorder.stop();
-        } catch (_) {}
-
-        if (sampledPcm.isNotEmpty) {
-          final window1s = List<double>.filled(16000, 0.0);
-          for (int i = 0; i < math.min(16000, sampledPcm.length); i++) {
-            window1s[i] = sampledPcm[i];
-          }
-
-          final pred = _neuralClassifier.predict(window1s);
-          if (pred != null) {
-            final topLabel = pred.label;
-            final topProb = pred.probability;
-            final mappedKey = _labelToSoundKey[topLabel] ?? topLabel;
-
-            // Total probability across all Sinhala speech classes in neural model
-            double speechProb = 0.0;
-            const speechClasses = ['udaw', 'beeraganna', 'ginnak', 'anathurak', 'karadarayak', 'balagena', 'parissamin', 'ehata_wenna'];
-            for (var sc in speechClasses) {
-              speechProb += (pred.allProbabilities[sc] ?? 0.0);
-            }
-
-            // If the acoustic sample contains speech or a Sinhala word, NEVER trigger an environmental sound card!
-            if (speechProb >= 0.15 || mappedKey.startsWith('sinhala_')) {
-              return;
-            }
-
-            final double dogProb = pred.allProbabilities['dog_barking'] ?? 0.0;
-            final double babyProb = pred.allProbabilities['baby_crying'] ?? 0.0;
-
-            // Only trigger the exact matching environmental sound when played/heard:
-            if (mappedKey == 'dog_bark_dataset' || topLabel == 'dog_barking') {
-              if (math.max(dogProb, topProb) >= 0.60) {
-                simulateSoundDetection('dog_bark_dataset', confidence: math.max(dogProb, topProb), overrideCooldown: true);
-                return;
-              }
-            } else if (mappedKey == 'baby crying' || topLabel == 'baby_crying') {
-              if (math.max(babyProb, topProb) >= 0.60) {
-                simulateSoundDetection('baby crying', confidence: math.max(babyProb, topProb), overrideCooldown: true);
-                return;
-              }
-            } else if (mappedKey == 'ambulance' || topLabel == 'ambulance_siren') {
-              if (topProb >= 0.60) {
-                simulateSoundDetection('ambulance', confidence: topProb, overrideCooldown: true);
-                return;
-              }
-            } else if (mappedKey == 'vehicle horns' || topLabel == 'vehicle_horn') {
-              if (topProb >= 0.60) {
-                simulateSoundDetection('vehicle horns', confidence: topProb, overrideCooldown: true);
-                return;
-              }
-            } else if (mappedKey == 'traffic' || topLabel == 'background_traffic') {
-              if (topProb >= 0.60) {
-                simulateSoundDetection('traffic', confidence: topProb, overrideCooldown: true);
-                return;
-              }
-            }
-          }
-        }
-      }
-    } catch (e) {
-      print('Acoustic neural sampling error: $e');
-    } finally {
-      _isSamplingAcousticPCM = false;
     }
   }
 
@@ -415,6 +278,7 @@ class AudioClassifierService {
     _isRestartingStt = false;
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     _listeningStartTimeMs = nowMs;
+    _lastSpeechTimeMs = nowMs;
     _rollingIdx = 0;
     _total16kPushed = 0;
     _latestSoundVolume = 0.25;
@@ -424,6 +288,9 @@ class AudioClassifierService {
 
     // 1. Continuous Live Speech Engine for transcribing EVERY single word spoken & sound alerts
     _safeListenSpeech();
+
+    // 2. Continuous OFFLINE Pure Dart Neural Audio Streamer
+    _startAudioStreamer();
 
     return true;
   }
@@ -575,12 +442,88 @@ class AudioClassifierService {
           final topProb = pred.probability;
           final mappedKey = _labelToSoundKey[topLabel] ?? topLabel;
 
-          final bool speechActiveRecently = (nowMs - _lastSpeechTimeMs < 800);
+          final double dogProb = pred.allProbabilities['dog_barking'] ?? 0.0;
+          final double babyProb = pred.allProbabilities['baby_crying'] ?? 0.0;
 
-          // Environmental Acoustic Sound Detection (Baby Crying, Vehicle Horns, Ambulance Siren, Dog Barking, Traffic)
-          if (!mappedKey.startsWith('sinhala_') && mappedKey != 'road' && mappedKey != 'traffic') {
-            if (topProb >= 0.40 && (rms >= 0.005 || maxAmp >= 0.015)) {
-              simulateSoundDetection(mappedKey, confidence: topProb);
+          // Compute total speech probability across all speech classes in neural model output
+          double totalSpeechProb = 0.0;
+          const speechClasses = ['udaw', 'beeraganna', 'ginnak', 'anathurak', 'karadarayak', 'balagena', 'parissamin', 'ehata_wenna'];
+          for (var sc in speechClasses) {
+            totalSpeechProb += (pred.allProbabilities[sc] ?? 0.0);
+          }
+
+          // If speech is detected in acoustic buffer or mapped to Sinhala keyword, mark speech active and do NOT trigger environmental sound cards!
+          if (totalSpeechProb >= 0.08 || mappedKey.startsWith('sinhala_')) {
+            _lastSpeechTimeMs = nowMs;
+            return;
+          }
+
+          // ENVIRONMENTAL SOUNDS:
+          // Strictly evaluate ONLY when speech has been idle (at least 800ms since last speech)
+          // AND total speech probability in model is very low (< 0.06).
+          // This prevents ANY human speech (e.g. "karanna", "sinhala words") from triggering environmental sound cards!
+          final bool isSpeechIdle = (nowMs - _lastSpeechTimeMs >= 800);
+          if (!isSpeechIdle || totalSpeechProb >= 0.06) {
+            return;
+          }
+
+          // 1. Dog Barking
+          if (mappedKey == 'dog_bark_dataset' || dogProb >= 0.70 || topLabel == 'dog_barking') {
+            if (math.max(dogProb, topProb) >= 0.70 && (rms >= 0.012 || maxAmp >= 0.035)) {
+              final String displayName = _displayNames['dog_bark_dataset'] ?? 'Dog Barking';
+              _transcriptController.add(displayName);
+              simulateSoundDetection('dog_bark_dataset', confidence: math.max(dogProb, topProb));
+              return;
+            }
+          }
+
+          // 2. Baby Crying (Strict 0.85 threshold so adult human speech vowels like "aa" never falsely trigger it)
+          if (mappedKey == 'baby crying' || babyProb >= 0.85 || topLabel == 'baby_crying') {
+            if (math.max(babyProb, topProb) >= 0.85 && (rms >= 0.018 || maxAmp >= 0.045)) {
+              final String displayName = _displayNames['baby crying'] ?? 'Baby Crying';
+              _transcriptController.add(displayName);
+              simulateSoundDetection('baby crying', confidence: math.max(babyProb, topProb));
+              return;
+            }
+          }
+
+          // 3. Ambulance Siren
+          if (mappedKey == 'ambulance' || topLabel == 'ambulance_siren') {
+            if (topProb >= 0.68 && (rms >= 0.015 || maxAmp >= 0.040)) {
+              final String displayName = _displayNames['ambulance'] ?? 'Ambulance Siren';
+              _transcriptController.add(displayName);
+              simulateSoundDetection('ambulance', confidence: topProb);
+              return;
+            }
+          }
+
+          // 4. Fire Truck Siren / Fire Alarm
+          if (mappedKey == 'fire_truck' || topLabel == 'fire_truck' || topLabel == 'fire_alarm' || topLabel == 'fire_engine' || topLabel == 'fire_siren') {
+            if (topProb >= 0.65 && (rms >= 0.015 || maxAmp >= 0.040)) {
+              final String displayName = _displayNames['fire_truck'] ?? 'Fire Alarm / Siren';
+              _transcriptController.add(displayName);
+              simulateSoundDetection('fire_truck', confidence: topProb);
+              return;
+            }
+          }
+
+          // 5. Vehicle Horns
+          if (mappedKey == 'vehicle horns' || topLabel == 'vehicle_horn') {
+            if (topProb >= 0.70 && (rms >= 0.018 || maxAmp >= 0.045)) {
+              final String displayName = _displayNames['vehicle horns'] ?? 'Vehicle Horns';
+              _transcriptController.add(displayName);
+              simulateSoundDetection('vehicle horns', confidence: topProb);
+              return;
+            }
+          }
+
+          // 6. Traffic Noise
+          if (mappedKey == 'traffic' || topLabel == 'background_traffic') {
+            if (topProb >= 0.65 && (rms >= 0.015 || maxAmp >= 0.035)) {
+              final String displayName = _displayNames['traffic'] ?? 'Traffic Noise';
+              _transcriptController.add(displayName);
+              simulateSoundDetection('traffic', confidence: topProb);
+              return;
             }
           }
         }
@@ -703,7 +646,6 @@ class AudioClassifierService {
           final lastTime = _lastKeywordTriggerTimes[key];
           if (lastTime == null || now.difference(lastTime).inMilliseconds > 200) {
             _lastKeywordTriggerTimes[key] = now;
-            _lastGlobalAlertTime = now;
             final String displayName = _displayNames[key] ?? key;
             _transcriptController.add(displayName);
             simulateSoundDetection(key, confidence: 0.99, overrideCooldown: true);
@@ -736,6 +678,10 @@ class AudioClassifierService {
     final now = DateTime.now();
 
     if (!overrideCooldown) {
+      final lastSoundTime = _lastSoundAlertTimes[soundKey];
+      if (lastSoundTime != null && now.difference(lastSoundTime).inMilliseconds < 2500) {
+        return;
+      }
       // 1-second global cooldown for non-override sound detections
       if (_lastEmittedAlertTime != null && now.difference(_lastEmittedAlertTime!).inMilliseconds < 1000) {
         return;
