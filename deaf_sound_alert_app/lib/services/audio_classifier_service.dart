@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
-import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import '../models/detected_sound.dart';
@@ -21,11 +20,7 @@ class AudioClassifierService {
   final NativeNeuralAudioClassifier _neuralClassifier =
       NativeNeuralAudioClassifier();
 
-  static const MethodChannel _speechChannel =
-      MethodChannel('com.deafalert.app/speech');
-  static const EventChannel _speechEvents =
-      EventChannel('com.deafalert.app/speech/events');
-  StreamSubscription? _speechSubscription;
+
 
   AudioRecorder? _audioRecorder;
   StreamSubscription<Uint8List>? _recordStreamSub;
@@ -403,57 +398,13 @@ class AudioClassifierService {
 
     _startVisualizerTicker();
 
-    bool sttAvailable = false;
-    try {
-      sttAvailable =
-          await _speechChannel.invokeMethod<bool>('isAvailable') ?? false;
-    } catch (_) {}
-
-    if (sttAvailable) {
-      // 1. Native Android Speech Recognizer: real-time word-by-word streaming, zero false alerts on noise!
-      _startSpeechRecognition();
-      _setSttStatus('Listening lively. Say any Sinhala word or emergency keyword.');
-    } else {
-      // 2. Fallback to hardware audio capture if STT is unavailable
-      await _startAudioCapture();
-      _setSttStatus('Listening for acoustic sound patterns & keywords.');
-    }
+    await _startAudioCapture();
+    _setSttStatus('Listening for speech & sound alerts.');
 
     return true;
   }
 
-  void _startSpeechRecognition() {
-    try {
-      _speechSubscription?.cancel();
-      _speechSubscription = _speechEvents.receiveBroadcastStream().listen(
-        (event) {
-          if (!_isListening || event is! Map) return;
-          final type = (event['type'] ?? '').toString();
-          if (type == 'rms') {
-            final double rmsVal =
-                ((event['rms'] as num?)?.toDouble() ?? -2.0);
-            final double vol =
-                (0.20 + (rmsVal.clamp(-2.0, 10.0) / 10.0)).clamp(0.18, 1.0);
-            _updateWaveformVolume(vol);
-          } else if (type == 'partialResult' || type == 'finalResult') {
-            final text = (event['text'] ?? '').toString().trim();
-            final candidates = ((event['candidates'] as List?) ?? [])
-                .map((e) => e.toString().trim())
-                .where((s) => s.isNotEmpty)
-                .toList();
 
-            if (text.isNotEmpty || candidates.isNotEmpty) {
-              processSpeechText(text, candidates: candidates);
-            }
-          }
-        },
-        onError: (_) {},
-        cancelOnError: false,
-      );
-
-      _speechChannel.invokeMethod('startListening').catchError((_) {});
-    } catch (_) {}
-  }
 
   Future<bool> _startAudioCapture() async {
     try {
@@ -555,7 +506,7 @@ class AudioClassifierService {
       }
 
       // 1. Noise floor / silence gate: filter out dead silence or quiet room hiss only
-      if (windowMax < 0.008 && rms < 0.002) {
+      if (windowMax < 0.015 && rms < 0.003) {
         if (_speechFramesCount > 0) {
           _speechSilenceFrames++;
           if (_speechSilenceFrames >= 2) {
@@ -568,8 +519,8 @@ class AudioClassifierService {
         return;
       }
 
-      // Smooth AGC: boost soft and far speech up to 8.0x
-      final double gain = (0.55 / math.max(windowMax, 0.008)).clamp(1.0, 8.0);
+      // Smooth AGC: boost soft and far speech cleanly up to 4.0x without blowing up noise
+      final double gain = (0.50 / math.max(windowMax, 0.020)).clamp(1.0, 4.0);
       final List<double> normWindow = List<double>.filled(16000, 0.0);
       for (int i = 0; i < 16000; i++) {
         normWindow[i] = (window16k[i] * gain).clamp(-1.0, 1.0);
@@ -603,11 +554,24 @@ class AudioClassifierService {
           speechClasses.fold(0.0, (sum, c) => sum + (allP[c] ?? 0.0));
       final double bgTrafficProb = allP['background_traffic'] ?? 0.0;
 
+      // Reject ambient room noise, fan, hiss, silence if background_traffic dominates and speech is low
+      if (bgTrafficProb >= 0.55 && totalSpeechProb < 0.30) {
+        if (_speechFramesCount > 0) {
+          _speechSilenceFrames++;
+          if (_speechSilenceFrames >= 2) {
+            _checkAndTriggerOffsetSpeech(nowMs);
+          }
+        } else {
+          _pendingEnvClass = null;
+          _pendingEnvVotes = 0;
+        }
+        return;
+      }
+
       // === 1. SPEECH INHIBITION & ACCUMULATION (All 8 Sinhala Emergency Keywords & Voice) ===
-      // If voice or speech energy is present, human is vocalizing or speaking.
-      // ENVIRONMENTAL SOUNDS MUST NEVER TRIGGER DURING HUMAN SPEECH!
-      final bool isSpeechOrVoice = (windowMax >= 0.008 || rms >= 0.002) &&
-          (totalSpeechProb >= 0.15 || topSpeechProb >= 0.15 || totalSpeechProb > topEnvProb);
+      // Speech energy must beat background traffic and environmental noise
+      final bool isSpeechOrVoice = (windowMax >= 0.020 || rms >= 0.004) &&
+          (totalSpeechProb >= 0.35 && totalSpeechProb > bgTrafficProb && totalSpeechProb > topEnvProb);
 
       if (isSpeechOrVoice) {
         _pendingEnvClass = null;
@@ -621,7 +585,7 @@ class AudioClassifierService {
           if (p > (_speechMaxProbs[s] ?? 0.0)) {
             _speechMaxProbs[s] = p;
           }
-          if (p >= 0.35) {
+          if (p >= 0.40) {
             _speechVotes[s] = (_speechVotes[s] ?? 0) + 1;
           }
         }
@@ -636,7 +600,7 @@ class AudioClassifierService {
           final p = allP[s] ?? 0.0;
           final sSum = _speechSumProbs[s] ?? 0.0;
           final sVotes = _speechVotes[s] ?? 0;
-          if (p >= 0.55 && sSum >= 0.90 && sVotes >= 2) {
+          if (p >= 0.60 && sSum >= 0.95 && sVotes >= 2) {
             _triggerKeywordAlert(s, p, nowMs);
             return;
           }
@@ -779,15 +743,15 @@ class AudioClassifierService {
       }
 
       // Identify whether user spoke one of the 8 Sinhala emergency keywords:
-      final bool isDominantKeyword = (bestVotes >= 2) &&
-          (bestPeak >= 0.50 && bestSum >= 0.90) &&
+      final bool isDominantKeyword = ((bestVotes >= 2 && bestPeak >= 0.45 && bestSum >= 0.85) ||
+              (bestVotes >= 1 && bestPeak >= 0.65 && bestSum >= 0.65)) &&
           (bestSum > bestEnvSum * 1.5) &&
           ((secondSum == 0.0) || (bestSum >= secondSum * 1.25));
 
       if (isDominantKeyword) {
         _triggerKeywordAlert(bestCandidate, bestPeak, nowMs);
         return;
-      } else if (_speechFramesCount >= 2) {
+      } else if (_speechFramesCount >= 1) {
         // Normal conversational speech: User said normal words or conversational sentence
         _transcriptController.add('Voice Heard (Normal Conversational Speech)');
       }
@@ -822,11 +786,7 @@ class AudioClassifierService {
     _visualizerTicker?.cancel();
     _visualizerTicker = null;
 
-    _speechSubscription?.cancel();
-    _speechSubscription = null;
-    try {
-      _speechChannel.invokeMethod('stopListening');
-    } catch (_) {}
+
 
     _latestSoundVolume = 0.02;
     _waveformController.add([]);
