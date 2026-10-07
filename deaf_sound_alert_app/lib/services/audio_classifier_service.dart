@@ -210,6 +210,7 @@ class AudioClassifierService {
           final String rawWords = result.recognizedWords.trim();
           if (rawWords.isNotEmpty) {
             _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
+            _highVolumeStartTimeMs = 0; // Speech detected: reset acoustic sound timer immediately
             final String formattedDisplay = _formatTranscriptWithSinhala(rawWords);
             _transcriptController.add(formattedDisplay);
             _processSpeechText(rawWords.toLowerCase());
@@ -222,10 +223,10 @@ class AudioClassifierService {
           _checkAcousticAudioSampleNeeded(soundVol);
         },
         listenOptions: stt.SpeechListenOptions(
-          listenMode: stt.ListenMode.dictation,
+          listenMode: stt.ListenMode.deviceDefault,
           partialResults: true,
           cancelOnError: false,
-          pauseFor: const Duration(seconds: 4),
+          pauseFor: const Duration(seconds: 3),
           listenFor: const Duration(hours: 1),
         ),
         localeId: targetLocale,
@@ -245,12 +246,20 @@ class AudioClassifierService {
 
     final nowMs = DateTime.now().millisecondsSinceEpoch;
 
-    // Parallel acoustic sound level detected (> 0.30)
-    // Quickly samples environmental sounds in parallel after 250ms of sound without blocking speech
-    if (soundVol >= 0.30) {
+    // Do NOT start acoustic mic sampling during speech or within 800ms of speech.
+    // This gives SpeechRecognizer 100% full, zero-latency mic access for instant Live Speech display
+    // and prevents human speech from being sampled into the environmental sound classifier!
+    if (nowMs - _lastSpeechTimeMs < 800) {
+      _highVolumeStartTimeMs = 0;
+      return;
+    }
+
+    // High acoustic sound level detected (> 0.32)
+    // Quickly samples environmental sounds after 300ms of non-speech sound
+    if (soundVol >= 0.32) {
       if (_highVolumeStartTimeMs == 0) {
         _highVolumeStartTimeMs = nowMs;
-      } else if (nowMs - _highVolumeStartTimeMs >= 250) {
+      } else if (nowMs - _highVolumeStartTimeMs >= 300) {
         _triggerAcousticNeuralSample();
       }
     } else {
@@ -316,27 +325,45 @@ class AudioClassifierService {
             final topProb = pred.probability;
             final mappedKey = _labelToSoundKey[topLabel] ?? topLabel;
 
+            // Total probability across all Sinhala speech classes in neural model
+            double speechProb = 0.0;
+            const speechClasses = ['udaw', 'beeraganna', 'ginnak', 'anathurak', 'karadarayak', 'balagena', 'parissamin', 'ehata_wenna'];
+            for (var sc in speechClasses) {
+              speechProb += (pred.allProbabilities[sc] ?? 0.0);
+            }
+
+            // If the acoustic sample contains speech or a Sinhala word, NEVER trigger an environmental sound card!
+            if (speechProb >= 0.20 || mappedKey.startsWith('sinhala_')) {
+              return;
+            }
+
             final double dogProb = pred.allProbabilities['dog_barking'] ?? 0.0;
             final double babyProb = pred.allProbabilities['baby_crying'] ?? 0.0;
 
-            if (dogProb >= 0.25) {
-              simulateSoundDetection('dog_bark_dataset', confidence: dogProb, overrideCooldown: true);
+            // Confident environmental sound detections (>= 0.60):
+            if (dogProb >= 0.60 && math.max(dogProb, topProb) >= 0.60) {
+              simulateSoundDetection('dog_bark_dataset', confidence: math.max(dogProb, topProb), overrideCooldown: true);
               return;
             }
 
-            if (babyProb >= 0.25) {
-              simulateSoundDetection('baby crying', confidence: babyProb, overrideCooldown: true);
+            if (babyProb >= 0.60 && math.max(babyProb, topProb) >= 0.60) {
+              simulateSoundDetection('baby crying', confidence: math.max(babyProb, topProb), overrideCooldown: true);
               return;
             }
 
-            if (mappedKey == 'traffic') {
-              if (topProb >= 0.38) {
+            if (mappedKey == 'traffic' || topLabel == 'background_traffic') {
+              if (topProb >= 0.60) {
                 simulateSoundDetection('traffic', confidence: topProb, overrideCooldown: true);
                 return;
               }
-            } else if (!mappedKey.startsWith('sinhala_') && mappedKey != 'road') {
-              if (topProb >= 0.30) {
-                simulateSoundDetection(mappedKey, confidence: topProb, overrideCooldown: true);
+            } else if (mappedKey == 'ambulance' || topLabel == 'ambulance_siren') {
+              if (topProb >= 0.60) {
+                simulateSoundDetection('ambulance', confidence: topProb, overrideCooldown: true);
+                return;
+              }
+            } else if (mappedKey == 'vehicle horns' || topLabel == 'vehicle_horn') {
+              if (topProb >= 0.60) {
+                simulateSoundDetection('vehicle horns', confidence: topProb, overrideCooldown: true);
                 return;
               }
             }
