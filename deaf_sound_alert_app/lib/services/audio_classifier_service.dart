@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
-import 'package:audio_streamer/audio_streamer.dart';
+import 'package:record/record.dart';
 import '../models/detected_sound.dart';
 import 'vibration_service.dart';
 import 'flashlight_service.dart';
@@ -18,8 +18,6 @@ class AudioClassifierService {
 
   final NativeNeuralAudioClassifier _neuralClassifier = NativeNeuralAudioClassifier();
   final stt.SpeechToText _speech = stt.SpeechToText();
-  AudioStreamer? _audioStreamer;
-  StreamSubscription? _pcmStreamSubscription;
 
   Timer? _sttWatchdogTimer;
   bool _speechAvailable = false;
@@ -28,14 +26,8 @@ class AudioClassifierService {
   double _latestSoundVolume = 0.02;
   final List<double> _visualizerBars = List<double>.filled(40, 0.15);
 
-  // 16,000 Hz circular rolling audio buffer (1 second)
-  final List<double> _rollingBuf16k = List<double>.filled(16000, 0.0);
-  int _rollingIdx = 0;
-  int _total16kPushed = 0;
-  int _hardwareSampleRate = 16000;
-  int _lastPcmTimeMs = 0;
-  int _lastMlTimeMs = 0;
-  int _listeningStartTimeMs = 0;
+  bool _isSamplingAcousticPCM = false;
+  int _highVolumeStartTimeMs = 0;
   int _lastSpeechTimeMs = 0;
 
   final Map<String, DateTime> _lastKeywordTriggerTimes = {};
@@ -215,6 +207,7 @@ class AudioClassifierService {
           final String rawWords = result.recognizedWords.trim();
           if (rawWords.isNotEmpty) {
             _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
+            _highVolumeStartTimeMs = 0;
             final String formattedDisplay = _formatTranscriptWithSinhala(rawWords);
             _transcriptController.add(formattedDisplay);
             _processSpeechText(rawWords.toLowerCase());
@@ -224,6 +217,7 @@ class AudioClassifierService {
           if (!_isListening) return;
           double soundVol = (0.25 + (level.clamp(-2.0, 10.0) / 10.0)).clamp(0.18, 1.0);
           _updateWaveformVolume(soundVol);
+          _checkAcousticAudioSampleNeeded(soundVol);
         },
         listenOptions: stt.SpeechListenOptions(
           listenMode: stt.ListenMode.dictation,
@@ -278,10 +272,7 @@ class AudioClassifierService {
     _isListening = true;
     _isRestartingStt = false;
     final nowMs = DateTime.now().millisecondsSinceEpoch;
-    _listeningStartTimeMs = nowMs;
     _lastSpeechTimeMs = nowMs;
-    _rollingIdx = 0;
-    _total16kPushed = 0;
     _latestSoundVolume = 0.25;
 
     // Start 50 FPS smooth visualizer animation ticker
@@ -290,245 +281,171 @@ class AudioClassifierService {
     // 1. Continuous Live Speech Engine for transcribing EVERY single word spoken & sound alerts
     _safeListenSpeech();
 
-    // 2. Continuous OFFLINE Pure Dart Neural Audio Streamer
-    _startAudioStreamer();
-
     return true;
   }
 
-  void _startAudioStreamer() async {
-    try {
-      _pcmStreamSubscription?.cancel();
-      _pcmStreamSubscription = null;
-      _audioStreamer = AudioStreamer();
-
-      _pcmStreamSubscription = _audioStreamer!.audioStream.listen(
-        (buffer) {
-          if (!_isListening || buffer.isEmpty) return;
-          _processPcmBuffer(buffer);
-        },
-        onError: (error) {
-          print('AudioStreamer error: $error');
-        },
-        cancelOnError: false,
-      );
-    } catch (e) {
-      print('AudioStreamer init error: $e');
-    }
-  }
-
-  void _processPcmBuffer(List<double> rawBuffer) {
-    if (rawBuffer.isEmpty) return;
+  void _checkAcousticAudioSampleNeeded(double soundVol) {
+    if (!_isListening || _isSamplingAcousticPCM) return;
 
     final nowMs = DateTime.now().millisecondsSinceEpoch;
 
-    double maxRaw = 0.0;
-    for (int i = 0; i < rawBuffer.length; i++) {
-      final a = rawBuffer[i].abs();
-      if (a > maxRaw) maxRaw = a;
+    // Do NOT sample if speech was detected within the last 2.0 seconds!
+    // This gives SpeechRecognizer 100% full, uninterrupted mic access for instant Live Speech display
+    // and prevents human speech from being sampled into the environmental sound classifier!
+    if (nowMs - _lastSpeechTimeMs < 2000) {
+      _highVolumeStartTimeMs = 0;
+      return;
     }
 
-    if (_lastPcmTimeMs > 0) {
-      final deltaMs = nowMs - _lastPcmTimeMs;
-      if (deltaMs > 5 && deltaMs < 200) {
-        final estimatedRate = (rawBuffer.length * 1000.0) / deltaMs;
-        if (estimatedRate > 38000 && estimatedRate < 46000) {
-          _hardwareSampleRate = 44100;
-        } else if (estimatedRate >= 46000 && estimatedRate < 56000) {
-          _hardwareSampleRate = 48000;
-        } else if (estimatedRate >= 12000 && estimatedRate <= 24000) {
-          _hardwareSampleRate = 16000;
-        }
+    // High acoustic sound level detected (> 0.35)
+    // Non-speech sound sustained for 350ms
+    if (soundVol >= 0.35) {
+      if (_highVolumeStartTimeMs == 0) {
+        _highVolumeStartTimeMs = nowMs;
+      } else if (nowMs - _highVolumeStartTimeMs >= 350) {
+        _triggerAcousticNeuralSample();
       }
-    }
-    _lastPcmTimeMs = nowMs;
-
-    final double normScale = maxRaw > 2.0 ? (1.0 / 32768.0) : 1.0;
-    const double gainBoost = 1.0;
-
-    List<double> packet16k;
-    if (_hardwareSampleRate == 16000) {
-      packet16k = List<double>.generate(
-        rawBuffer.length,
-        (i) => (rawBuffer[i] * normScale * gainBoost).clamp(-1.0, 1.0),
-      );
     } else {
-      final int targetCount = ((rawBuffer.length * 16000) / _hardwareSampleRate).round();
-      if (targetCount <= 0) return;
-      packet16k = List<double>.filled(targetCount, 0.0);
-      final double step = rawBuffer.length / targetCount.toDouble();
-      for (int i = 0; i < targetCount; i++) {
-        final int startIdx = (i * step).floor();
-        final int endIdx = math.min(rawBuffer.length, ((i + 1) * step).floor());
-        double sum = 0.0;
-        int count = 0;
-        for (int j = startIdx; j < endIdx; j++) {
-          sum += rawBuffer[j] * normScale * gainBoost;
-          count++;
-        }
-        double val = count > 0 ? (sum / count) : (rawBuffer[startIdx.clamp(0, rawBuffer.length - 1)] * normScale * gainBoost);
-        packet16k[i] = val.clamp(-1.0, 1.0);
-      }
+      _highVolumeStartTimeMs = 0;
     }
+  }
 
-    double sumSquares = 0.0;
-    double maxAmp = 0.0;
+  Future<void> _triggerAcousticNeuralSample() async {
+    if (_isSamplingAcousticPCM || !_isListening) return;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (nowMs - _lastSpeechTimeMs < 2000) return;
 
-    for (int i = 0; i < packet16k.length; i++) {
-      final s = packet16k[i];
-      final absS = s.abs();
-      if (absS > maxAmp) maxAmp = absS;
-      sumSquares += s * s;
+    _isSamplingAcousticPCM = true;
+    _highVolumeStartTimeMs = 0;
 
-      _rollingBuf16k[_rollingIdx] = s;
-      _rollingIdx = (_rollingIdx + 1) % 16000;
-      _total16kPushed++;
-    }
+    try {
+      final AudioRecorder sampleRecorder = AudioRecorder();
+      if (await sampleRecorder.hasPermission()) {
+        final stream = await sampleRecorder.startStream(
+          const RecordConfig(
+            encoder: AudioEncoder.pcm16bits,
+            numChannels: 1,
+            sampleRate: 16000,
+          ),
+        );
 
-    final rms = math.sqrt(sumSquares / (packet16k.isEmpty ? 1 : packet16k.length));
-    
-    // Pass real mic volume & 40-band pitch spectrum directly to wave visualizer continuously
-    final double soundVol = (maxAmp * 4.0 + rms * 12.0).clamp(0.0, 1.0);
-    final double nowSec = nowMs / 1000.0;
-    
-    final List<double> newFrame = List<double>.generate(40, (band) {
-      final int startSample = (band * (packet16k.length / 40.0)).floor();
-      final int endSample = math.min(packet16k.length, ((band + 1) * (packet16k.length / 40.0)).floor());
-      
-      double bandAmp = 0.0;
-      for (int k = startSample; k < endSample; k++) {
-        final a = packet16k[k].abs();
-        if (a > bandAmp) bandAmp = a;
-      }
-      
-      final double centerDist = ((band - 20) / 20.0).abs();
-      final double centerEnvelope = math.exp(-centerDist * centerDist * 1.2);
+        final List<double> sampledPcm = [];
+        final Completer<void> sampleCompleter = Completer<void>();
 
-      // Organic dynamic micro-waves so visualizer baseline is alive and NEVER freezes into a static shape!
-      final double ripple1 = math.sin(band * 0.40 + nowSec * 4.0).abs() * 0.08;
-      final double ripple2 = math.cos(band * 0.70 - nowSec * 5.5).abs() * 0.06;
+        StreamSubscription? sub;
+        sub = stream.listen((bytes) {
+          final samples = List<double>.generate(bytes.length ~/ 2, (i) {
+            int byte0 = bytes[i * 2];
+            int byte1 = bytes[i * 2 + 1];
+            int val = (byte1 << 8) | byte0;
+            if (val >= 32768) val -= 65536;
+            return val / 32768.0;
+          });
+          sampledPcm.addAll(samples);
+          if (sampledPcm.length >= 6400) {
+            if (!sampleCompleter.isCompleted) sampleCompleter.complete();
+          }
+        }, onError: (_) {
+          if (!sampleCompleter.isCompleted) sampleCompleter.complete();
+        });
 
-      double targetHeight;
-      if (soundVol < 0.008) {
-        // Resting baseline: lively micro-bouncing waveform (0.12 - 0.32)
-        targetHeight = (0.14 + centerEnvelope * 0.10 + ripple1 + ripple2).clamp(0.12, 0.32);
-      } else {
-        // Sound / Speech active: energetic response to mic volume and pitch
-        final double scaledBand = (bandAmp * 5.0 + soundVol * 0.8).clamp(0.20, 1.0);
-        targetHeight = (scaledBand * (centerEnvelope * 0.65 + ripple1 * 0.5 + 0.30)).clamp(0.18, 1.0);
-      }
-      return targetHeight;
-    });
+        await sampleCompleter.future.timeout(
+          const Duration(milliseconds: 400),
+          onTimeout: () {},
+        );
 
-    // Apply smooth exponential moving average across frames for fluid bouncing motion (0 Lag)
-    for (int i = 0; i < 40; i++) {
-      _visualizerBars[i] = _visualizerBars[i] * 0.50 + newFrame[i] * 0.50;
-    }
+        await sub.cancel();
+        try {
+          await sampleRecorder.stop();
+          await sampleRecorder.dispose();
+        } catch (_) {}
 
-    _waveformController.add(List<double>.from(_visualizerBars));
-
-    // Fast 100ms Neural Inference for Instant 1st-Attempt Speech & Sound Alert Detections!
-    if (_total16kPushed >= 2000 && (nowMs - _listeningStartTimeMs >= 200) && (rms >= 0.003 || maxAmp >= 0.008)) {
-      if (nowMs - _lastMlTimeMs >= 100) {
-        _lastMlTimeMs = nowMs;
-
-        final List<double> window1s = List<double>.filled(16000, 0.0);
-        for (int i = 0; i < 16000; i++) {
-          window1s[i] = _rollingBuf16k[(_rollingIdx - 16000 + i + 16000) % 16000];
+        // Double check: if speech was detected during the sample, DISCARD IMMEDIATELY!
+        final postSampleMs = DateTime.now().millisecondsSinceEpoch;
+        if (postSampleMs - _lastSpeechTimeMs < 2000) {
+          return;
         }
 
-        final pred = _neuralClassifier.predict(window1s);
-        if (pred != null) {
-          final topLabel = pred.label;
-          final topProb = pred.probability;
-          final mappedKey = _labelToSoundKey[topLabel] ?? topLabel;
-
-          final double dogProb = pred.allProbabilities['dog_barking'] ?? 0.0;
-          final double babyProb = pred.allProbabilities['baby_crying'] ?? 0.0;
-
-          // Compute total speech probability across all speech classes in neural model output
-          double totalSpeechProb = 0.0;
-          const speechClasses = ['udaw', 'beeraganna', 'ginnak', 'anathurak', 'karadarayak', 'balagena', 'parissamin', 'ehata_wenna'];
-          for (var sc in speechClasses) {
-            totalSpeechProb += (pred.allProbabilities[sc] ?? 0.0);
+        if (sampledPcm.isNotEmpty) {
+          final window1s = List<double>.filled(16000, 0.0);
+          for (int i = 0; i < math.min(16000, sampledPcm.length); i++) {
+            window1s[i] = sampledPcm[i];
           }
 
-          // If speech is detected in acoustic buffer or mapped to Sinhala keyword, mark speech active and do NOT trigger environmental sound cards!
-          if (totalSpeechProb >= 0.08 || mappedKey.startsWith('sinhala_')) {
-            _lastSpeechTimeMs = nowMs;
-            return;
-          }
+          final pred = _neuralClassifier.predict(window1s);
+          if (pred != null) {
+            final topLabel = pred.label;
+            final topProb = pred.probability;
+            final mappedKey = _labelToSoundKey[topLabel] ?? topLabel;
 
-          // ENVIRONMENTAL SOUNDS:
-          // Strictly evaluate ONLY when speech has been idle (at least 800ms since last speech)
-          // AND total speech probability in model is very low (< 0.06).
-          // This prevents ANY human speech (e.g. "karanna", "sinhala words") from triggering environmental sound cards!
-          final bool isSpeechIdle = (nowMs - _lastSpeechTimeMs >= 800);
-          if (!isSpeechIdle || totalSpeechProb >= 0.06) {
-            return;
-          }
+            // Total probability across all Sinhala speech classes in neural model
+            double speechProb = 0.0;
+            const speechClasses = ['udaw', 'beeraganna', 'ginnak', 'anathurak', 'karadarayak', 'balagena', 'parissamin', 'ehata_wenna'];
+            for (var sc in speechClasses) {
+              speechProb += (pred.allProbabilities[sc] ?? 0.0);
+            }
 
-          // 1. Dog Barking
-          if (mappedKey == 'dog_bark_dataset' || dogProb >= 0.70 || topLabel == 'dog_barking') {
-            if (math.max(dogProb, topProb) >= 0.70 && (rms >= 0.012 || maxAmp >= 0.035)) {
-              final String displayName = _displayNames['dog_bark_dataset'] ?? 'Dog Barking';
-              _transcriptController.add(displayName);
-              simulateSoundDetection('dog_bark_dataset', confidence: math.max(dogProb, topProb));
+            // If the acoustic sample contains ANY speech or a Sinhala word, NEVER trigger an environmental sound card!
+            if (speechProb >= 0.08 || mappedKey.startsWith('sinhala_')) {
+              _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
               return;
             }
-          }
 
-          // 2. Baby Crying (Strict 0.85 threshold so adult human speech vowels like "aa" never falsely trigger it)
-          if (mappedKey == 'baby crying' || babyProb >= 0.85 || topLabel == 'baby_crying') {
-            if (math.max(babyProb, topProb) >= 0.85 && (rms >= 0.018 || maxAmp >= 0.045)) {
-              final String displayName = _displayNames['baby crying'] ?? 'Baby Crying';
-              _transcriptController.add(displayName);
-              simulateSoundDetection('baby crying', confidence: math.max(babyProb, topProb));
-              return;
-            }
-          }
+            final double dogProb = pred.allProbabilities['dog_barking'] ?? 0.0;
+            final double babyProb = pred.allProbabilities['baby_crying'] ?? 0.0;
 
-          // 3. Ambulance Siren
-          if (mappedKey == 'ambulance' || topLabel == 'ambulance_siren') {
-            if (topProb >= 0.68 && (rms >= 0.015 || maxAmp >= 0.040)) {
-              final String displayName = _displayNames['ambulance'] ?? 'Ambulance Siren';
-              _transcriptController.add(displayName);
-              simulateSoundDetection('ambulance', confidence: topProb);
-              return;
-            }
-          }
-
-          // 4. Fire Truck Siren / Fire Alarm
-          if (mappedKey == 'fire_truck' || topLabel == 'fire_truck' || topLabel == 'fire_alarm' || topLabel == 'fire_engine' || topLabel == 'fire_siren') {
-            if (topProb >= 0.65 && (rms >= 0.015 || maxAmp >= 0.040)) {
-              final String displayName = _displayNames['fire_truck'] ?? 'Fire Alarm / Siren';
-              _transcriptController.add(displayName);
-              simulateSoundDetection('fire_truck', confidence: topProb);
-              return;
-            }
-          }
-
-          // 5. Vehicle Horns
-          if (mappedKey == 'vehicle horns' || topLabel == 'vehicle_horn') {
-            if (topProb >= 0.70 && (rms >= 0.018 || maxAmp >= 0.045)) {
-              final String displayName = _displayNames['vehicle horns'] ?? 'Vehicle Horns';
-              _transcriptController.add(displayName);
-              simulateSoundDetection('vehicle horns', confidence: topProb);
-              return;
-            }
-          }
-
-          // 6. Traffic Noise
-          if (mappedKey == 'traffic' || topLabel == 'background_traffic') {
-            if (topProb >= 0.65 && (rms >= 0.015 || maxAmp >= 0.035)) {
-              final String displayName = _displayNames['traffic'] ?? 'Traffic Noise';
-              _transcriptController.add(displayName);
-              simulateSoundDetection('traffic', confidence: topProb);
-              return;
+            // ONLY trigger environmental sound when played/heard, with strict speech protection:
+            if (mappedKey == 'dog_bark_dataset' || topLabel == 'dog_barking' || dogProb >= 0.72) {
+              if (math.max(dogProb, topProb) >= 0.72) {
+                final String displayName = _displayNames['dog_bark_dataset'] ?? 'Dog Barking';
+                _transcriptController.add(displayName);
+                simulateSoundDetection('dog_bark_dataset', confidence: math.max(dogProb, topProb), overrideCooldown: true);
+                return;
+              }
+            } else if (mappedKey == 'baby crying' || topLabel == 'baby_crying' || babyProb >= 0.90) {
+              // High 0.90 threshold ensures human speech vowels (e.g. "කරන්න") NEVER falsely trigger baby crying!
+              if (math.max(babyProb, topProb) >= 0.90 && speechProb < 0.04) {
+                final String displayName = _displayNames['baby crying'] ?? 'Baby Crying';
+                _transcriptController.add(displayName);
+                simulateSoundDetection('baby crying', confidence: math.max(babyProb, topProb), overrideCooldown: true);
+                return;
+              }
+            } else if (mappedKey == 'ambulance' || topLabel == 'ambulance_siren') {
+              if (topProb >= 0.70) {
+                final String displayName = _displayNames['ambulance'] ?? 'Ambulance Siren';
+                _transcriptController.add(displayName);
+                simulateSoundDetection('ambulance', confidence: topProb, overrideCooldown: true);
+                return;
+              }
+            } else if (mappedKey == 'fire_truck' || topLabel == 'fire_truck' || topLabel == 'fire_alarm' || topLabel == 'fire_engine' || topLabel == 'fire_siren') {
+              if (topProb >= 0.68) {
+                final String displayName = _displayNames['fire_truck'] ?? 'Fire Alarm / Siren';
+                _transcriptController.add(displayName);
+                simulateSoundDetection('fire_truck', confidence: topProb, overrideCooldown: true);
+                return;
+              }
+            } else if (mappedKey == 'vehicle horns' || topLabel == 'vehicle_horn') {
+              if (topProb >= 0.70) {
+                final String displayName = _displayNames['vehicle horns'] ?? 'Vehicle Horns';
+                _transcriptController.add(displayName);
+                simulateSoundDetection('vehicle horns', confidence: topProb, overrideCooldown: true);
+                return;
+              }
+            } else if (mappedKey == 'traffic' || topLabel == 'background_traffic') {
+              if (topProb >= 0.70) {
+                final String displayName = _displayNames['traffic'] ?? 'Traffic Noise';
+                _transcriptController.add(displayName);
+                simulateSoundDetection('traffic', confidence: topProb, overrideCooldown: true);
+                return;
+              }
             }
           }
         }
       }
+    } catch (e) {
+      // Ignore
+    } finally {
+      _isSamplingAcousticPCM = false;
     }
   }
 
@@ -661,15 +578,14 @@ class AudioClassifierService {
     _isListening = false;
     _sttWatchdogTimer?.cancel();
     _sttWatchdogTimer = null;
+    _visualizerTicker?.cancel();
+    _visualizerTicker = null;
     _latestSoundVolume = 0.02;
     _waveformController.add([]);
 
     if (_speech.isListening) {
       _speech.stop();
     }
-    _pcmStreamSubscription?.cancel();
-    _pcmStreamSubscription = null;
-    _audioStreamer = null;
     FlashlightService().cancelFlashlight();
   }
 
