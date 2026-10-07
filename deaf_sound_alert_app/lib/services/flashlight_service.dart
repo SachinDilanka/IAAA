@@ -33,7 +33,7 @@ class FlashlightService {
     } catch (_) {}
   }
 
-  /// Flashes camera flashlight based on priority level and vibration pattern
+  /// Flashes camera flashlight based on priority level synced with vibration patterns
   Future<void> triggerFlashlightPattern(PriorityLevel priority) async {
     if (!_isFlashlightEnabled) return;
 
@@ -41,23 +41,21 @@ class FlashlightService {
       List<int> pattern;
       switch (priority) {
         case PriorityLevel.high:
-          // Synced with High Priority SOS Emergency Vibration: [0, 800, 100, 800, 100, 800, 100, 800, 100, 1000]
-          pattern = [0, 800, 100, 800, 100, 800, 100, 800, 100, 1000];
+          // Synced with High Priority SOS Triple Burst Vibration: [0, 450, 120, 450, 120, 700]
+          pattern = [0, 450, 120, 450, 120, 700];
           break;
         case PriorityLevel.medium:
-          // Synced with Medium Priority Caution Vibration: [0, 600, 150, 600, 150, 600]
-          pattern = [0, 600, 150, 600, 150, 600];
+          // Synced with Medium Priority Double Pulse Caution Vibration: [0, 350, 150, 350]
+          pattern = [0, 350, 150, 350];
           break;
         case PriorityLevel.low:
-          // Synced with Low Priority Notice Vibration: [0, 450, 150, 450]
-          pattern = [0, 450, 150, 450];
+          // Synced with Low Priority Single Pulse Notice Vibration: [0, 250]
+          pattern = [0, 250];
           break;
       }
 
       await _channel.invokeMethod('flashPattern', {'pattern': pattern});
-    } catch (e) {
-      print('Flashlight pattern error: $e');
-    }
+    } catch (_) {}
   }
 
   Future<void> cancelFlashlight() async {

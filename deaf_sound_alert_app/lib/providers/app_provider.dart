@@ -7,6 +7,7 @@ import '../services/sound_config_service.dart';
 import '../services/history_service.dart';
 import '../services/smartwatch_service.dart';
 import '../services/vibration_service.dart';
+import '../services/flashlight_service.dart';
 
 class AppProvider with ChangeNotifier {
   bool _isLoading = true;
@@ -27,12 +28,14 @@ class AppProvider with ChangeNotifier {
   List<DetectedSound> get history => HistoryService().history;
   bool get isSmartwatchConnected => SmartwatchService().isConnected;
   String get connectedWatchName => SmartwatchService().connectedDeviceName;
+  bool get isFlashlightEnabled => FlashlightService().isFlashlightEnabled;
 
   Future<void> init() async {
     _isLoading = true;
     notifyListeners();
 
     await VibrationService().init();
+    await FlashlightService().init();
     await SmartwatchService().init();
     await SoundConfigService().init();
     await HistoryService().init();
@@ -69,8 +72,14 @@ class AppProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setFlashlightEnabled(bool enabled) async {
+    await FlashlightService().setEnabled(enabled);
+    notifyListeners();
+  }
+
   void dismissLastSound() {
     _lastDetectedSound = null;
+    FlashlightService().cancelFlashlight();
     notifyListeners();
   }
 

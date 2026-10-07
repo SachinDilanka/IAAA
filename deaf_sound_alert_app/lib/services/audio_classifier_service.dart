@@ -5,6 +5,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:audio_streamer/audio_streamer.dart';
 import '../models/detected_sound.dart';
 import 'vibration_service.dart';
+import 'flashlight_service.dart';
 import 'smartwatch_service.dart';
 import 'sound_config_service.dart';
 import 'history_service.dart';
@@ -669,6 +670,7 @@ class AudioClassifierService {
     _pcmStreamSubscription?.cancel();
     _pcmStreamSubscription = null;
     _audioStreamer = null;
+    FlashlightService().cancelFlashlight();
   }
 
   DateTime? _lastEmittedAlertTime;
@@ -710,7 +712,10 @@ class AudioClassifierService {
     // 2. Trigger Phone Vibration instantly
     VibrationService().triggerVibration(event.priority);
 
-    // 3. Save log to history & sync to Yesido IO 39 smartwatch asynchronously in background
+    // 3. Trigger Flashlight Flashing pattern based on priority level
+    FlashlightService().triggerFlashlightPattern(event.priority);
+
+    // 4. Save log to history & sync to Yesido IO 39 smartwatch asynchronously in background
     unawaited(HistoryService().addEvent(event));
     unawaited(SmartwatchService().sendAlertToWatch(event));
   }
