@@ -23,6 +23,9 @@ class AudioClassifierService {
 
   static const MethodChannel _speechChannel =
       MethodChannel('com.deafalert.app/speech');
+  static const EventChannel _speechEvents =
+      EventChannel('com.deafalert.app/speech/events');
+  StreamSubscription? _speechSubscription;
 
   AudioRecorder? _audioRecorder;
   StreamSubscription<Uint8List>? _recordStreamSub;
@@ -400,11 +403,56 @@ class AudioClassifierService {
 
     _startVisualizerTicker();
 
-    // Start continuous hardware audio capture for visualizer & neural sound classification
-    await _startAudioCapture();
+    bool sttAvailable = false;
+    try {
+      sttAvailable =
+          await _speechChannel.invokeMethod<bool>('isAvailable') ?? false;
+    } catch (_) {}
 
-    _setSttStatus('Listening lively. Say any Sinhala word or emergency keyword.');
+    if (sttAvailable) {
+      // 1. Native Android Speech Recognizer: real-time word-by-word streaming, zero false alerts on noise!
+      _startSpeechRecognition();
+      _setSttStatus('Listening lively. Say any Sinhala word or emergency keyword.');
+    } else {
+      // 2. Fallback to hardware audio capture if STT is unavailable
+      await _startAudioCapture();
+      _setSttStatus('Listening for acoustic sound patterns & keywords.');
+    }
+
     return true;
+  }
+
+  void _startSpeechRecognition() {
+    try {
+      _speechSubscription?.cancel();
+      _speechSubscription = _speechEvents.receiveBroadcastStream().listen(
+        (event) {
+          if (!_isListening || event is! Map) return;
+          final type = (event['type'] ?? '').toString();
+          if (type == 'rms') {
+            final double rmsVal =
+                ((event['rms'] as num?)?.toDouble() ?? -2.0);
+            final double vol =
+                (0.20 + (rmsVal.clamp(-2.0, 10.0) / 10.0)).clamp(0.18, 1.0);
+            _updateWaveformVolume(vol);
+          } else if (type == 'partialResult' || type == 'finalResult') {
+            final text = (event['text'] ?? '').toString().trim();
+            final candidates = ((event['candidates'] as List?) ?? [])
+                .map((e) => e.toString().trim())
+                .where((s) => s.isNotEmpty)
+                .toList();
+
+            if (text.isNotEmpty || candidates.isNotEmpty) {
+              processSpeechText(text, candidates: candidates);
+            }
+          }
+        },
+        onError: (_) {},
+        cancelOnError: false,
+      );
+
+      _speechChannel.invokeMethod('startListening').catchError((_) {});
+    } catch (_) {}
   }
 
   Future<bool> _startAudioCapture() async {
@@ -731,10 +779,10 @@ class AudioClassifierService {
       }
 
       // Identify whether user spoke one of the 8 Sinhala emergency keywords:
-      final bool isDominantKeyword = (bestVotes >= 1) &&
-          (bestPeak >= 0.38 && bestSum >= 0.65) &&
-          (bestSum > bestEnvSum) &&
-          ((secondSum == 0.0) || (bestSum >= secondSum * 1.15));
+      final bool isDominantKeyword = (bestVotes >= 2) &&
+          (bestPeak >= 0.50 && bestSum >= 0.90) &&
+          (bestSum > bestEnvSum * 1.5) &&
+          ((secondSum == 0.0) || (bestSum >= secondSum * 1.25));
 
       if (isDominantKeyword) {
         _triggerKeywordAlert(bestCandidate, bestPeak, nowMs);
@@ -774,6 +822,8 @@ class AudioClassifierService {
     _visualizerTicker?.cancel();
     _visualizerTicker = null;
 
+    _speechSubscription?.cancel();
+    _speechSubscription = null;
     try {
       _speechChannel.invokeMethod('stopListening');
     } catch (_) {}
