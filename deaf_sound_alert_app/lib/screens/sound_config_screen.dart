@@ -11,53 +11,12 @@ class SoundConfigScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<AppProvider>(
       builder: (context, provider, child) {
-        return ListView(
+        return ListView.builder(
           padding: const EdgeInsets.all(16),
-          children: [
-            // Flashlight Alert Strobe Toggle Card
-            Container(
-              margin: const EdgeInsets.only(bottom: 16),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.amber.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.amber.withOpacity(0.5)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.flash_on_rounded, color: Colors.amber, size: 28),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text(
-                          'Flashlight Alert Strobe',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          'Flashes phone camera light synced with strong vibration pattern when sound detected',
-                          style: TextStyle(color: Colors.white70, fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Switch(
-                    value: provider.isFlashlightEnabled,
-                    activeColor: Colors.amber,
-                    onChanged: (val) => provider.setFlashlightEnabled(val),
-                  ),
-                ],
-              ),
-            ),
-
-            ...provider.soundConfigs.map((config) {
-              return Container(
+          itemCount: provider.soundConfigs.length,
+          itemBuilder: (context, index) {
+            final config = provider.soundConfigs[index];
+            return Container(
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -138,9 +97,8 @@ class SoundConfigScreen extends StatelessWidget {
                 ],
               ),
             );
-          }),
-        ],
-      );
+          },
+        );
       },
     );
   }

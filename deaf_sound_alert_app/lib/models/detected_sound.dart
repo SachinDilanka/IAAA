@@ -42,8 +42,6 @@ extension DetectedSoundIconExtension on DetectedSound {
     switch (soundKey) {
       case 'ambulance':
         return Icons.emergency_rounded;
-      case 'fire_truck':
-        return Icons.local_fire_department_rounded;
       case 'baby crying':
         return Icons.child_care_rounded;
       case 'vehicle horns':

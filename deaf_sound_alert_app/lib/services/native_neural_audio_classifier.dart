@@ -183,11 +183,10 @@ class NativeNeuralAudioClassifier {
       h3[j] = relu(s);
     }
 
-    // Layer 4: 64 -> Output Logits (_classes.length = 14)
-    final int numClasses = _classes.length;
-    final List<double> logits = List<double>.filled(numClasses, 0.0);
+    // Layer 4: 64 -> 13 Logits
+    final List<double> logits = List<double>.filled(13, 0.0);
     double maxL = -1e9;
-    for (int j = 0; j < numClasses; j++) {
+    for (int j = 0; j < 13; j++) {
       double s = _b4[j];
       for (int i = 0; i < 64; i++) {
         s += h3[i] * _W4[i][j];
@@ -196,16 +195,16 @@ class NativeNeuralAudioClassifier {
       if (s > maxL) maxL = s;
     }
 
-    // Softmax across all classes
+    // Softmax
     double expSum = 0.0;
-    final List<double> probs = List<double>.filled(numClasses, 0.0);
-    for (int j = 0; j < numClasses; j++) {
+    final List<double> probs = List<double>.filled(13, 0.0);
+    for (int j = 0; j < 13; j++) {
       probs[j] = math.exp(logits[j] - maxL);
       expSum += probs[j];
     }
 
     final Map<String, double> map = {};
-    for (int j = 0; j < numClasses; j++) {
+    for (int j = 0; j < 13; j++) {
       map[_classes[j]] = probs[j] / (expSum > 0 ? expSum : 1.0);
     }
     return map;

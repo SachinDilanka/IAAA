@@ -82,11 +82,5 @@
     "key": "vehicle horns",
     "name": "Vehicle Horns",
     "priority": "high"
-  },
-  {
-    "id": 14,
-    "key": "fire_truck",
-    "name": "Fire Alarm / Siren",
-    "priority": "high"
   }
 ]
