@@ -2743,6 +2743,52 @@ body.dark-mode .category-active-btn.category-bank-btn .cat-msg-count-pill {
   color: #93c5fd !important;
 }
 
+#location-pin-avatar {
+  color: #f43f5e;
+  background: #ffe4e6;
+  width: 40px;
+  height: 40px;
+  font-size: 18px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+#location-pin-avatar.is-bank {
+  color: #2563eb;
+  background: #dbeafe;
+}
+
+.category-criteria-shown {
+  display: block;
+}
+
+.category-criteria-hidden {
+  display: none;
+}
+
+.hospital-status-badge.badge-bank-theme {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.category-selector-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.category-selector-bar.bar-hidden {
+  display: none !important;
+}
+
+.waiting-hospital-card.waiting-hidden {
+  display: none !important;
+}
+
+
 
 
 
