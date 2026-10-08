@@ -1051,17 +1051,6 @@ document.addEventListener('DOMContentLoaded', () => {
     bindMessageCardListeners();
   }
 
-  let cachedHospitalCategories = {
-    'basic-comm': [],
-    'reception': [],
-    'directions': [],
-    'symptoms': [],
-    'emergency': [],
-    'medical-history': [],
-    'doctor-consultation': [],
-    'procedures-comfort': [],
-    'pharmacy-billing': []
-  };
 
   let cachedBankCategories = {
     'bank-basic-comm': [
