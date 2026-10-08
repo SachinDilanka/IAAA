@@ -21,6 +21,20 @@ SAMPLE_LOCATIONS = [
         "slug": "supermarket",
         "icon": "fa-cart-shopping",
         "description": "Finding products, grocery sections, assistance, and checkout."
+    },
+    {
+        "id": 4,
+        "name": "Bank",
+        "slug": "bank",
+        "icon": "fa-building-columns",
+        "description": "Account inquiries, cash deposits, withdrawals, and ATM directions."
+    },
+    {
+        "id": 5,
+        "name": "Pharmacy",
+        "slug": "pharmacy",
+        "icon": "fa-prescription-bottle-medical",
+        "description": "Prescriptions, over-the-counter medicine, and health supplies."
     }
 ]
 

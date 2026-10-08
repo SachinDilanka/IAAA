@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
+  <title>AI Communication Assistant - Mobile Interface</title>
+  <meta name="description" content="AI Communication Assistant mobile interface with GPS-aware situational messages for Hospitals, Supermarkets, Restaurants, and Banks.">
+
+  <!-- FontAwesome 6 Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
+  <!-- Modern Google Fonts: Inter & Outfit -->
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800;900&display=swap" rel="stylesheet">
+
+  <!-- Leaflet Interactive Maps CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}">
+</head>
+<body>
+
+<div class="mobile-page-wrapper">
+  
+  <!-- Desktop Preview Toolbar (Hidden on actual mobile screens) -->
+  <header class="preview-control-bar" role="region" aria-label="Device Preview Controls">
+    <div class="preview-badge-group">
+      <i class="fa-solid fa-mobile-screen-button"></i>
+      <span>Mobile Viewport Preview</span>
+    </div>
+
+    <div class="preview-actions">
+      <div class="gps-mode-badge" style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:#38bdf8; font-weight:600; padding:4px 10px; background:rgba(56,189,248,0.12); border-radius:20px; border:1px solid rgba(56,189,248,0.25);">
+        <span class="live-dot" style="background:#10b981; width:6px; height:6px;"></span>
+        <span>GPS Auto-Detecting Mode</span>
+      </div>
+
+      <button id="preview-live-gps-btn" class="preview-btn-toggle" type="button" title="Detect device GPS coordinates">
+        <i class="fa-solid fa-crosshairs"></i> Real GPS
+      </button>
+
+      <button id="preview-open-sim-btn" class="preview-btn-toggle" type="button" title="Test predefined GPS places">
+        <i class="fa-solid fa-satellite-dish"></i> GPS Simulator
+      </button>
+
+      <button id="preview-frame-toggle" class="preview-btn-toggle" type="button" aria-label="Toggle Phone Frame View">
+        <i class="fa-solid fa-expand"></i> Expanded View
+      </button>
+
+      <a href="/" class="preview-btn-toggle" title="Go to Web Portal">
+        <i class="fa-solid fa-desktop"></i> Web Portal
+      </a>
+    </div>
+  </header>
+
+  <!-- Smartphone Mockup Frame (iPhone Form Factor) -->
+  <div class="phone-mockup-frame" id="phone-mockup" role="region" aria-label="AI Communication Assistant Mobile Application">
+    
+    <!-- Phone Screen Body -->
+    <div class="phone-screen">
+
+      <!-- Status Bar (9:41, Cellular Dots, Wi-Fi, Battery) -->
+      <header class="mobile-status-bar" aria-label="Mobile Status Bar">
+        <span class="status-time" id="status-time">9:41</span>
+        
+        <div class="status-dynamic-notch" aria-hidden="true">
+          <div class="notch-camera-dot"></div>
+        </div>
+
+        <div class="status-icons" aria-label="Network and battery status">
+          <span class="status-dots" title="Cellular Signal">●●●</span>
+          <i class="fa-solid fa-wifi" title="Wi-Fi Connected"></i>
+          <i class="fa-solid fa-battery-full" title="Battery 100%"></i>
+        </div>
+      </header>
+
+      <!-- App Header: Hamburger (☰), Title ("AI Communication Assistant"), Settings/Target (⊙) -->
+      <nav class="mobile-app-header" role="navigation" aria-label="App Navigation Header">
+        <button class="btn-header-icon" id="menu-btn" type="button" aria-label="Open Navigation Menu">
+          <i class="fa-solid fa-bars"></i>
+        </button>
+
+        <h1 class="mobile-app-title">AI Communication Assistant</h1>
+
+        <button class="btn-header-icon" id="gps-target-btn" type="button" aria-label="Scan and Detect GPS Location" title="Scan GPS Location">
+          <i class="fa-solid fa-bullseye"></i>
+        </button>
+      </nav>
+ 
+      <!-- GPS Live Sub-Header Strip -->
+      <div class="gps-live-strip" id="gps-live-strip" role="status" aria-live="polite">
+        <div class="gps-strip-indicator">
+          <span class="gps-radar-pulse"></span>
+          <span id="gps-strip-status">GPS Active: Auto-detecting venue...</span>
+        </div>
+        <button id="gps-strip-recheck" class="gps-strip-btn" type="button" title="Scan GPS coordinates">
+          <i class="fa-solid fa-arrows-rotate"></i> Scan GPS
+        </button>
+      </div>
+
+      <!-- GPS Detection Toast Notification -->
+      <aside id="gps-scan-toast" class="gps-scan-toast" role="status" aria-live="polite">
+        <div class="gps-radar-spinner"></div>
+        <span id="gps-toast-text">Scanning GPS satellite coordinates...</span>
+      </aside>
+
+      <!-- Scrollable Content -->
+      <main class="mobile-content-body" id="main-mobile-content">
+
+        <!-- ================= TAB 1: HOME (Exact Wireframe Screen) ================= -->
+        <section id="tab-home" class="tab-content-panel active" aria-labelledby="location-title">
+          
+          <!-- SCREEN 1: First Screen (Only Map & Nine Main Message Criteria) -->
+          <div id="screen-main-home" class="mobile-subview active">
+            <!-- Area Map Widget with Integrated Live Location -->
+            <article class="area-map-card" id="area-map-card" role="region" aria-label="Interactive Area Location Map">
+              
+              <!-- Integrated Location Header -->
+              <header class="location-hero-card" id="location-hero-card" style="margin-bottom:0; border:none; border-bottom:1px solid var(--border-color, #e2e8f0); border-radius:0; padding:12px 14px; box-shadow:none; background:transparent;">
+                <div class="location-hero-top" style="display:flex; align-items:center; gap:12px;">
+                  <div class="location-pin-avatar" id="location-pin-avatar" 
+                       style="color: {{ theme_color|default('#f43f5e') }}; background: {{ bg_color|default('#ffe4e6') }}; width:40px; height:40px; font-size:18px; border-radius:12px; display:flex; align-items:center; justify-content:center; flex-shrink:0;" 
+                       aria-hidden="true">
+                    <i class="fa-solid {{ badge_icon|default('fa-location-dot') }}" id="location-badge-icon"></i>
+                  </div>
+                  
+                  <div class="location-details" style="flex:1; min-width:0;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
+                      <span class="location-eyebrow" id="location-eyebrow" style="font-size:10px; font-weight:700; letter-spacing:0.8px; color:var(--text-muted); text-transform:uppercase;">CURRENT LOCATION</span>
+                      <span class="area-map-hospital-badge" id="map-hospitals-count-badge" style="font-size:10px; font-weight:700; color:#ef4444; background:#fee2e2; padding:2px 6px; border-radius:8px;">
+                        <i class="fa-solid fa-square-h"></i> 20 SL Hospitals
+                      </span>
+                    </div>
+                    <h2 id="location-title" class="location-main-title" style="font-size:17px; font-weight:800; margin:1px 0; color:var(--text-main); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ location_name|default('Detecting Location...') }}</h2>
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:6px; margin-top:2px;">
+                      <span class="location-gps-sub" id="location-gps-sub" style="font-size:11px; color:var(--text-muted);">Detected via GPS</span>
+                      <button class="live-badge-pill" id="live-badge-btn" type="button" aria-label="GPS Status: Live. Tap to view GPS details or test coordinates" style="padding:2px 8px; font-size:10px;">
+                        <span class="live-dot" aria-hidden="true"></span>
+                        <span id="live-badge-text">LIVE</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </header>
+
+              <!-- Map Viewport -->
+              <div class="map-view-wrapper" id="map-view-wrapper">
+                <div id="leaflet-area-map" class="leaflet-area-map" role="application" aria-label="Interactive GPS Area Map" style="height:230px;"></div>
+                
+                <!-- Floating Map Instruction Badge -->
+                <div class="map-tap-instruction-badge" id="map-tap-instruction-badge">
+                  <span style="color:#ef4444; font-weight:700;"><i class="fa-solid fa-square-h"></i> Hospitals (Red)</span> &bull; <span style="color:#2563eb; font-weight:700;"><i class="fa-solid fa-building-columns"></i> Banks (Blue)</span> &bull; Tap pin to select
+                </div>
+
+                <!-- Map Overlay Floating Recenter, Hospital & Bank Controls -->
+                <div class="map-overlay-controls">
+                  <button id="map-recenter-btn" class="map-overlay-btn" type="button" title="Center on my GPS position">
+                    <i class="fa-solid fa-crosshairs"></i>
+                  </button>
+                  <button id="map-sl-hospitals-quick-btn" class="map-overlay-btn" type="button" title="Show All Sri Lanka Hospitals (Red)" style="color:#ef4444;">
+                    <i class="fa-solid fa-square-h"></i>
+                  </button>
+                  <button id="map-sl-banks-quick-btn" class="map-overlay-btn" type="button" title="Show All Sri Lanka Banks (Blue)" style="color:#2563eb;">
+                    <i class="fa-solid fa-building-columns"></i>
+                  </button>
+                  <button id="map-hospitals-focus-btn" class="map-overlay-btn" type="button" title="Focus Colombo Venues" style="color:#6366f1;">
+                    <i class="fa-solid fa-hospital"></i>
+                  </button>
+                  <button class="map-overlay-btn" id="map-toggle-btn" type="button" aria-label="Toggle map view height" title="Expand / Minimize Map">
+                    <i class="fa-solid fa-chevron-up" id="map-toggle-icon"></i>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Integrated Map Hospital & Bank Quick Selector Strip (Select Directly From Map) -->
+              <div class="map-hospital-selector-strip" id="map-hospital-selector-strip" role="region" aria-label="Select Hospital or Bank from Map">
+                <div class="map-strip-header">
+                  <span class="map-strip-title">
+                    <i class="fa-solid fa-map-location-dot" style="color:#2563eb;"></i> Select on Map (🔴 Hospitals | 🔵 Banks):
+                  </span>
+                  <span class="map-strip-badge" id="map-strip-badge">Tap Pin on Map</span>
+                </div>
+                <div class="map-hospital-pills-row" id="map-hospital-pills-row" role="tablist" aria-label="Sri Lanka Hospitals on Map">
+                  <!-- Dynamically populated hospital pills -->
+                </div>
+              </div>
+
+              <!-- Dynamic Area Status Bar -->
+              <footer class="area-map-status-bar" id="map-status-bar">
+                <i class="fa-solid fa-circle-info" id="map-status-icon"></i>
+                <span id="map-status-text">Acquiring area coordinates and nearby hospitals...</span>
+              </footer>
+            </article>
+
+            <!-- Section: Message Criteria (Revealed when a Hospital or Bank is detected or selected) -->
+            <div id="section-category-criteria" style="display: {% if location_slug in ['hospital', 'bank'] and not auto_detect %}block{% else %}none{% endif %};">
+              <div class="section-heading-wrap" style="display: flex; flex-direction: column; gap: 4px; margin: 14px 0 10px 0;">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                  <h3 class="section-messages-title" id="section-messages-heading" style="margin: 0; font-size: 15px; font-weight: 800;">
+                    {% if location_slug == 'bank' %}
+                    <i class="fa-solid fa-building-columns" style="color: #2563eb; margin-right: 6px;"></i> Bank Message Criteria / බැංකු කාණ්ඩ
+                    {% else %}
+                    <i class="fa-solid fa-list-check" style="color: #ef4444; margin-right: 6px;"></i> Hospital Message Criteria / රෝහල් කාණ්ඩ
+                    {% endif %}
+                  </h3>
+                  <span id="hospital-status-badge" class="hospital-status-badge" style="display: inline-flex; {% if location_slug == 'bank' %}background: #dbeafe; color: #2563eb;{% endif %}">
+                    {% if location_slug == 'bank' %}
+                    <i class="fa-solid fa-building-columns"></i> 2 Categories
+                    {% else %}
+                    <i class="fa-solid fa-square-h"></i> 9 Categories
+                    {% endif %}
+                  </span>
+                </div>
+                <p class="category-hint-text" id="category-hint-text" style="display: block; margin: 2px 0 0 0;">
+                  <i class="fa-solid fa-hand-pointer"></i> Press a category button above to suggest communication messages
+                </p>
+              </div>
+
+              <!-- Hospital Message Criteria Buttons (9 buttons) -->
+              <div id="category-selector-bar" class="category-selector-bar" style="display: {% if location_slug == 'bank' %}none{% else %}flex{% endif %}; flex-direction: column; gap: 8px;">
+                <button type="button" class="category-active-btn" id="btn-cat-basic-comm" data-cat="basic-comm" aria-label="1. මූලික සන්නිවේදනය / Basic communication" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-comments"></i>
+                  <span class="cat-btn-text">1. මූලික සන්නිවේදනය / Basic communication</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-basic-comm">10</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-chevron-icon-1"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-reception-btn" id="btn-cat-reception" data-cat="reception" aria-label="2. පිළිගැනීම සහ ලියාපදිංචිය / Reception and registration" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-clipboard-user"></i>
+                  <span class="cat-btn-text">2. පිළිගැනීම සහ ලියාපදිංචිය / Reception and registration</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-reception">10</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-chevron-icon-2"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-directions-btn" id="btn-cat-directions" data-cat="directions" aria-label="3. දිශාවන් / Directions" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-diamond-turn-right"></i>
+                  <span class="cat-btn-text">3. දිශාවන් / Directions</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-directions">10</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-chevron-icon-3"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-symptoms-btn" id="btn-cat-symptoms" data-cat="symptoms" aria-label="4. රෝග ලක්ෂණ / Symptoms" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-heart-pulse"></i>
+                  <span class="cat-btn-text">4. රෝග ලක්ෂණ / Symptoms</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-symptoms">19</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-chevron-icon-4"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-emergency-btn" id="btn-cat-emergency" data-cat="emergency" aria-label="5. හදිසි අවස්ථාව / Emergency" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-truck-medical"></i>
+                  <span class="cat-btn-text">5. හදිසි අවස්ථාව / Emergency</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-emergency">8</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-chevron-icon-5"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-medical-history-btn" id="btn-cat-medical-history" data-cat="medical-history" aria-label="6. වෛද්ය ඉතිහාසය / Medical history" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-file-waveform"></i>
+                  <span class="cat-btn-text">6. වෛද්ය ඉතිහාසය / Medical history</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-medical-history">14</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-chevron-icon-6"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-doctor-consultation-btn" id="btn-cat-doctor-consultation" data-cat="doctor-consultation" aria-label="7. වෛද්ය උපදේශනය / Doctor consultation" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-user-doctor"></i>
+                  <span class="cat-btn-text">7. වෛද්ය උපදේශනය / Doctor consultation</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-doctor-consultation">14</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-chevron-icon-7"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-procedures-comfort-btn" id="btn-cat-procedures-comfort" data-cat="procedures-comfort" aria-label="8. ක්රියාපටිපාටි සහ පහසුව / Procedures and comfort" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-hand-holding-heart"></i>
+                  <span class="cat-btn-text">8. ක්රියාපටිපාටි සහ පහසුව / Procedures and comfort</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-procedures-comfort">8</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-chevron-icon-8"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-pharmacy-billing-btn" id="btn-cat-pharmacy-billing" data-cat="pharmacy-billing" aria-label="9. ඖෂධ ශාලාව, බිල්පත් කිරීම සහ බැහැර කිරීම / Pharmacy, billing and discharge" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-receipt"></i>
+                  <span class="cat-btn-text">9. ඖෂධ ශාලාව, බිල්පත් කිරීම සහ බැහැර කිරීම / Pharmacy, billing and discharge</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-pharmacy-billing">6</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-chevron-icon-9"></i>
+                  </div>
+                </button>
+              </div>
+
+              <!-- Bank Message Criteria Buttons (2 buttons) -->
+              <div id="bank-category-selector-bar" class="category-selector-bar" style="display: {% if location_slug == 'bank' %}flex{% else %}none{% endif %}; flex-direction: column; gap: 8px;">
+                <button type="button" class="category-active-btn category-bank-btn" id="btn-cat-bank-basic-comm" data-cat="bank-basic-comm" aria-label="1. මූලික සන්නිවේදනය / Basic communication" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-comments"></i>
+                  <span class="cat-btn-text">1. මූලික සන්නිවේදනය / Basic communication</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-bank-basic-comm">7</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-bank-chevron-icon-1"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-bank-btn" id="btn-cat-bank-reception-queue" data-cat="bank-reception-queue" aria-label="2. පිළිගැනීමේ අංශය සහ පෝලිම / Reception and queue" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-users-line"></i>
+                  <span class="cat-btn-text">2. පිළිගැනීමේ අංශය සහ පෝලිම / Reception and queue</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-bank-reception-queue">8</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-bank-chevron-icon-2"></i>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <!-- Waiting for Hospital or Bank Detection State (Visible when scanning or outside) -->
+            <div id="waiting-hospital-state" class="waiting-hospital-card" style="display: {% if location_slug in ['hospital', 'bank'] and not auto_detect %}none{% else %}block{% endif %};">
+              <div class="waiting-icon-pulse">
+                <i class="fa-solid fa-location-crosshairs"></i>
+              </div>
+              <h4 class="waiting-title">GPS Detection Active</h4>
+              <p class="waiting-desc">
+                Select a hospital (🔴) or bank (🔵) on the map, or wait for GPS to detect your location to view message categories.
+              </p>
+              <button id="btn-quick-sim-nhsl" class="btn-quick-sim-nhsl" type="button" style="display:none;" onclick="triggerSimulateHospital('nhsl-colombo')">
+                <i class="fa-solid fa-hospital"></i> Select NHSL Hospital
+              </button>
+            </div>
+          </div>
+
+          <!-- SCREEN 2: Category Suggested Messages Screen (Revealed when tapping any criterion) -->
+          <div id="screen-category-messages" class="mobile-subview" style="display: none;">
+            
+            <!-- Category Navigation Header with Back Button -->
+            <div class="category-subscreen-header" id="category-subscreen-header">
+              <button type="button" class="btn-subscreen-back" id="btn-back-to-home" aria-label="Back to Map & Categories">
+                <i class="fa-solid fa-arrow-left"></i>
+                <span>Back</span>
+              </button>
+              <div class="subscreen-header-title-box">
+                <span class="subscreen-header-title" id="subscreen-category-title">1. මූලික සන්නිවේදනය</span>
+                <span class="subscreen-header-sub" id="subscreen-category-en">Basic communication</span>
+              </div>
+              <span class="subscreen-count-badge" id="subscreen-count-pill">10</span>
+            </div>
+
+            <!-- Category Info Banner -->
+            <div class="subscreen-category-banner" id="subscreen-category-banner">
+              <div class="subscreen-banner-icon" id="subscreen-banner-icon-box">
+                <i class="fa-solid fa-comments" id="subscreen-banner-icon"></i>
+              </div>
+              <div class="subscreen-banner-text">
+                <h4 id="subscreen-banner-title">1. මූලික සන්නිවේදනය / Basic communication</h4>
+                <p id="subscreen-banner-desc">Tap any message card below to display full-screen or speak aloud.</p>
+              </div>
+            </div>
+
+            <!-- Suggested Message Grid (Populated with suggested messages for selected category) -->
+            <div class="messages-grid-2col" id="messages-grid" role="list" aria-label="Hospital Situation Messages" style="display: none;">
+              {% if messages %}
+                {% for msg in messages %}
+                <button class="msg-action-card dual-lang-card" role="listitem" type="button" 
+                        data-msg="{{ msg.template_si|default(msg.template) }} ({{ msg.template_en|default(msg.template) }})" 
+                        data-msg-si="{{ msg.template_si|default('') }}" 
+                        data-msg-en="{{ msg.template_en|default(msg.template) }}" 
+                        data-icon="{{ msg.icon|default('fa-comment-dots') }}" 
+                        aria-label="Display message: {{ msg.template_si|default('') }} - {{ msg.template_en|default(msg.template) }}">
+                  <div class="card-inner-dual">
+                    <div class="card-header-meta">
+                      <i class="fa-solid {{ msg.icon|default('fa-comment-dots') }} card-icon-badge"></i>
+                    </div>
+                    <div class="card-dual-body">
+                      <div class="card-text-si">{{ msg.template_si|default('') }}</div>
+                      <div class="card-text-en">{{ msg.template_en|default(msg.template) }}</div>
+                    </div>
+                  </div>
+                  <div class="card-right-meta">
+                    <button class="card-fav-star" type="button" aria-label="Add to Favorites" title="Favorite">
+                      <i class="fa-regular fa-star"></i>
+                    </button>
+                    <i class="fa-solid fa-chevron-right card-arrow-icon" aria-hidden="true"></i>
+                  </div>
+                </button>
+                {% endfor %}
+              {% endif %}
+            </div>
+
+            <!-- Custom Typing Action Card (Full Width Below Grid) -->
+            <button class="custom-typing-action-card" id="custom-typing-trigger" type="button" aria-label="Open Custom Message Typing Sheet">
+              <div class="custom-typing-left">
+                <div class="custom-typing-icon-box" aria-hidden="true">
+                  <i class="fa-solid fa-pencil"></i>
+                </div>
+                <div class="custom-typing-text-wrap">
+                  <span class="custom-typing-title">Custom Typing</span>
+                  <span class="custom-typing-sub">Type your own message</span>
+                </div>
+              </div>
+              <div class="custom-typing-arrow" aria-hidden="true">
+                <i class="fa-solid fa-chevron-right"></i>
+              </div>
+            </button>
+          </div>
+
+        </section>
+
+
+        <!-- ================= TAB 2: CATEGORIES ================= -->
+        <section id="tab-categories" class="tab-content-panel" aria-labelledby="cat-heading">
+          <div class="section-heading-wrap">
+            <h3 id="cat-heading" class="section-messages-title">Browse Categories</h3>
+          </div>
+          
+          <div class="category-list-wrap">
+            <button type="button" class="cat-item-card gps-sim-btn" data-slug="supermarket">
+              <div class="cat-icon-circle" style="background:#d1fae5; color:#10b981;"><i class="fa-solid fa-cart-shopping"></i></div>
+              <div>
+                <strong>Supermarket & Groceries</strong>
+                <p style="font-size:12px; color:var(--text-muted); margin:0;">Finding items, pricing, staff help, checkout counter</p>
+              </div>
+            </button>
+            <button type="button" class="cat-item-card gps-sim-btn" data-slug="restaurant">
+              <div class="cat-icon-circle" style="background:#fef3c7; color:#f59e0b;"><i class="fa-solid fa-utensils"></i></div>
+              <div>
+                <strong>Popular Restaurant & Dining</strong>
+                <p style="font-size:12px; color:var(--text-muted); margin:0;">Viewing menu, ordering meals, allergies, requesting bill</p>
+              </div>
+            </button>
+            <button type="button" class="cat-item-card gps-sim-btn" data-slug="bank">
+              <div class="cat-icon-circle" style="background:#dbeafe; color:#2563eb;"><i class="fa-solid fa-building-columns"></i></div>
+              <div>
+                <strong>Bank & Financial Services</strong>
+                <p style="font-size:12px; color:var(--text-muted); margin:0;">Cash withdrawals, deposits, teller help, ATM directions</p>
+              </div>
+            </button>
+            <button type="button" class="cat-item-card gps-sim-btn" data-slug="hospital">
+              <div class="cat-icon-circle" style="background:#ffe4e6; color:#f43f5e;"><i class="fa-solid fa-hospital"></i></div>
+              <div>
+                <strong>Hospital & Healthcare</strong>
+                <p style="font-size:12px; color:var(--text-muted); margin:0;">Emergency care, appointments, doctor visits, directions</p>
+              </div>
+            </button>
+            <button type="button" class="cat-item-card gps-sim-btn" data-slug="pharmacy">
+              <div class="cat-icon-circle" style="background:#ede9fe; color:#8b5cf6;"><i class="fa-solid fa-prescription-bottle-medical"></i></div>
+              <div>
+                <strong>Pharmacy & Medicine</strong>
+                <p style="font-size:12px; color:var(--text-muted); margin:0;">Prescriptions, cold medicine, first aid, dosage guide</p>
+              </div>
+            </button>
+            <button type="button" class="cat-item-card gps-sim-btn" data-slug="other">
+              <div class="cat-icon-circle" style="background:#e0e7ff; color:#6366f1;"><i class="fa-solid fa-location-dot"></i></div>
+              <div>
+                <strong>Outside Predefined Facilities</strong>
+                <p style="font-size:12px; color:var(--text-muted); margin:0;">Everyday situations: Cannot speak, need help, restroom, write down</p>
+              </div>
+            </button>
+          </div>
+        </section>
+
+        <!-- ================= TAB 3: HISTORY ================= -->
+        <section id="tab-history" class="tab-content-panel" aria-labelledby="hist-heading">
+          <div class="section-heading-wrap" style="display:flex; justify-content:space-between; align-items:center;">
+            <h3 id="hist-heading" class="section-messages-title">Recent Messages</h3>
+            <button id="clear-history-btn" type="button" style="background:transparent; border:none; color:#ef4444; font-size:12px; font-weight:700; cursor:pointer;">Clear All</button>
+          </div>
+
+          <div id="history-empty" class="history-empty-state">
+            <i class="fa-solid fa-clock-rotate-left"></i>
+            <p>No messages displayed yet.<br>Tap any card to view and speak it.</p>
+          </div>
+
+          <div id="history-list" class="history-items-list"></div>
+        </section>
+
+        <!-- ================= TAB 4: FAVORITES ================= -->
+        <section id="tab-favorites" class="tab-content-panel" aria-labelledby="fav-heading">
+          <div class="section-heading-wrap" style="display:flex; justify-content:space-between; align-items:center;">
+            <h3 id="fav-heading" class="section-messages-title">Favorite Messages</h3>
+            <button id="clear-favs-btn" type="button" style="background:transparent; border:none; color:#ef4444; font-size:12px; font-weight:700; cursor:pointer;">Clear All</button>
+          </div>
+
+          <div id="favorites-empty" class="favorites-empty-state">
+            <i class="fa-solid fa-star"></i>
+            <p>No favorites saved yet.<br>Tap the star icon on any card to save it here for quick access.</p>
+          </div>
+
+          <div id="favorites-list" class="fav-items-list"></div>
+        </section>
+
+      </main>
+
+      <!-- Bottom Navigation Bar (Home, Categories, History, Favorites) -->
+      <nav class="mobile-bottom-nav" role="navigation" aria-label="Bottom Navigation">
+        <div class="bottom-nav-items-row">
+          <button class="bottom-nav-btn active" data-tab="home" type="button" aria-label="Go to Home">
+            <i class="fa-solid fa-house"></i>
+            <span>Home</span>
+          </button>
+
+          <button class="bottom-nav-btn" data-tab="categories" type="button" aria-label="View Categories">
+            <i class="fa-solid fa-border-all"></i>
+            <span>Categories</span>
+          </button>
+
+          <button class="bottom-nav-btn" data-tab="history" type="button" aria-label="View Message History">
+            <i class="fa-solid fa-clock-rotate-left"></i>
+            <span>History</span>
+          </button>
+
+          <button class="bottom-nav-btn" data-tab="favorites" type="button" aria-label="View Favorite Messages">
+            <i class="fa-solid fa-star"></i>
+            <span>Favorites</span>
+          </button>
+        </div>
+
+        <!-- iOS Home Indicator Swipe Bar -->
+        <div class="iphone-home-indicator-bar" aria-hidden="true"></div>
+      </nav>
+
+      <!-- ================= MODAL: GPS DETECTION DIALOG & SIMULATION ================= -->
+      <div id="gps-dialog-backdrop" class="mobile-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="gps-dialog-title">
+        <div class="bottom-sheet-panel" style="max-height:85%;">
+          <div class="sheet-header">
+            <h3 id="gps-dialog-title" class="sheet-title">
+              <i class="fa-solid fa-location-crosshairs" style="color:#2563eb;"></i> GPS Location Detector
+            </h3>
+            <button id="close-gps-dialog-btn" class="btn-close-sheet" type="button" aria-label="Close GPS Dialog">&times;</button>
+          </div>
+
+          <p style="font-size:13px; color:var(--text-muted); margin:0;">
+            Detect your nearby facility automatically via GPS or choose a predefined place to simulate real-time positioning:
+          </p>
+
+          <!-- Action: Live GPS Scan -->
+          <button id="run-live-gps-btn" class="btn-sheet-primary" type="button" style="width:100%;">
+            <i class="fa-solid fa-satellite-dish"></i> Detect via Live Device GPS
+          </button>
+
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:var(--text-muted); margin-top:4px;">
+            Or Detect Predefined Locations
+          </div>
+
+          <!-- Predefined Locations Grid -->
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            <button class="gps-simulate-btn" data-slug="hospital" type="button" style="background:#fff; border:1.5px solid #cbd5e1; border-radius:12px; padding:10px; display:flex; align-items:center; gap:8px; font-weight:600; font-size:13px; cursor:pointer;">
+              <span style="width:28px; height:28px; border-radius:50%; background:#ffe4e6; color:#f43f5e; display:flex; align-items:center; justify-content:center; font-size:13px;"><i class="fa-solid fa-hospital"></i></span>
+              <span>Hospital</span>
+            </button>
+
+            <button class="gps-simulate-btn" data-slug="supermarket" type="button" style="background:#fff; border:1.5px solid #cbd5e1; border-radius:12px; padding:10px; display:flex; align-items:center; gap:8px; font-weight:600; font-size:13px; cursor:pointer;">
+              <span style="width:28px; height:28px; border-radius:50%; background:#d1fae5; color:#10b981; display:flex; align-items:center; justify-content:center; font-size:13px;"><i class="fa-solid fa-cart-shopping"></i></span>
+              <span>Supermarket</span>
+            </button>
+
+            <button class="gps-simulate-btn" data-slug="restaurant" type="button" style="background:#fff; border:1.5px solid #cbd5e1; border-radius:12px; padding:10px; display:flex; align-items:center; gap:8px; font-weight:600; font-size:13px; cursor:pointer;">
+              <span style="width:28px; height:28px; border-radius:50%; background:#fef3c7; color:#f59e0b; display:flex; align-items:center; justify-content:center; font-size:13px;"><i class="fa-solid fa-utensils"></i></span>
+              <span>Restaurant</span>
+            </button>
+
+            <button class="gps-simulate-btn" data-slug="bank" type="button" style="background:#fff; border:1.5px solid #cbd5e1; border-radius:12px; padding:10px; display:flex; align-items:center; gap:8px; font-weight:600; font-size:13px; cursor:pointer;">
+              <span style="width:28px; height:28px; border-radius:50%; background:#dbeafe; color:#2563eb; display:flex; align-items:center; justify-content:center; font-size:13px;"><i class="fa-solid fa-building-columns"></i></span>
+              <span>Bank</span>
+            </button>
+          </div>
+
+          <div id="gps-status-feedback" style="font-size:12px; color:#2563eb; background:#eff6ff; padding:8px 12px; border-radius:8px; display:none;"></div>
+        </div>
+      </div>
+
+      <!-- ================= MODAL: CUSTOM TYPING BOTTOM SHEET ================= -->
+      <div id="custom-sheet-backdrop" class="mobile-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="custom-sheet-title">
+        <div class="bottom-sheet-panel">
+          <div class="sheet-header">
+            <h3 id="custom-sheet-title" class="sheet-title">
+              <i class="fa-solid fa-pencil" style="color:#2563eb;"></i> Custom Typing
+            </h3>
+            <button id="close-sheet-btn" class="btn-close-sheet" type="button" aria-label="Close sheet">&times;</button>
+          </div>
+
+          <textarea id="custom-input-text" class="sheet-textarea" rows="3" placeholder="Type your custom message here..."></textarea>
+
+          <div class="sheet-quick-chips" aria-label="Quick suggestion chips">
+            <button type="button" class="chip-btn" data-text="Yes">Yes</button>
+            <button type="button" class="chip-btn" data-text="No">No</button>
+            <button type="button" class="chip-btn" data-text="Please write it down">Please write it down</button>
+            <button type="button" class="chip-btn" data-text="I am deaf / hard of hearing">I am deaf / hard of hearing</button>
+            <button type="button" class="chip-btn" data-text="Thank you">Thank you</button>
+          </div>
+
+          <div class="sheet-actions">
+            <button id="show-custom-fullscreen-btn" class="btn-sheet-primary" type="button">
+              <i class="fa-solid fa-expand"></i> Display Fullscreen
+            </button>
+            <button id="speak-custom-btn" class="btn-sheet-secondary" type="button" title="Speak Out Loud">
+              <i class="fa-solid fa-volume-high"></i> Speak
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= MODAL: FULLSCREEN BILLBOARD COMMUNICATION CARD ================= -->
+      <div id="billboard-modal" class="billboard-display-modal" role="dialog" aria-modal="true" aria-labelledby="billboard-text">
+        <header class="billboard-toolbar">
+          <button id="billboard-back-btn" class="billboard-btn-back" type="button">
+            <i class="fa-solid fa-arrow-left"></i> Back
+          </button>
+
+          <div class="billboard-toolbar-actions">
+            <button id="billboard-flip-btn" class="billboard-action-btn" type="button" title="Flip 180° for person facing you">
+              <i class="fa-solid fa-rotate"></i> Flip 180°
+            </button>
+            <button id="billboard-speak-btn" class="billboard-action-btn" type="button" title="Speak Message via Audio">
+              <i class="fa-solid fa-volume-high"></i> Speak
+            </button>
+            <button id="billboard-fav-btn" class="billboard-action-btn" type="button" title="Favorite Message">
+              <i class="fa-regular fa-star"></i> Favorite
+            </button>
+          </div>
+        </header>
+
+        <div id="billboard-center" class="billboard-content-center">
+          <i id="billboard-icon" class="fa-solid fa-comment-dots billboard-icon"></i>
+          <p id="billboard-text-si" class="billboard-big-text-si" style="display: none;"></p>
+          <p id="billboard-text" class="billboard-big-text">I am deaf.</p>
+        </div>
+
+        <footer class="billboard-footer-hint">
+          <span>Show this screen to staff or companion • High-Contrast Mode</span>
+        </footer>
+      </div>
+
+      <!-- ================= SIDE DRAWER: HAMBURGER MENU ================= -->
+      <div id="drawer-backdrop" class="mobile-side-drawer-backdrop" role="dialog" aria-modal="true" aria-label="Side Navigation Menu">
+        <div class="mobile-side-drawer">
+          <div class="drawer-header">
+            <div class="drawer-brand">
+              <i class="fa-solid fa-hands-asl-interpreting" style="color:#2563eb;"></i>
+              <span>AssistComm</span>
+            </div>
+            <button id="close-drawer-btn" class="btn-close-sheet" type="button" aria-label="Close Drawer">&times;</button>
+          </div>
+
+          <span class="drawer-section-title">Predefined Locations</span>
+          <div class="drawer-nav-list">
+            <button type="button" class="drawer-link gps-sim-btn" data-slug="supermarket">
+              <i class="fa-solid fa-cart-shopping" style="color:#10b981;"></i> Supermarket & Retail
+            </button>
+            <button type="button" class="drawer-link gps-sim-btn" data-slug="restaurant">
+              <i class="fa-solid fa-utensils" style="color:#f59e0b;"></i> Popular Restaurant & Dining
+            </button>
+            <button type="button" class="drawer-link gps-sim-btn" data-slug="bank">
+              <i class="fa-solid fa-building-columns" style="color:#2563eb;"></i> Bank & Finance
+            </button>
+            <button type="button" class="drawer-link gps-sim-btn" data-slug="hospital">
+              <i class="fa-solid fa-hospital" style="color:#f43f5e;"></i> Hospital & Healthcare
+            </button>
+            <button type="button" class="drawer-link gps-sim-btn" data-slug="pharmacy">
+              <i class="fa-solid fa-prescription-bottle-medical" style="color:#8b5cf6;"></i> Pharmacy & Medicine
+            </button>
+            <button type="button" class="drawer-link gps-sim-btn" data-slug="other">
+              <i class="fa-solid fa-location-dot" style="color:#6366f1;"></i> Outside Facilities (Everyday)
+            </button>
+          </div>
+
+          <span class="drawer-section-title">Accessibility & Theme</span>
+          <div class="drawer-nav-list">
+            <button id="contrast-toggle" class="drawer-link" type="button">
+              <i class="fa-solid fa-circle-half-stroke"></i> Toggle High Contrast
+            </button>
+            <button id="dark-toggle" class="drawer-link" type="button">
+              <i class="fa-solid fa-moon"></i> Dark / Light Mode
+            </button>
+          </div>
+
+          <span class="drawer-section-title">Application</span>
+          <div class="drawer-nav-list">
+            <a href="/" class="drawer-link">
+              <i class="fa-solid fa-table-columns"></i> Desktop Web View
+            </a>
+            <button class="drawer-link" type="button" onclick="alert('AssistComm AI Communication Assistant v2.0 - Designed for deaf and non-verbal accessibility with GPS location awareness for Hospitals, Supermarkets, Restaurants, and Banks.')">
+              <i class="fa-solid fa-circle-info"></i> About Assistant
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= MODAL: GPS DETECTION & LOCATION SIMULATOR ================= -->
+      <div id="gps-dialog-backdrop" class="gps-dialog-backdrop" role="dialog" aria-modal="true" aria-labelledby="gps-dialog-title">
+        <div class="gps-dialog-card">
+          <div class="gps-dialog-header">
+            <h3 id="gps-dialog-title" class="gps-dialog-title">
+              <i class="fa-solid fa-satellite-dish" style="color:#2563eb;"></i> GPS Detection
+            </h3>
+            <button id="close-gps-dialog-btn" class="btn-close-sheet" type="button" aria-label="Close GPS Dialog">&times;</button>
+          </div>
+
+          <div class="gps-dialog-body">
+            <p style="margin:0 0 12px 0;">The system continuously checks device GPS coordinates to detect if you are inside a <strong>Supermarket, Restaurant, Bank, or Hospital</strong>, then automatically delivers the situation's messages.</p>
+
+            <button id="run-live-gps-btn" class="gps-btn-live-scan" type="button">
+              <i class="fa-solid fa-crosshairs"></i> Detect Real Device GPS
+            </button>
+          </div>
+
+          <div>
+            <span class="gps-dialog-section-label">Simulate GPS Coordinates</span>
+            <div class="gps-sim-grid">
+              <button type="button" class="gps-sim-chip gps-sim-btn" data-slug="supermarket">
+                <i class="fa-solid fa-cart-shopping" style="color:#10b981;"></i> Supermarket
+              </button>
+              <button type="button" class="gps-sim-chip gps-sim-btn" data-slug="restaurant">
+                <i class="fa-solid fa-utensils" style="color:#f59e0b;"></i> Restaurant
+              </button>
+              <button type="button" class="gps-sim-chip gps-sim-btn" data-slug="bank">
+                <i class="fa-solid fa-building-columns" style="color:#2563eb;"></i> Bank
+              </button>
+              <button type="button" class="gps-sim-chip gps-sim-btn" data-slug="hospital">
+                <i class="fa-solid fa-hospital" style="color:#f43f5e;"></i> Hospital
+              </button>
+              <button type="button" class="gps-sim-chip gps-sim-btn" data-slug="pharmacy">
+                <i class="fa-solid fa-prescription-bottle-medical" style="color:#8b5cf6;"></i> Pharmacy
+              </button>
+              <button type="button" class="gps-sim-chip gps-sim-btn" data-slug="other">
+                <i class="fa-solid fa-location-dot" style="color:#6366f1;"></i> Outside
+              </button>
+            </div>
+          </div>
+
+          <div style="margin-top:14px;">
+            <span class="gps-dialog-section-label"><i class="fa-solid fa-hand-pointer"></i> Manually Select Hospital</span>
+            <div class="manual-selector-input-row" style="margin-top:6px;">
+              <select id="modal-manual-hospital-select" class="manual-hospital-dropdown">
+                <option value="" disabled selected>-- Choose Hospital in Sri Lanka --</option>
+                <option value="nhsl-colombo">National Hospital of Sri Lanka (NHSL), Colombo</option>
+                <option value="asiri-central">Asiri Central Hospital, Colombo 10</option>
+                <option value="nawaloka-colombo">Nawaloka Hospital, Colombo 02</option>
+                <option value="kalubowila-teaching">Colombo South Teaching Hospital (Kalubowila)</option>
+                <option value="lanka-hospitals">The Lanka Hospitals, Narahenpita</option>
+                <option value="durdans-colombo">Durdans Hospital, Kollupitiya</option>
+                <option value="asiri-surgical">Asiri Surgical Hospital, Narahenpita</option>
+                <option value="lrh-colombo">Lady Ridgeway Hospital for Children (LRH)</option>
+                <option value="castle-street">Castle Street Hospital for Women</option>
+                <option value="ragama-teaching">Colombo North Teaching Hospital (Ragama)</option>
+                <option value="sri-jayewardenepura">Sri Jayewardenepura General Hospital</option>
+                <option value="negombo-hospital">District General Hospital Negombo</option>
+                <option value="gampaha-hospital">District General Hospital Gampaha</option>
+                <option value="kandy-teaching">National Hospital Kandy</option>
+                <option value="karapitiya-teaching">Teaching Hospital Karapitiya (Galle)</option>
+                <option value="jaffna-teaching">Teaching Hospital Jaffna</option>
+                <option value="anuradhapura-teaching">Teaching Hospital Anuradhapura</option>
+                <option value="batticaloa-teaching">Teaching Hospital Batticaloa</option>
+                <option value="panadura-hospital">Base Hospital Panadura</option>
+                <option value="homagama-hospital">Base Hospital Homagama</option>
+              </select>
+              <button type="button" id="btn-modal-apply-hospital" class="btn-apply-manual-hospital">
+                Select
+              </button>
+            </div>
+          </div>
+
+          <div style="margin-top:14px;">
+            <span class="gps-dialog-section-label">Quick Hospital Selection</span>
+            <div class="gps-sim-grid">
+              <button type="button" class="gps-sim-chip gps-hospital-sim-chip" data-lat="6.9197" data-lon="79.8693" data-name="National Hospital of Sri Lanka (NHSL)">
+                <i class="fa-solid fa-hospital" style="color:#ef4444;"></i> NHSL Colombo
+              </button>
+              <button type="button" class="gps-sim-chip gps-hospital-sim-chip" data-lat="6.9248" data-lon="79.8647" data-name="Asiri Central Hospital">
+                <i class="fa-solid fa-hospital" style="color:#ef4444;"></i> Asiri Central
+              </button>
+              <button type="button" class="gps-sim-chip gps-hospital-sim-chip" data-lat="6.8732" data-lon="79.8789" data-name="Colombo South Teaching Hospital (Kalubowila)">
+                <i class="fa-solid fa-hospital" style="color:#ef4444;"></i> Kalubowila
+              </button>
+              <button type="button" class="gps-sim-chip gps-hospital-sim-chip" data-lat="6.8953" data-lon="79.8837" data-name="The Lanka Hospitals">
+                <i class="fa-solid fa-hospital" style="color:#ef4444;"></i> Lanka Hospitals
+              </button>
+              <button type="button" class="gps-sim-chip gps-hospital-sim-chip" data-lat="7.2885" data-lon="80.6277" data-name="National Hospital Kandy">
+                <i class="fa-solid fa-hospital" style="color:#ef4444;"></i> Kandy Hospital
+              </button>
+              <button type="button" class="gps-sim-chip gps-hospital-sim-chip" data-lat="6.0645" data-lon="80.2285" data-name="Teaching Hospital Karapitiya Galle">
+                <i class="fa-solid fa-hospital" style="color:#ef4444;"></i> Karapitiya Galle
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div> <!-- End phone-screen -->
+  </div> <!-- End phone-mockup-frame -->
+
+</div> <!-- End mobile-page-wrapper -->
+
+<!-- Leaflet Interactive Maps JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="{{ url_for('static', filename='js/mobile.js') }}"></script>
+</body>
+</html>

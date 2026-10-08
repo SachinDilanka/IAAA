@@ -19,10 +19,13 @@
     <a href="#main-content" class="skip-link">Skip to main content</a>
 
     <header class="app-header">
-        <div class="header-container">
-            <a href="{{ url_for('main.index') }}" class="brand-logo" aria-label="AssistComm Home Page">
+        <div class="header-container" style="display:flex; justify-content:space-between; align-items:center;">
+            <a href="/" class="brand-logo" aria-label="AssistComm Home Page">
                 <i class="fa-solid fa-hands-asl-interpreting brand-icon"></i>
                 <span class="brand-title">AssistComm</span>
+            </a>
+            <a href="/mobile" style="font-size:0.9rem; font-weight:700; padding:6px 16px; border-radius:20px; display:inline-flex; align-items:center; gap:8px; color:#ffee00; border:1.5px solid #ffee00; text-decoration:none; background:rgba(255, 238, 0, 0.1);">
+                <i class="fa-solid fa-mobile-screen"></i> Mobile App View
             </a>
         </div>
     </header>

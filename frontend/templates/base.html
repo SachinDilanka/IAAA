@@ -20,10 +20,13 @@
     <a href="#main-content" class="skip-link">Skip to main content</a>
 
     <header class="app-header" role="banner">
-        <div class="header-inner">
-            <a href="{{ url_for('views.index') }}" class="brand-link" aria-label="AssistComm Home">
+        <div class="header-inner" style="display:flex; justify-content:space-between; align-items:center;">
+            <a href="/" class="brand-link" aria-label="AssistComm Home">
                 <i class="fa-solid fa-hands-asl-interpreting brand-icon" aria-hidden="true"></i>
                 <span class="brand-name">AssistComm</span>
+            </a>
+            <a href="/mobile" class="btn-mobile-nav-link" style="font-size:0.9rem; font-weight:700; padding:6px 16px; border-radius:20px; display:inline-flex; align-items:center; gap:8px; color:#38bdf8; border:1.5px solid #38bdf8; text-decoration:none; background:rgba(56, 189, 248, 0.1);">
+                <i class="fa-solid fa-mobile-screen"></i> Mobile App View
             </a>
         </div>
     </header>
