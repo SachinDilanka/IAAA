@@ -2712,35 +2712,46 @@ body.dark-mode #messages-grid::-webkit-scrollbar-thumb {
 
 /* Bank Category Criteria Buttons */
 .category-active-btn.category-bank-btn {
-  border-left: 4px solid #2563eb !important;
+  background: #2563eb !important;
+  color: #ffffff !important;
+  border: 1.5px solid #1d4ed8 !important;
+  border-left: 5px solid #1e3a8a !important;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25) !important;
 }
 
 .category-active-btn.category-bank-btn:hover {
-  background: #eff6ff !important;
-  border-color: #2563eb !important;
+  background: #1d4ed8 !important;
+  border-color: #1e40af !important;
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.36) !important;
+  transform: translateY(-1px);
 }
 
 .category-active-btn.category-bank-btn i {
-  color: #2563eb !important;
+  color: #ffffff !important;
+}
+
+.category-active-btn.category-bank-btn .cat-btn-text {
+  color: #ffffff !important;
 }
 
 .category-active-btn.category-bank-btn .cat-msg-count-pill {
-  background: #dbeafe !important;
-  color: #1e40af !important;
+  background: rgba(255, 255, 255, 0.25) !important;
+  color: #ffffff !important;
 }
 
 body.dark-mode .category-active-btn.category-bank-btn {
-  background: #1e293b;
+  background: #1e3a8a !important;
   border-color: #3b82f6 !important;
+  color: #ffffff !important;
 }
 
 body.dark-mode .category-active-btn.category-bank-btn:hover {
-  background: #1e3a8a !important;
+  background: #2563eb !important;
 }
 
 body.dark-mode .category-active-btn.category-bank-btn .cat-msg-count-pill {
-  background: #1e3a8a !important;
-  color: #93c5fd !important;
+  background: rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
 }
 
 #location-pin-avatar {

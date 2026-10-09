@@ -275,8 +275,24 @@ class TestMobileInterface(unittest.TestCase):
         bank_cats = data['bank_categories']
         self.assertIn('bank-basic-comm', bank_cats)
         self.assertIn('bank-reception-queue', bank_cats)
+        self.assertIn('bank-open-account', bank_cats)
+        self.assertIn('bank-deposits-withdrawals', bank_cats)
+        self.assertIn('bank-cards-atm', bank_cats)
+        self.assertIn('bank-loans', bank_cats)
+        self.assertIn('bank-transfers-payments', bank_cats)
+        self.assertIn('bank-account-services', bank_cats)
+        self.assertIn('bank-security-fraud', bank_cats)
+        self.assertIn('bank-closing-courtesy', bank_cats)
         self.assertEqual(len(bank_cats['bank-basic-comm']), 7)
         self.assertEqual(len(bank_cats['bank-reception-queue']), 8)
+        self.assertEqual(len(bank_cats['bank-open-account']), 12)
+        self.assertEqual(len(bank_cats['bank-deposits-withdrawals']), 12)
+        self.assertEqual(len(bank_cats['bank-cards-atm']), 12)
+        self.assertEqual(len(bank_cats['bank-loans']), 12)
+        self.assertEqual(len(bank_cats['bank-transfers-payments']), 10)
+        self.assertEqual(len(bank_cats['bank-account-services']), 12)
+        self.assertEqual(len(bank_cats['bank-security-fraud']), 6)
+        self.assertEqual(len(bank_cats['bank-closing-courtesy']), 6)
 
     def test_bank_communication_messages_content(self):
         # Verify Bank Category 1: Basic communication (7 messages)
@@ -320,15 +336,87 @@ class TestMobileInterface(unittest.TestCase):
         self.assertEqual(queue_msgs[7]['template_en'], 'May I speak to the manager?')
         self.assertEqual(queue_msgs[7]['template_si'], 'මට කළමනාකරු හමුවීමට පුළුවන් ද?')
 
+        # Verify Bank Category 3: Opening an account (12 messages)
+        open_msgs = data['bank_categories']['bank-open-account']
+        self.assertEqual(len(open_msgs), 12)
+        self.assertEqual(open_msgs[0]['template_en'], 'I want to open a new account.')
+        self.assertEqual(open_msgs[0]['template_si'], 'මට නව ගිණුමක් විවෘත කිරීමට අවශ්යයි.')
+        self.assertEqual(open_msgs[11]['template_en'], 'Can I have a copy of the form?')
+        self.assertEqual(open_msgs[11]['template_si'], 'ෆෝරමයේ පිටපතක් ලබාගන්න පුළුවන් ද?')
+
+        # Verify Bank Category 4: Deposits and withdrawals (12 messages)
+        dep_msgs = data['bank_categories']['bank-deposits-withdrawals']
+        self.assertEqual(len(dep_msgs), 12)
+        self.assertEqual(dep_msgs[0]['template_en'], 'I want to deposit money.')
+        self.assertEqual(dep_msgs[0]['template_si'], 'මට මුදල් තැන්පත් කිරීමට අවශ්යයි.')
+        self.assertEqual(dep_msgs[11]['template_en'], 'Please update my passbook.')
+        self.assertEqual(dep_msgs[11]['template_si'], 'කරුණාකර මගේ බැංකු පොත යාවත්කාලීන කරන්න.')
+
+        # Verify Bank Category 5: Cards and ATM (12 messages)
+        card_msgs = data['bank_categories']['bank-cards-atm']
+        self.assertEqual(len(card_msgs), 12)
+        self.assertEqual(card_msgs[0]['template_en'], 'I want to apply for a debit card.')
+        self.assertEqual(card_msgs[0]['template_si'], 'මට ඩෙබිට් කාඩ්පතක් සඳහා අයදුම් කිරීමට අවශ්යයි.')
+        self.assertEqual(card_msgs[11]['template_en'], 'I want to activate my card.')
+        self.assertEqual(card_msgs[11]['template_si'], 'මට මගේ කාඩ්පත සක්රිය කිරීමට අවශ්යයි.')
+
+        # Verify Bank Category 6: Loans (12 messages)
+        loan_msgs = data['bank_categories']['bank-loans']
+        self.assertEqual(len(loan_msgs), 12)
+        self.assertEqual(loan_msgs[0]['template_en'], 'I want to apply for a loan.')
+        self.assertEqual(loan_msgs[0]['template_si'], 'මට ණයක් සඳහා අයදුම් කිරීමට අවශ්යයි.')
+        self.assertEqual(loan_msgs[11]['template_en'], 'Can I get a loan statement?')
+        self.assertEqual(loan_msgs[11]['template_si'], 'මට ණය ප්රකාශයක් ලබාගත හැකිද?')
+
+        # Verify Bank Category 7: Transfers and payments (10 messages)
+        tf_msgs = data['bank_categories']['bank-transfers-payments']
+        self.assertEqual(len(tf_msgs), 10)
+        self.assertEqual(tf_msgs[0]['template_en'], 'I want to transfer money.')
+        self.assertEqual(tf_msgs[0]['template_si'], 'මට මුදල් මාරු කිරීමට අවශ්යයි.')
+        self.assertEqual(tf_msgs[9]['template_en'], 'I want to exchange foreign currency.')
+        self.assertEqual(tf_msgs[9]['template_si'], 'මට විදේශ මුදල් මාරු කරගැනීමට අවශ්යයි.')
+
+        # Verify Bank Category 8: Account services and problems (12 messages)
+        acct_msgs = data['bank_categories']['bank-account-services']
+        self.assertEqual(len(acct_msgs), 12)
+        self.assertEqual(acct_msgs[0]['template_en'], 'I need a bank statement.')
+        self.assertEqual(acct_msgs[0]['template_si'], 'මට ගිණුම් ප්රකාශයක් අවශ්යයි.')
+        self.assertEqual(acct_msgs[11]['template_en'], 'I want to close my account.')
+        self.assertEqual(acct_msgs[11]['template_si'], 'මට මගේ ගිණුම වසා දැමීමට අවශ්යයි.')
+
+        # Verify Bank Category 9: Security and fraud (6 messages)
+        sec_msgs = data['bank_categories']['bank-security-fraud']
+        self.assertEqual(len(sec_msgs), 6)
+        self.assertEqual(sec_msgs[0]['template_en'], 'I think someone has accessed my account without permission.')
+        self.assertEqual(sec_msgs[0]['template_si'], 'මගේ ගිණුමට අවසරයකින් තොරව කවුරුහරි ඇතුළු වී ඇති බව මට හැඟෙනවා.')
+        self.assertEqual(sec_msgs[5]['template_en'], 'Please do not share my details with anyone.')
+        self.assertEqual(sec_msgs[5]['template_si'], 'කරුණාකර මගේ තොරතුරු කිසිවෙකු සමඟ බෙදා නොගන්න.')
+
+        # Verify Bank Category 10: Closing and courtesy (6 messages)
+        close_msgs = data['bank_categories']['bank-closing-courtesy']
+        self.assertEqual(len(close_msgs), 6)
+        self.assertEqual(close_msgs[0]['template_en'], 'Can you explain this in writing?')
+        self.assertEqual(close_msgs[0]['template_si'], 'මෙය ලියා පැහැදිලි කරන්න පුළුවන් ද?')
+        self.assertEqual(close_msgs[5]['template_en'], 'Thank you for your help.')
+        self.assertEqual(close_msgs[5]['template_si'], 'ඔබේ උදව්වට ස්තූතියි.')
+
     def test_mobile_bank_ui_elements(self):
-        # Verify /mobile/bank renders bank category buttons and badge
+        # Verify /mobile/bank renders all 10 bank category buttons and badge
         resp = self.client.get('/mobile/bank')
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b'id="bank-category-selector-bar"', resp.data)
         self.assertIn(b'id="btn-cat-bank-basic-comm"', resp.data)
         self.assertIn(b'id="btn-cat-bank-reception-queue"', resp.data)
+        self.assertIn(b'id="btn-cat-bank-open-account"', resp.data)
+        self.assertIn(b'id="btn-cat-bank-deposits-withdrawals"', resp.data)
+        self.assertIn(b'id="btn-cat-bank-cards-atm"', resp.data)
+        self.assertIn(b'id="btn-cat-bank-loans"', resp.data)
+        self.assertIn(b'id="btn-cat-bank-transfers-payments"', resp.data)
+        self.assertIn(b'id="btn-cat-bank-account-services"', resp.data)
+        self.assertIn(b'id="btn-cat-bank-security-fraud"', resp.data)
+        self.assertIn(b'id="btn-cat-bank-closing-courtesy"', resp.data)
         self.assertIn(b'Bank Message Criteria', resp.data)
-        self.assertIn(b'2 Categories', resp.data)
+        self.assertIn(b'10 Categories', resp.data)
         self.assertIn(b'id="modal-manual-bank-select"', resp.data)
         self.assertIn(b'gps-bank-sim-chip', resp.data)
 

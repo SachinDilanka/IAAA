@@ -204,7 +204,7 @@
                   </h3>
                   <span id="hospital-status-badge" class="hospital-status-badge {% if location_slug == 'bank' %}badge-bank-theme{% endif %}" style="display: inline-flex;">
                     {% if location_slug == 'bank' %}
-                    <i class="fa-solid fa-building-columns"></i> 2 Categories
+                    <i class="fa-solid fa-building-columns"></i> 10 Categories
                     {% else %}
                     <i class="fa-solid fa-square-h"></i> 9 Categories
                     {% endif %}
@@ -299,7 +299,7 @@
                 </button>
               </div>
 
-              <!-- Bank Message Criteria Buttons (2 buttons) -->
+              <!-- Bank Message Criteria Buttons (10 buttons) -->
               <div id="bank-category-selector-bar" class="category-selector-bar {% if location_slug != 'bank' %}bar-hidden{% endif %}">
                 <button type="button" class="category-active-btn category-bank-btn" id="btn-cat-bank-basic-comm" data-cat="bank-basic-comm" aria-label="1. මූලික සන්නිවේදනය / Basic communication" title="Tap to view suggested messages">
                   <i class="fa-solid fa-comments"></i>
@@ -316,6 +316,78 @@
                   <div class="cat-btn-right-meta">
                     <span class="cat-msg-count-pill" id="cat-badge-bank-reception-queue">8</span>
                     <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-bank-chevron-icon-2"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-bank-btn" id="btn-cat-bank-open-account" data-cat="bank-open-account" aria-label="3. ගිණුමක් විවෘත කිරීම / Opening an account" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-user-plus"></i>
+                  <span class="cat-btn-text">3. ගිණුමක් විවෘත කිරීම / Opening an account</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-bank-open-account">12</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-bank-chevron-icon-3"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-bank-btn" id="btn-cat-bank-deposits-withdrawals" data-cat="bank-deposits-withdrawals" aria-label="4. තැන්පත් කිරීම් සහ මුදල් ආපසු ගැනීම් / Deposits and withdrawals" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-money-bill-wave"></i>
+                  <span class="cat-btn-text">4. තැන්පත් කිරීම් සහ මුදල් ආපසු ගැනීම් / Deposits and withdrawals</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-bank-deposits-withdrawals">12</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-bank-chevron-icon-4"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-bank-btn" id="btn-cat-bank-cards-atm" data-cat="bank-cards-atm" aria-label="5. කාඩ්පත් සහ ATM / Cards and ATM" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-credit-card"></i>
+                  <span class="cat-btn-text">5. කාඩ්පත් සහ ATM / Cards and ATM</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-bank-cards-atm">12</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-bank-chevron-icon-5"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-bank-btn" id="btn-cat-bank-loans" data-cat="bank-loans" aria-label="6. ණය / Loans" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-hand-holding-dollar"></i>
+                  <span class="cat-btn-text">6. ණය / Loans</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-bank-loans">12</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-bank-chevron-icon-6"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-bank-btn" id="btn-cat-bank-transfers-payments" data-cat="bank-transfers-payments" aria-label="7. මාරු කිරීම් සහ ගෙවීම් / Transfers and payments" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-arrow-right-arrow-left"></i>
+                  <span class="cat-btn-text">7. මාරු කිරීම් සහ ගෙවීම් / Transfers and payments</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-bank-transfers-payments">10</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-bank-chevron-icon-7"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-bank-btn" id="btn-cat-bank-account-services" data-cat="bank-account-services" aria-label="8. ගිණුම් සේවා සහ ගැටළු / Account services and problems" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-file-lines"></i>
+                  <span class="cat-btn-text">8. ගිණුම් සේවා සහ ගැටළු / Account services and problems</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-bank-account-services">12</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-bank-chevron-icon-8"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-bank-btn" id="btn-cat-bank-security-fraud" data-cat="bank-security-fraud" aria-label="9. ආරක්ෂාව සහ වංචා / Security and fraud" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-shield-halved"></i>
+                  <span class="cat-btn-text">9. ආරක්ෂාව සහ වංචා / Security and fraud</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-bank-security-fraud">6</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-bank-chevron-icon-9"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-bank-btn" id="btn-cat-bank-closing-courtesy" data-cat="bank-closing-courtesy" aria-label="10. ආචාරශීලී වදන් සහ සමුගැනීම / Closing and courtesy" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-handshake"></i>
+                  <span class="cat-btn-text">10. ආචාරශීලී වදන් සහ සමුගැනීම / Closing and courtesy</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-bank-closing-courtesy">6</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-bank-chevron-icon-10"></i>
                   </div>
                 </button>
               </div>

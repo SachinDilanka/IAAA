@@ -1071,6 +1071,104 @@ document.addEventListener('DOMContentLoaded', () => {
       { id: 6, template: "Please tap my shoulder when it is my turn.", template_en: "Please tap my shoulder when it is my turn.", template_si: "මගේ වාරය පැමිණි විට කරුණාකර මගේ උරහිසට තට්ටු කරන්න.", icon: "fa-hand-pointer", category: "Reception and queue" },
       { id: 7, template: "Please let me know when my number is called.", template_en: "Please let me know when my number is called.", template_si: "මගේ අංකය කැඳවන විට කරුණාකර මට දන්වන්න.", icon: "fa-bullhorn", category: "Reception and queue" },
       { id: 8, template: "May I speak to the manager?", template_en: "May I speak to the manager?", template_si: "මට කළමනාකරු හමුවීමට පුළුවන් ද?", icon: "fa-user-tie", category: "Reception and queue" }
+    ],
+    'bank-open-account': [
+      { id: 1, template: "I want to open a new account.", template_en: "I want to open a new account.", template_si: "මට නව ගිණුමක් විවෘත කිරීමට අවශ්යයි.", icon: "fa-user-plus", category: "Opening an account" },
+      { id: 2, template: "I want to open a savings account.", template_en: "I want to open a savings account.", template_si: "මට ඉතිරිකිරීමේ ගිණුමක් විවෘත කිරීමට අවශ්යයි.", icon: "fa-piggy-bank", category: "Opening an account" },
+      { id: 3, template: "I want to open a current account.", template_en: "I want to open a current account.", template_si: "මට ජංගම ගිණුමක් විවෘත කිරීමට අවශ්යයි.", icon: "fa-briefcase", category: "Opening an account" },
+      { id: 4, template: "I want to open a fixed deposit.", template_en: "I want to open a fixed deposit.", template_si: "මට ස්ථාවර තැන්පතුවක් ආරම්භ කිරීමට අවශ්යයි.", icon: "fa-vault", category: "Opening an account" },
+      { id: 5, template: "What documents do I need?", template_en: "What documents do I need?", template_si: "මට අවශ්ය ලේඛන මොනවාද?", icon: "fa-file-lines", category: "Opening an account" },
+      { id: 6, template: "Here is my National Identity Card.", template_en: "Here is my National Identity Card.", template_si: "මෙන්න මගේ ජාතික හැඳුනුම්පත.", icon: "fa-id-card", category: "Opening an account" },
+      { id: 7, template: "Here is my passport.", template_en: "Here is my passport.", template_si: "මෙන්න මගේ විදේශ ගමන් බලපත්රය.", icon: "fa-passport", category: "Opening an account" },
+      { id: 8, template: "Here is my proof of address.", template_en: "Here is my proof of address.", template_si: "මෙන්න මගේ ලිපිනය තහවුරු කරන ලේඛනය.", icon: "fa-house-chimney", category: "Opening an account" },
+      { id: 9, template: "What is the minimum balance required?", template_en: "What is the minimum balance required?", template_si: "අවශ්ය අවම ශේෂය කීයද?", icon: "fa-scale-balanced", category: "Opening an account" },
+      { id: 10, template: "Is there a monthly fee?", template_en: "Is there a monthly fee?", template_si: "මාසික ගාස්තුවක් තියෙනවා ද?", icon: "fa-coins", category: "Opening an account" },
+      { id: 11, template: "Where should I sign?", template_en: "Where should I sign?", template_si: "මම අත්සන් කළ යුත්තේ කොහෙද?", icon: "fa-signature", category: "Opening an account" },
+      { id: 12, template: "Can I have a copy of the form?", template_en: "Can I have a copy of the form?", template_si: "ෆෝරමයේ පිටපතක් ලබාගන්න පුළුවන් ද?", icon: "fa-copy", category: "Opening an account" }
+    ],
+    'bank-deposits-withdrawals': [
+      { id: 1, template: "I want to deposit money.", template_en: "I want to deposit money.", template_si: "මට මුදල් තැන්පත් කිරීමට අවශ්යයි.", icon: "fa-money-bill-wave", category: "Deposits and withdrawals" },
+      { id: 2, template: "I want to withdraw money.", template_en: "I want to withdraw money.", template_si: "මට මුදල් ආපසු ගැනීමට අවශ්යයි.", icon: "fa-hand-holding-dollar", category: "Deposits and withdrawals" },
+      { id: 3, template: "I want to deposit a cheque.", template_en: "I want to deposit a cheque.", template_si: "මට චෙක්පතක් තැන්පත් කිරීමට අවශ්යයි.", icon: "fa-money-check", category: "Deposits and withdrawals" },
+      { id: 4, template: "I want to cash a cheque.", template_en: "I want to cash a cheque.", template_si: "මට චෙක්පතක් මුදල් බවට හරවා ගැනීම අවශ්යයි.", icon: "fa-money-check-dollar", category: "Deposits and withdrawals" },
+      { id: 5, template: "How much can I withdraw today?", template_en: "How much can I withdraw today?", template_si: "අද මට උපරිම කොපමණ මුදලක් ආපසු ගත හැකිද?", icon: "fa-calculator", category: "Deposits and withdrawals" },
+      { id: 6, template: "Please give me small notes.", template_en: "Please give me small notes.", template_si: "කරුණාකර කුඩා නෝට්ටු දෙන්න.", icon: "fa-money-bills", category: "Deposits and withdrawals" },
+      { id: 7, template: "Please count the money in front of me.", template_en: "Please count the money in front of me.", template_si: "කරුණාකර මා ඉදිරියේ මුදල් ගණන් කරන්න.", icon: "fa-eye", category: "Deposits and withdrawals" },
+      { id: 8, template: "Here is the deposit slip.", template_en: "Here is the deposit slip.", template_si: "මෙන්න තැන්පතු පත්රිකාව.", icon: "fa-file-invoice", category: "Deposits and withdrawals" },
+      { id: 9, template: "Where can I get a deposit slip?", template_en: "Where can I get a deposit slip?", template_si: "තැන්පතු පත්රිකාවක් ලබාගන්නේ කොහෙන්ද?", icon: "fa-circle-question", category: "Deposits and withdrawals" },
+      { id: 10, template: "Please give me a receipt.", template_en: "Please give me a receipt.", template_si: "කරුණාකර රිසිට්පතක් දෙන්න.", icon: "fa-receipt", category: "Deposits and withdrawals" },
+      { id: 11, template: "What is my account balance?", template_en: "What is my account balance?", template_si: "මගේ ගිණුම් ශේෂය කීයද?", icon: "fa-scale-balanced", category: "Deposits and withdrawals" },
+      { id: 12, template: "Please update my passbook.", template_en: "Please update my passbook.", template_si: "කරුණාකර මගේ බැංකු පොත යාවත්කාලීන කරන්න.", icon: "fa-book", category: "Deposits and withdrawals" }
+    ],
+    'bank-cards-atm': [
+      { id: 1, template: "I want to apply for a debit card.", template_en: "I want to apply for a debit card.", template_si: "මට ඩෙබිට් කාඩ්පතක් සඳහා අයදුම් කිරීමට අවශ්යයි.", icon: "fa-credit-card", category: "Cards and ATM" },
+      { id: 2, template: "I want to apply for a credit card.", template_en: "I want to apply for a credit card.", template_si: "මට ක්රෙඩිට් කාඩ්පතක් සඳහා අයදුම් කිරීමට අවශ්යයි.", icon: "fa-credit-card", category: "Cards and ATM" },
+      { id: 3, template: "I have lost my card.", template_en: "I have lost my card.", template_si: "මගේ කාඩ්පත නැති වුණා.", icon: "fa-circle-exclamation", category: "Cards and ATM" },
+      { id: 4, template: "My card was stolen.", template_en: "My card was stolen.", template_si: "මගේ කාඩ්පත සොරකම් වුණා.", icon: "fa-shield-halved", category: "Cards and ATM" },
+      { id: 5, template: "Please block my card.", template_en: "Please block my card.", template_si: "කරුණාකර මගේ කාඩ්පත අවහිර කරන්න.", icon: "fa-ban", category: "Cards and ATM" },
+      { id: 6, template: "My card is not working.", template_en: "My card is not working.", template_si: "මගේ කාඩ්පත ක්රියා කරන්නේ නැහැ.", icon: "fa-triangle-exclamation", category: "Cards and ATM" },
+      { id: 7, template: "The ATM kept my card.", template_en: "The ATM kept my card.", template_si: "ATM යන්ත්රය මගේ කාඩ්පත රඳවා ගත්තා.", icon: "fa-box-archive", category: "Cards and ATM" },
+      { id: 8, template: "The ATM did not give me the cash.", template_en: "The ATM did not give me the cash.", template_si: "ATM යන්ත්රය මට මුදල් දුන්නේ නැහැ.", icon: "fa-money-bill-circle-xmark", category: "Cards and ATM" },
+      { id: 9, template: "I forgot my PIN.", template_en: "I forgot my PIN.", template_si: "මට මගේ PIN අංකය අමතක වුණා.", icon: "fa-key", category: "Cards and ATM" },
+      { id: 10, template: "I want to change my PIN.", template_en: "I want to change my PIN.", template_si: "මට මගේ PIN අංකය වෙනස් කිරීමට අවශ්යයි.", icon: "fa-arrows-rotate", category: "Cards and ATM" },
+      { id: 11, template: "Where is the ATM?", template_en: "Where is the ATM?", template_si: "ATM යන්ත්රය කොහෙද?", icon: "fa-map-pin", category: "Cards and ATM" },
+      { id: 12, template: "I want to activate my card.", template_en: "I want to activate my card.", template_si: "මට මගේ කාඩ්පත සක්රිය කිරීමට අවශ්යයි.", icon: "fa-circle-check", category: "Cards and ATM" }
+    ],
+    'bank-loans': [
+      { id: 1, template: "I want to apply for a loan.", template_en: "I want to apply for a loan.", template_si: "මට ණයක් සඳහා අයදුම් කිරීමට අවශ්යයි.", icon: "fa-file-signature", category: "Loans" },
+      { id: 2, template: "I am interested in a personal loan.", template_en: "I am interested in a personal loan.", template_si: "මට පුද්ගලික ණයක් ගැන උනන්දුවක් තියෙනවා.", icon: "fa-user", category: "Loans" },
+      { id: 3, template: "I am interested in a housing loan.", template_en: "I am interested in a housing loan.", template_si: "මට නිවාස ණයක් ගැන උනන්දුවක් තියෙනවා.", icon: "fa-house", category: "Loans" },
+      { id: 4, template: "I am interested in a vehicle loan.", template_en: "I am interested in a vehicle loan.", template_si: "මට වාහන ණයක් ගැන උනන්දුවක් තියෙනවා.", icon: "fa-car", category: "Loans" },
+      { id: 5, template: "What is the interest rate?", template_en: "What is the interest rate?", template_si: "පොලී අනුපාතය කීයද?", icon: "fa-percent", category: "Loans" },
+      { id: 6, template: "What is the loan period?", template_en: "What is the loan period?", template_si: "ණය කාලය කොපමණද?", icon: "fa-calendar-days", category: "Loans" },
+      { id: 7, template: "What is the monthly installment?", template_en: "What is the monthly installment?", template_si: "මාසික වාරිකය කීයද?", icon: "fa-calendar-check", category: "Loans" },
+      { id: 8, template: "What documents are required for the loan?", template_en: "What documents are required for the loan?", template_si: "ණය සඳහා අවශ්ය ලේඛන මොනවාද?", icon: "fa-folder-open", category: "Loans" },
+      { id: 9, template: "Do I need a guarantor?", template_en: "Do I need a guarantor?", template_si: "මට ඇපකරුවෙකු අවශ්යයි ද?", icon: "fa-user-group", category: "Loans" },
+      { id: 10, template: "How long will the approval take?", template_en: "How long will the approval take?", template_si: "අනුමැතිය ලැබීමට කොපමණ කාලයක් ගතවේද?", icon: "fa-clock", category: "Loans" },
+      { id: 11, template: "I want to settle my loan.", template_en: "I want to settle my loan.", template_si: "මට මගේ ණය නිරවුල් කිරීමට අවශ්යයි.", icon: "fa-circle-check", category: "Loans" },
+      { id: 12, template: "Can I get a loan statement?", template_en: "Can I get a loan statement?", template_si: "මට ණය ප්රකාශයක් ලබාගත හැකිද?", icon: "fa-file-invoice-dollar", category: "Loans" }
+    ],
+    'bank-transfers-payments': [
+      { id: 1, template: "I want to transfer money.", template_en: "I want to transfer money.", template_si: "මට මුදල් මාරු කිරීමට අවශ්යයි.", icon: "fa-arrow-right-arrow-left", category: "Transfers and payments" },
+      { id: 2, template: "I want to transfer to another bank.", template_en: "I want to transfer to another bank.", template_si: "මට වෙනත් බැංකුවකට මුදල් මාරු කිරීමට අවශ්යයි.", icon: "fa-building-columns", category: "Transfers and payments" },
+      { id: 3, template: "Here are the recipient's account details.", template_en: "Here are the recipient's account details.", template_si: "මෙන්න ලබන්නාගේ ගිණුම් විස්තර.", icon: "fa-user-tag", category: "Transfers and payments" },
+      { id: 4, template: "Is there a transfer fee?", template_en: "Is there a transfer fee?", template_si: "මාරු කිරීමේ ගාස්තුවක් තියෙනවා ද?", icon: "fa-coins", category: "Transfers and payments" },
+      { id: 5, template: "How long will the transfer take?", template_en: "How long will the transfer take?", template_si: "මාරු කිරීමට කොපමණ කාලයක් ගතවේද?", icon: "fa-hourglass-half", category: "Transfers and payments" },
+      { id: 6, template: "I want to pay a utility bill.", template_en: "I want to pay a utility bill.", template_si: "මට උපයෝගිතා බිලක් ගෙවීමට අවශ්යයි.", icon: "fa-file-invoice", category: "Transfers and payments" },
+      { id: 7, template: "I want to pay my credit card bill.", template_en: "I want to pay my credit card bill.", template_si: "මට මගේ ක්රෙඩිට් කාඩ්පත් බිල ගෙවීමට අවශ්යයි.", icon: "fa-credit-card", category: "Transfers and payments" },
+      { id: 8, template: "I want to send money abroad.", template_en: "I want to send money abroad.", template_si: "මට විදේශයකට මුදල් යැවීමට අවශ්යයි.", icon: "fa-earth-americas", category: "Transfers and payments" },
+      { id: 9, template: "I want to receive money from abroad.", template_en: "I want to receive money from abroad.", template_si: "මට විදේශයකින් මුදල් ලබාගැනීමට අවශ්යයි.", icon: "fa-globe", category: "Transfers and payments" },
+      { id: 10, template: "I want to exchange foreign currency.", template_en: "I want to exchange foreign currency.", template_si: "මට විදේශ මුදල් මාරු කරගැනීමට අවශ්යයි.", icon: "fa-money-bill-transfer", category: "Transfers and payments" }
+    ],
+    'bank-account-services': [
+      { id: 1, template: "I need a bank statement.", template_en: "I need a bank statement.", template_si: "මට ගිණුම් ප්රකාශයක් අවශ්යයි.", icon: "fa-file-lines", category: "Account services and problems" },
+      { id: 2, template: "I need a statement for the last three months.", template_en: "I need a statement for the last three months.", template_si: "මට පසුගිය මාස තුනේ ගිණුම් ප්රකාශයක් අවශ්යයි.", icon: "fa-calendar-week", category: "Account services and problems" },
+      { id: 3, template: "I want to update my phone number.", template_en: "I want to update my phone number.", template_si: "මට මගේ දුරකථන අංකය යාවත්කාලීන කිරීමට අවශ්යයි.", icon: "fa-phone", category: "Account services and problems" },
+      { id: 4, template: "I want to update my address.", template_en: "I want to update my address.", template_si: "මට මගේ ලිපිනය යාවත්කාලීන කිරීමට අවශ්යයි.", icon: "fa-location-dot", category: "Account services and problems" },
+      { id: 5, template: "I want to register for online banking.", template_en: "I want to register for online banking.", template_si: "මට අන්තර්ජාල බැංකුකරණය සඳහා ලියාපදිංචි වීමට අවශ්යයි.", icon: "fa-laptop", category: "Account services and problems" },
+      { id: 6, template: "I want to set up mobile banking.", template_en: "I want to set up mobile banking.", template_si: "මට ජංගම බැංකුකරණය ස්ථාපිත කිරීමට අවශ්යයි.", icon: "fa-mobile-screen", category: "Account services and problems" },
+      { id: 7, template: "I forgot my online banking password.", template_en: "I forgot my online banking password.", template_si: "මට මගේ අන්තර්ජාල බැංකු මුරපදය අමතක වුණා.", icon: "fa-key", category: "Account services and problems" },
+      { id: 8, template: "I am not receiving SMS alerts.", template_en: "I am not receiving SMS alerts.", template_si: "මට SMS දැනුම්දීම් ලැබෙන්නේ නැහැ.", icon: "fa-comment-sms", category: "Account services and problems" },
+      { id: 9, template: "There is a mistake in my account.", template_en: "There is a mistake in my account.", template_si: "මගේ ගිණුමේ වැරැද්දක් තියෙනවා.", icon: "fa-triangle-exclamation", category: "Account services and problems" },
+      { id: 10, template: "Money was deducted from my account by mistake.", template_en: "Money was deducted from my account by mistake.", template_si: "මගේ ගිණුමෙන් වැරදීමකින් මුදල් අඩු වී තියෙනවා.", icon: "fa-circle-minus", category: "Account services and problems" },
+      { id: 11, template: "I want to make a complaint.", template_en: "I want to make a complaint.", template_si: "මට පැමිණිල්ලක් ඉදිරිපත් කිරීමට අවශ්යයි.", icon: "fa-bullhorn", category: "Account services and problems" },
+      { id: 12, template: "I want to close my account.", template_en: "I want to close my account.", template_si: "මට මගේ ගිණුම වසා දැමීමට අවශ්යයි.", icon: "fa-rectangle-xmark", category: "Account services and problems" }
+    ],
+    'bank-security-fraud': [
+      { id: 1, template: "I think someone has accessed my account without permission.", template_en: "I think someone has accessed my account without permission.", template_si: "මගේ ගිණුමට අවසරයකින් තොරව කවුරුහරි ඇතුළු වී ඇති බව මට හැඟෙනවා.", icon: "fa-user-secret", category: "Security and fraud" },
+      { id: 2, template: "I received a suspicious message or call.", template_en: "I received a suspicious message or call.", template_si: "මට සැක සහිත පණිවිඩයක් හෝ ඇමතුමක් ලැබුණා.", icon: "fa-triangle-exclamation", category: "Security and fraud" },
+      { id: 3, template: "I did not make this transaction.", template_en: "I did not make this transaction.", template_si: "මම මෙම ගනුදෙනුව කළේ නැහැ.", icon: "fa-shield-halved", category: "Security and fraud" },
+      { id: 4, template: "Please freeze my account.", template_en: "Please freeze my account.", template_si: "කරුණාකර මගේ ගිණුම අත්හිටුවන්න.", icon: "fa-snowflake", category: "Security and fraud" },
+      { id: 5, template: "I want to change my password.", template_en: "I want to change my password.", template_si: "මට මගේ මුරපදය වෙනස් කිරීමට අවශ්යයි.", icon: "fa-lock", category: "Security and fraud" },
+      { id: 6, template: "Please do not share my details with anyone.", template_en: "Please do not share my details with anyone.", template_si: "කරුණාකර මගේ තොරතුරු කිසිවෙකු සමඟ බෙදා නොගන්න.", icon: "fa-user-lock", category: "Security and fraud" }
+    ],
+    'bank-closing-courtesy': [
+      { id: 1, template: "Can you explain this in writing?", template_en: "Can you explain this in writing?", template_si: "මෙය ලියා පැහැදිලි කරන්න පුළුවන් ද?", icon: "fa-pen-to-square", category: "Closing and courtesy" },
+      { id: 2, template: "Please write down the amount.", template_en: "Please write down the amount.", template_si: "කරුණාකර මුදල ලියන්න.", icon: "fa-pen", category: "Closing and courtesy" },
+      { id: 3, template: "Is a sign language interpreter available?", template_en: "Is a sign language interpreter available?", template_si: "සංඥා භාෂා පරිවර්තකයෙකු ඉන්නවාද?", icon: "fa-hands-asl-interpreting", category: "Closing and courtesy" },
+      { id: 4, template: "May I bring someone to help me?", template_en: "May I bring someone to help me?", template_si: "මට උදව් කිරීමට කෙනෙකු රැගෙන එන්න පුළුවන් ද?", icon: "fa-person-circle-question", category: "Closing and courtesy" },
+      { id: 5, template: "Is everything complete?", template_en: "Is everything complete?", template_si: "සියල්ල අවසන් ද?", icon: "fa-circle-check", category: "Closing and courtesy" },
+      { id: 6, template: "Thank you for your help.", template_en: "Thank you for your help.", template_si: "ඔබේ උදව්වට ස්තූතියි.", icon: "fa-handshake", category: "Closing and courtesy" }
     ]
   };
 
@@ -1165,6 +1263,70 @@ document.addEventListener('DOMContentLoaded', () => {
       icon: 'fa-users-line',
       buttonId: 'btn-cat-bank-reception-queue',
       badgeId: 'cat-badge-bank-reception-queue'
+    },
+    'bank-open-account': {
+      titleSi: '3. ගිණුමක් විවෘත කිරීම',
+      titleEn: 'Opening an account',
+      label: '3. ගිණුමක් විවෘත කිරීම / Opening an account',
+      icon: 'fa-user-plus',
+      buttonId: 'btn-cat-bank-open-account',
+      badgeId: 'cat-badge-bank-open-account'
+    },
+    'bank-deposits-withdrawals': {
+      titleSi: '4. තැන්පත් කිරීම් සහ මුදල් ආපසු ගැනීම්',
+      titleEn: 'Deposits and withdrawals',
+      label: '4. තැන්පත් කිරීම් සහ මුදල් ආපසු ගැනීම් / Deposits and withdrawals',
+      icon: 'fa-money-bill-wave',
+      buttonId: 'btn-cat-bank-deposits-withdrawals',
+      badgeId: 'cat-badge-bank-deposits-withdrawals'
+    },
+    'bank-cards-atm': {
+      titleSi: '5. කාඩ්පත් සහ ATM',
+      titleEn: 'Cards and ATM',
+      label: '5. කාඩ්පත් සහ ATM / Cards and ATM',
+      icon: 'fa-credit-card',
+      buttonId: 'btn-cat-bank-cards-atm',
+      badgeId: 'cat-badge-bank-cards-atm'
+    },
+    'bank-loans': {
+      titleSi: '6. ණය',
+      titleEn: 'Loans',
+      label: '6. ණය / Loans',
+      icon: 'fa-hand-holding-dollar',
+      buttonId: 'btn-cat-bank-loans',
+      badgeId: 'cat-badge-bank-loans'
+    },
+    'bank-transfers-payments': {
+      titleSi: '7. මාරු කිරීම් සහ ගෙවීම්',
+      titleEn: 'Transfers and payments',
+      label: '7. මාරු කිරීම් සහ ගෙවීම් / Transfers and payments',
+      icon: 'fa-arrow-right-arrow-left',
+      buttonId: 'btn-cat-bank-transfers-payments',
+      badgeId: 'cat-badge-bank-transfers-payments'
+    },
+    'bank-account-services': {
+      titleSi: '8. ගිණුම් සේවා සහ ගැටළු',
+      titleEn: 'Account services and problems',
+      label: '8. ගිණුම් සේවා සහ ගැටළු / Account services and problems',
+      icon: 'fa-file-lines',
+      buttonId: 'btn-cat-bank-account-services',
+      badgeId: 'cat-badge-bank-account-services'
+    },
+    'bank-security-fraud': {
+      titleSi: '9. ආරක්ෂාව සහ වංචා',
+      titleEn: 'Security and fraud',
+      label: '9. ආරක්ෂාව සහ වංචා / Security and fraud',
+      icon: 'fa-shield-halved',
+      buttonId: 'btn-cat-bank-security-fraud',
+      badgeId: 'cat-badge-bank-security-fraud'
+    },
+    'bank-closing-courtesy': {
+      titleSi: '10. ආචාරශීලී වදන් සහ සමුගැනීම',
+      titleEn: 'Closing and courtesy',
+      label: '10. ආචාරශීලී වදන් සහ සමුගැනීම / Closing and courtesy',
+      icon: 'fa-handshake',
+      buttonId: 'btn-cat-bank-closing-courtesy',
+      badgeId: 'cat-badge-bank-closing-courtesy'
     }
   };
 
@@ -1182,7 +1344,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const ALL_BANK_CAT_KEYS = [
     'bank-basic-comm',
-    'bank-reception-queue'
+    'bank-reception-queue',
+    'bank-open-account',
+    'bank-deposits-withdrawals',
+    'bank-cards-atm',
+    'bank-loans',
+    'bank-transfers-payments',
+    'bank-account-services',
+    'bank-security-fraud',
+    'bank-closing-courtesy'
   ];
 
   // Screen 1 & Screen 2 Navigation:
@@ -2108,7 +2278,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (hospitalBadge) {
         hospitalBadge.classList.add('badge-bank-theme');
         hospitalBadge.style.display = 'inline-flex';
-        hospitalBadge.innerHTML = '<i class="fa-solid fa-building-columns"></i> 2 Categories';
+        hospitalBadge.innerHTML = '<i class="fa-solid fa-building-columns"></i> 10 Categories';
         hospitalBadge.style.background = '#dbeafe';
         hospitalBadge.style.color = '#2563eb';
       }
