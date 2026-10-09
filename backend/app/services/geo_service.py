@@ -714,6 +714,426 @@ def get_sri_lanka_banks(user_lat=None, user_lon=None):
             pass
     return banks
 
+# Major & Popular Restaurants in Sri Lanka (Famous Dining, Traditional, Seafood & Heritage Venues)
+SRI_LANKA_RESTAURANTS = [
+    {
+        'id': 'upalis-colombo',
+        'name': "Upali's by Nawaloka",
+        'short_name': "Upali's Colombo",
+        'restaurant_name': "Upali's by Nawaloka",
+        'cuisine': 'Authentic Sri Lankan Cuisine',
+        'branch': 'Colombo 07',
+        'city': 'C.W.W. Kannangara Mw, Town Hall, Colombo 07',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.9115,
+        'lon': 79.8635,
+        'phone': '+94 11 269 5812',
+        'slug': 'restaurant',
+        'color': '#f59e0b'
+    },
+    {
+        'id': 'ministry-of-crab',
+        'name': 'Ministry of Crab',
+        'short_name': 'Ministry of Crab',
+        'restaurant_name': 'Ministry of Crab',
+        'cuisine': 'Seafood & Lagoon Crab Fine Dining',
+        'branch': 'Old Dutch Hospital',
+        'city': 'Old Dutch Hospital, Fort, Colombo 01',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.9345,
+        'lon': 79.8437,
+        'phone': '+94 11 540 2722',
+        'slug': 'restaurant',
+        'color': '#f59e0b'
+    },
+    {
+        'id': 'the-lagoon-cinnamon-grand',
+        'name': 'The Lagoon - Cinnamon Grand',
+        'short_name': 'The Lagoon',
+        'restaurant_name': 'The Lagoon',
+        'cuisine': 'Premium Seafood Market & Dining',
+        'branch': 'Cinnamon Grand',
+        'city': 'Galle Road, Kollupitiya, Colombo 03',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.9167,
+        'lon': 79.8492,
+        'phone': '+94 11 249 7371',
+        'slug': 'restaurant',
+        'color': '#f59e0b'
+    },
+    {
+        'id': 'nuga-gama',
+        'name': 'Nuga Gama - Cinnamon Grand',
+        'short_name': 'Nuga Gama',
+        'restaurant_name': 'Nuga Gama',
+        'cuisine': 'Traditional Sri Lankan Village Dining',
+        'branch': 'Cinnamon Grand',
+        'city': 'Galle Road, Colombo 03',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.9172,
+        'lon': 79.8488,
+        'phone': '+94 11 249 7369',
+        'slug': 'restaurant',
+        'color': '#f59e0b'
+    },
+    {
+        'id': 'shanmugas-wellawatte',
+        'name': 'Shanmugas Restaurant',
+        'short_name': 'Shanmugas',
+        'restaurant_name': 'Shanmugas',
+        'cuisine': 'South Indian Vegetarian',
+        'branch': 'Wellawatte',
+        'city': 'Ramakrishna Rd, Wellawatte, Colombo 06',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.8785,
+        'lon': 79.8601,
+        'phone': '+94 11 236 1384',
+        'slug': 'restaurant',
+        'color': '#f59e0b'
+    },
+    {
+        'id': 'green-cabin-colombo',
+        'name': 'Green Cabin Restaurant',
+        'short_name': 'Green Cabin',
+        'restaurant_name': 'Green Cabin',
+        'cuisine': 'Traditional Sri Lankan & Bakery',
+        'branch': 'Kollupitiya',
+        'city': 'Galle Road, Colombo 03',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.8970,
+        'lon': 79.8565,
+        'phone': '+94 11 258 8811',
+        'slug': 'restaurant',
+        'color': '#f59e0b'
+    },
+    {
+        'id': 'raja-bojun',
+        'name': 'Raja Bojun',
+        'short_name': 'Raja Bojun',
+        'restaurant_name': 'Raja Bojun',
+        'cuisine': 'Authentic Sri Lankan Buffet',
+        'branch': 'Liberty Arcade',
+        'city': 'R.A. De Mel Mw, Colombo 03',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.9038,
+        'lon': 79.8530,
+        'phone': '+94 11 471 6171',
+        'slug': 'restaurant',
+        'color': '#f59e0b'
+    },
+    {
+        'id': 'galle-face-sea-spray',
+        'name': 'Sea Spray - The Galle Face Hotel',
+        'short_name': 'Sea Spray Galle Face',
+        'restaurant_name': 'Sea Spray',
+        'cuisine': 'Oceanfront Seafood & Grill',
+        'branch': 'Galle Face Hotel',
+        'city': 'Galle Road, Kollupitiya, Colombo 03',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.9205,
+        'lon': 79.8448,
+        'phone': '+94 11 254 1010',
+        'slug': 'restaurant',
+        'color': '#f59e0b'
+    },
+    {
+        'id': 'pilawoos-kollupitiya',
+        'name': 'Hotel de Pilawoos',
+        'short_name': 'Pilawoos Kollupitiya',
+        'restaurant_name': 'Hotel de Pilawoos',
+        'cuisine': 'Sri Lankan Street Food & Kottu',
+        'branch': 'Kollupitiya',
+        'city': 'Galle Road, Kollupitiya, Colombo 03',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.9080,
+        'lon': 79.8510,
+        'phone': '+94 11 257 4333',
+        'slug': 'restaurant',
+        'color': '#f59e0b'
+    },
+    {
+        'id': 'the-gallery-cafe',
+        'name': 'The Gallery Café (Paradise Road)',
+        'short_name': 'The Gallery Café',
+        'restaurant_name': 'The Gallery Café',
+        'cuisine': 'Contemporary Fusion & Desserts',
+        'branch': 'Bambalapitiya',
+        'city': 'Alfred House Rd, Colombo 03',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.8988,
+        'lon': 79.8550,
+        'phone': '+94 11 258 2162',
+        'slug': 'restaurant',
+        'color': '#f59e0b'
+    },
+    {
+        'id': 'kaema-sutra-shangrila',
+        'name': 'Kaema Sutra - Shangri-La Colombo',
+        'short_name': 'Kaema Sutra',
+        'restaurant_name': 'Kaema Sutra',
+        'cuisine': 'Modern Creative Sri Lankan',
+        'branch': 'Shangri-La Hotel',
+        'city': 'One Galle Face, Colombo 01',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.9272,
+        'lon': 79.8442,
+        'phone': '+94 11 788 8288',
+        'slug': 'restaurant',
+        'color': '#f59e0b'
+    },
+    {
+        'id': 'monsoon-colombo',
+        'name': 'Monsoon Colombo',
+        'short_name': 'Monsoon Colombo',
+        'restaurant_name': 'Monsoon',
+        'cuisine': 'Southeast Asian Street Food',
+        'branch': 'Park Street Mews',
+        'city': 'Park Street Mews, Colombo 02',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.9185,
+        'lon': 79.8580,
+        'phone': '+94 11 230 4333',
+        'slug': 'restaurant',
+        'color': '#f59e0b'
+    },
+    {
+        'id': 'bavarian-german-restaurant',
+        'name': 'Bavarian German Restaurant',
+        'short_name': 'Bavarian Colombo',
+        'restaurant_name': 'Bavarian German Restaurant',
+        'cuisine': 'European & German Grill',
+        'branch': 'Galle Face Terrace',
+        'city': 'Galle Face Terrace, Colombo 03',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.9200,
+        'lon': 79.8475,
+        'phone': '+94 11 242 2233',
+        'slug': 'restaurant',
+        'color': '#f59e0b'
+    },
+    {
+        'id': 'graze-kitchen-hilton',
+        'name': 'Graze Kitchen - Hilton Colombo',
+        'short_name': 'Graze Kitchen',
+        'restaurant_name': 'Graze Kitchen',
+        'cuisine': 'International Live Stations & Buffet',
+        'branch': 'Hilton Colombo',
+        'city': 'Sir Chittampalam A Gardiner Mw, Colombo 02',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.9320,
+        'lon': 79.8465,
+        'phone': '+94 11 249 2492',
+        'slug': 'restaurant',
+        'color': '#f59e0b'
+    },
+    {
+        'id': 'dinemore-thurstan',
+        'name': 'Dinemore - Thurstan Road',
+        'short_name': 'Dinemore Thurstan',
+        'restaurant_name': 'Dinemore',
+        'cuisine': 'Submarines, Grill & Fast Casual',
+        'branch': 'Thurstan Road',
+        'city': 'Thurstan Rd, Colombo 03',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.9040,
+        'lon': 79.8585,
+        'phone': '+94 11 255 6000',
+        'slug': 'restaurant',
+        'color': '#f59e0b'
+    },
+    {
+        'id': 'chola-authentic-indian',
+        'name': 'Chola Authentic Indian Restaurant',
+        'short_name': 'Chola Restaurant',
+        'restaurant_name': 'Chola',
+        'cuisine': 'North & South Indian Cuisine',
+        'branch': 'Wellawatte',
+        'city': 'Lily Ave, Wellawatte, Colombo 06',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.8770,
+        'lon': 79.8595,
+        'phone': '+94 11 436 4364',
+        'slug': 'restaurant',
+        'color': '#f59e0b'
+    },
+    {
+        'id': 'the-kandy-house',
+        'name': 'The Kandy House Restaurant',
+        'short_name': 'The Kandy House',
+        'restaurant_name': 'The Kandy House',
+        'cuisine': 'Gourmet Fusion & Fine Dining',
+        'branch': 'Amunugama',
+        'city': 'Amunugama, Gunnepana, Kandy',
+        'district': 'Kandy',
+        'province': 'Central',
+        'lat': 7.3080,
+        'lon': 80.6720,
+        'phone': '+94 81 492 1394',
+        'slug': 'restaurant',
+        'color': '#f59e0b'
+    },
+    {
+        'id': 'slightly-chilled-kandy',
+        'name': 'Slightly Chilled Lounge & Restaurant',
+        'short_name': 'Slightly Chilled Kandy',
+        'restaurant_name': 'Slightly Chilled Lounge',
+        'cuisine': 'Asian, Continental & Lake View Dining',
+        'branch': 'Kandy Lake',
+        'city': 'Anagarika Dharmapala Mw, Kandy',
+        'district': 'Kandy',
+        'province': 'Central',
+        'lat': 7.2925,
+        'lon': 80.6410,
+        'phone': '+94 81 223 8238',
+        'slug': 'restaurant',
+        'color': '#f59e0b'
+    },
+    {
+        'id': 'pedlars-inn-galle',
+        'name': "Pedlar's Inn Café & Restaurant",
+        'short_name': "Pedlar's Inn Galle",
+        'restaurant_name': "Pedlar's Inn Café",
+        'cuisine': 'Italian, Continental & Gelato',
+        'branch': 'Galle Fort',
+        'city': 'Pedlar St, Galle Fort, Galle',
+        'district': 'Galle',
+        'province': 'Southern',
+        'lat': 6.0270,
+        'lon': 80.2175,
+        'phone': '+94 91 222 5333',
+        'slug': 'restaurant',
+        'color': '#f59e0b'
+    },
+    {
+        'id': 'a-minute-by-tuk-tuk',
+        'name': 'A Minute by Tuk Tuk',
+        'short_name': 'A Minute by Tuk Tuk',
+        'restaurant_name': 'A Minute by Tuk Tuk',
+        'cuisine': 'Sri Lankan Fusion & Seafood',
+        'branch': 'Dutch Hospital Galle',
+        'city': 'Old Dutch Hospital, Galle Fort, Galle',
+        'district': 'Galle',
+        'province': 'Southern',
+        'lat': 6.0260,
+        'lon': 80.2185,
+        'phone': '+94 91 224 4550',
+        'slug': 'restaurant',
+        'color': '#f59e0b'
+    },
+    {
+        'id': 'lords-restaurant-negombo',
+        'name': 'Lords Restaurant Complex',
+        'short_name': 'Lords Negombo',
+        'restaurant_name': 'Lords Restaurant',
+        'cuisine': 'Seafood, Sri Lankan & International',
+        'branch': 'Porutota',
+        'city': 'Porutota Rd, Negombo',
+        'district': 'Gampaha',
+        'province': 'Western',
+        'lat': 7.2340,
+        'lon': 79.8420,
+        'phone': '+94 31 227 5000',
+        'slug': 'restaurant',
+        'color': '#f59e0b'
+    },
+    {
+        'id': 'black-pepper-colombo',
+        'name': 'Black Pepper Restaurant',
+        'short_name': 'Black Pepper',
+        'restaurant_name': 'Black Pepper',
+        'cuisine': 'Authentic Sri Lankan Crab & Spices',
+        'branch': 'Dutch Hospital Fort',
+        'city': 'Old Dutch Hospital, Fort, Colombo 01',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.9342,
+        'lon': 79.8440,
+        'phone': '+94 11 232 0544',
+        'slug': 'restaurant',
+        'color': '#f59e0b'
+    },
+    {
+        'id': 't-lounge-dilmah',
+        'name': 't-Lounge by Dilmah',
+        'short_name': 'Dilmah t-Lounge',
+        'restaurant_name': 't-Lounge by Dilmah',
+        'cuisine': 'Gourmet Tea, Crepes & High Tea',
+        'branch': 'Chatham Street',
+        'city': 'Chatham St, Fort, Colombo 01',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.9338,
+        'lon': 79.8442,
+        'phone': '+94 11 244 7168',
+        'slug': 'restaurant',
+        'color': '#f59e0b'
+    },
+    {
+        'id': 'sultans-biryani-colombo',
+        'name': "Sultan's Biryani & Grill",
+        'short_name': "Sultan's Biryani",
+        'restaurant_name': "Sultan's Biryani",
+        'cuisine': 'Biryani, Tandoor & Middle Eastern',
+        'branch': 'Bambalapitiya',
+        'city': 'Marine Drive, Colombo 04',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.8890,
+        'lon': 79.8545,
+        'phone': '+94 11 250 8800',
+        'slug': 'restaurant',
+        'color': '#f59e0b'
+    },
+    {
+        'id': 'manhattan-fish-market',
+        'name': 'The Manhattan Fish Market',
+        'short_name': 'Manhattan Fish Market',
+        'restaurant_name': 'The Manhattan Fish Market',
+        'cuisine': 'American Style Seafood & Platters',
+        'branch': 'Kollupitiya',
+        'city': 'Deal Place, Kollupitiya, Colombo 03',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.9042,
+        'lon': 79.8535,
+        'phone': '+94 11 237 0044',
+        'slug': 'restaurant',
+        'color': '#f59e0b'
+    }
+]
+
+def get_sri_lanka_restaurants(user_lat=None, user_lon=None):
+    """Returns list of Sri Lanka restaurants with calculated distances if coordinates are given."""
+    restaurants = [dict(r) for r in SRI_LANKA_RESTAURANTS]
+    if user_lat is not None and user_lon is not None:
+        try:
+            u_lat = float(user_lat)
+            u_lon = float(user_lon)
+            for r in restaurants:
+                d = calculate_distance_km(u_lat, u_lon, r['lat'], r['lon'])
+                r['distance_km'] = round(d, 2)
+                r['distance_m'] = round(d * 1000)
+            restaurants.sort(key=lambda x: x['distance_km'])
+        except Exception:
+            pass
+    return restaurants
+
 # Predefined reference coordinates (Primary in Sri Lanka, with aliases for tests)
 PREDEFINED_COORDINATES = {
     'hospital': {'lat': 6.9197, 'lon': 79.8693, 'name': 'National Hospital of Sri Lanka (NHSL), Colombo', 'slug': 'hospital'},
@@ -2568,6 +2988,270 @@ BANK_COMMUNICATION_CATEGORIES = [
     }
 ]
 
+# Restaurant Communication Messages
+RESTAURANT_BASIC_COMMUNICATION_MESSAGES = [
+    {
+        "id": 1,
+        "template": "A table for one, please.",
+        "template_en": "A table for one, please.",
+        "template_si": "කරුණාකර එක් අයෙකුට මේසයක් ලබාදෙන්න.",
+        "icon": "fa-user",
+        "category": "Basic communication"
+    },
+    {
+        "id": 2,
+        "template": "A table for two, please.",
+        "template_en": "A table for two, please.",
+        "template_si": "කරුණාකර දෙදෙනෙකුට මේසයක් ලබාදෙන්න.",
+        "icon": "fa-user-group",
+        "category": "Basic communication"
+    },
+    {
+        "id": 3,
+        "template": "I am deaf / non-verbal. Please write down instructions.",
+        "template_en": "I am deaf / non-verbal. Please write down instructions.",
+        "template_si": "මම බිහිරි/කතා කළ නොහැකි අයෙක්. කරුණාකර ලියා පෙන්වන්න.",
+        "icon": "fa-ear-deaf",
+        "category": "Basic communication"
+    },
+    {
+        "id": 4,
+        "template": "Can I see the menu, please?",
+        "template_en": "Can I see the menu, please?",
+        "template_si": "කරුණාකර මෙනුව බලන්න පුළුවන් ද?",
+        "icon": "fa-book-open",
+        "category": "Basic communication"
+    },
+    {
+        "id": 5,
+        "template": "Please wait a moment.",
+        "template_en": "Please wait a moment.",
+        "template_si": "කරුණාකර මොහොතක් රැඳී සිටින්න.",
+        "icon": "fa-hourglass-half",
+        "category": "Basic communication"
+    },
+    {
+        "id": 6,
+        "template": "Where is the restroom?",
+        "template_en": "Where is the restroom?",
+        "template_si": "වැසිකිළිය කොහෙද?",
+        "icon": "fa-restroom",
+        "category": "Basic communication"
+    }
+]
+
+RESTAURANT_ORDERING_MESSAGES = [
+    {
+        "id": 1,
+        "template": "I am ready to order.",
+        "template_en": "I am ready to order.",
+        "template_si": "මම ඇනවුම් කිරීමට සූදානම්.",
+        "icon": "fa-circle-check",
+        "category": "Ordering food"
+    },
+    {
+        "id": 2,
+        "template": "What do you recommend?",
+        "template_en": "What do you recommend?",
+        "template_si": "ඔබ නිර්දේශ කරන්නේ කුමන කෑමද?",
+        "icon": "fa-star",
+        "category": "Ordering food"
+    },
+    {
+        "id": 3,
+        "template": "I would like a glass of water, please.",
+        "template_en": "I would like a glass of water, please.",
+        "template_si": "කරුණාකර මට වතුර වීදුරුවක් දෙන්න.",
+        "icon": "fa-glass-water",
+        "category": "Ordering food"
+    },
+    {
+        "id": 4,
+        "template": "I would like to order rice.",
+        "template_en": "I would like to order rice.",
+        "template_si": "මට බත් ඇනවුම් කිරීමට අවශ්‍යයි.",
+        "icon": "fa-bowl-rice",
+        "category": "Ordering food"
+    },
+    {
+        "id": 5,
+        "template": "I would like to order noodles / pasta.",
+        "template_en": "I would like to order noodles / pasta.",
+        "template_si": "මට නූඩ්ල්ස් / පැස්ටා ඇනවුම් කිරීමට අවශ්‍යයි.",
+        "icon": "fa-plate-wheat",
+        "category": "Ordering food"
+    },
+    {
+        "id": 6,
+        "template": "Please make it less spicy.",
+        "template_en": "Please make it less spicy.",
+        "template_si": "කරුණාකර සැර අඩුවෙන් සාදන්න.",
+        "icon": "fa-pepper-hot",
+        "category": "Ordering food"
+    },
+    {
+        "id": 7,
+        "template": "Can I change my order?",
+        "template_en": "Can I change my order?",
+        "template_si": "මගේ ඇනවුම වෙනස් කළ හැකිද?",
+        "icon": "fa-pen-to-square",
+        "category": "Ordering food"
+    },
+    {
+        "id": 8,
+        "template": "How long will the food take?",
+        "template_en": "How long will the food take?",
+        "template_si": "කෑම ලැබීමට කොපමණ වේලාවක් ගතවේද?",
+        "icon": "fa-clock",
+        "category": "Ordering food"
+    }
+]
+
+RESTAURANT_ALLERGIES_DIETARY_MESSAGES = [
+    {
+        "id": 1,
+        "template": "I have a food allergy.",
+        "template_en": "I have a food allergy.",
+        "template_si": "මට ආහාර අසාත්මිකතාවයක් තියෙනවා.",
+        "icon": "fa-triangle-exclamation",
+        "category": "Allergies & Dietary"
+    },
+    {
+        "id": 2,
+        "template": "Is this dish vegetarian / vegan?",
+        "template_en": "Is this dish vegetarian / vegan?",
+        "template_si": "මෙම කෑම නිර්මාංශද?",
+        "icon": "fa-seedling",
+        "category": "Allergies & Dietary"
+    },
+    {
+        "id": 3,
+        "template": "Does this contain nuts or dairy?",
+        "template_en": "Does this contain nuts or dairy?",
+        "template_si": "මෙහි රටකජු හෝ කිරි අඩංගුද?",
+        "icon": "fa-shield-halved",
+        "category": "Allergies & Dietary"
+    },
+    {
+        "id": 4,
+        "template": "Does this contain seafood?",
+        "template_en": "Does this contain seafood?",
+        "template_si": "මෙහි මුහුදු ආහාර අඩංගුද?",
+        "icon": "fa-shrimp",
+        "category": "Allergies & Dietary"
+    },
+    {
+        "id": 5,
+        "template": "No sugar / less sugar, please.",
+        "template_en": "No sugar / less sugar, please.",
+        "template_si": "සීනි නොමැතිව / සීනි අඩුවෙන් දෙන්න.",
+        "icon": "fa-cubes-stacked",
+        "category": "Allergies & Dietary"
+    },
+    {
+        "id": 6,
+        "template": "Is this food Halal?",
+        "template_en": "Is this food Halal?",
+        "template_si": "මෙම ආහාර හලාල් ද?",
+        "icon": "fa-certificate",
+        "category": "Allergies & Dietary"
+    }
+]
+
+RESTAURANT_BILLING_PAYMENT_MESSAGES = [
+    {
+        "id": 1,
+        "template": "Can I have the bill, please?",
+        "template_en": "Can I have the bill, please?",
+        "template_si": "කරුණාකර බිල ලබාදෙන්න.",
+        "icon": "fa-receipt",
+        "category": "Payment & Service"
+    },
+    {
+        "id": 2,
+        "template": "Are card payments accepted?",
+        "template_en": "Are card payments accepted?",
+        "template_si": "කාඩ්පත් මඟින් ගෙවීම් පිළිගන්නවාද?",
+        "icon": "fa-credit-card",
+        "category": "Payment & Service"
+    },
+    {
+        "id": 3,
+        "template": "Can I pay by cash?",
+        "template_en": "Can I pay by cash?",
+        "template_si": "මට මුදලින් ගෙවිය හැකිද?",
+        "icon": "fa-money-bill-wave",
+        "category": "Payment & Service"
+    },
+    {
+        "id": 4,
+        "template": "Can I have a receipt?",
+        "template_en": "Can I have a receipt?",
+        "template_si": "කරුණාකර රිසිට්පතක් ලබාදෙන්න.",
+        "icon": "fa-file-invoice",
+        "category": "Payment & Service"
+    },
+    {
+        "id": 5,
+        "template": "Thank you, the food was delicious!",
+        "template_en": "Thank you, the food was delicious!",
+        "template_si": "ස්තූතියි, කෑම ඉතා රසවත්!",
+        "icon": "fa-thumbs-up",
+        "category": "Payment & Service"
+    },
+    {
+        "id": 6,
+        "template": "Thank you for your service.",
+        "template_en": "Thank you for your service.",
+        "template_si": "ඔබේ සේවයට ස්තූතියි.",
+        "icon": "fa-heart",
+        "category": "Payment & Service"
+    }
+]
+
+RESTAURANT_COMMUNICATION_CATEGORIES = [
+    {
+        'id': 'rest-basic-comm',
+        'key': 'rest-basic-comm',
+        'name': '1. මූලික සන්නිවේදනය / Basic communication',
+        'name_si': 'මූලික සන්නිවේදනය',
+        'name_en': 'Basic communication',
+        'icon': 'fa-comments',
+        'count': len(RESTAURANT_BASIC_COMMUNICATION_MESSAGES),
+        'messages': RESTAURANT_BASIC_COMMUNICATION_MESSAGES
+    },
+    {
+        'id': 'rest-ordering',
+        'key': 'rest-ordering',
+        'name': '2. කෑම ඇනවුම් කිරීම / Ordering food',
+        'name_si': 'කෑම ඇනවුම් කිරීම',
+        'name_en': 'Ordering food',
+        'icon': 'fa-bowl-food',
+        'count': len(RESTAURANT_ORDERING_MESSAGES),
+        'messages': RESTAURANT_ORDERING_MESSAGES
+    },
+    {
+        'id': 'rest-allergies',
+        'key': 'rest-allergies',
+        'name': '3. අසාත්මිකතා සහ මනාපයන් / Allergies and preferences',
+        'name_si': 'අසාත්මිකතා සහ මනාපයන්',
+        'name_en': 'Allergies and preferences',
+        'icon': 'fa-wheat-awn-circle-exclamation',
+        'count': len(RESTAURANT_ALLERGIES_DIETARY_MESSAGES),
+        'messages': RESTAURANT_ALLERGIES_DIETARY_MESSAGES
+    },
+    {
+        'id': 'rest-billing',
+        'key': 'rest-billing',
+        'name': '4. ගෙවීම් සහ සමුගැනීම / Billing and payment',
+        'name_si': 'ගෙවීම් සහ සමුගැනීම',
+        'name_en': 'Billing and payment',
+        'icon': 'fa-receipt',
+        'count': len(RESTAURANT_BILLING_PAYMENT_MESSAGES),
+        'messages': RESTAURANT_BILLING_PAYMENT_MESSAGES
+    }
+]
+
 # Predefined location messages and styling presets
 LOCATION_PRESETS = {
     'hospital': {
@@ -2613,6 +3297,16 @@ LOCATION_PRESETS = {
         'badge_icon': 'fa-utensils',
         'theme_color': '#f59e0b',
         'bg_color': '#fef3c7',
+        'category_name': '1. මූලික සන්නිවේදනය / Basic communication',
+        'category_name_si': 'මූලික සන්නිවේදනය',
+        'category_name_en': 'Basic communication',
+        'categories': RESTAURANT_COMMUNICATION_CATEGORIES,
+        'restaurant_categories': {
+            'rest-basic-comm': RESTAURANT_BASIC_COMMUNICATION_MESSAGES,
+            'rest-ordering': RESTAURANT_ORDERING_MESSAGES,
+            'rest-allergies': RESTAURANT_ALLERGIES_DIETARY_MESSAGES,
+            'rest-billing': RESTAURANT_BILLING_PAYMENT_MESSAGES,
+        },
         'messages': []
     },
     'bank': {
@@ -2676,8 +3370,10 @@ def _attach_preset(result, slug, lat=None, lon=None):
     result['categories'] = preset.get('categories', [])
     result['hospital_categories'] = preset.get('hospital_categories', {})
     result['bank_categories'] = preset.get('bank_categories', {})
+    result['restaurant_categories'] = preset.get('restaurant_categories', {})
     result['is_hospital'] = (slug == 'hospital')
     result['is_bank'] = (slug == 'bank')
+    result['is_restaurant'] = (slug == 'restaurant')
     result['is_predefined'] = (slug in ['hospital', 'supermarket', 'restaurant', 'bank', 'pharmacy'])
     if lat is not None:
         result['lat'] = float(lat)
@@ -2686,6 +3382,7 @@ def _attach_preset(result, slug, lat=None, lon=None):
     result['predefined_coordinates'] = PREDEFINED_COORDINATES
     result['sri_lanka_hospitals'] = SRI_LANKA_HOSPITALS
     result['sri_lanka_banks'] = SRI_LANKA_BANKS
+    result['sri_lanka_restaurants'] = SRI_LANKA_RESTAURANTS
     return result
 
 def select_hospital_by_id(hospital_id=None, name=None):
@@ -2766,6 +3463,45 @@ def select_bank_by_id(bank_id=None, name=None):
     }
     return _attach_preset(res, 'bank', lat, lon)
 
+def select_restaurant_by_id(restaurant_id=None, name=None):
+    """
+    Manually selects a Sri Lanka restaurant by ID or name and returns
+    preset payload.
+    """
+    matched = None
+    if restaurant_id:
+        for r in SRI_LANKA_RESTAURANTS:
+            if r['id'] == restaurant_id:
+                matched = r
+                break
+    if not matched and name:
+        name_l = name.lower()
+        for r in SRI_LANKA_RESTAURANTS:
+            if name_l in r['name'].lower() or name_l in r['short_name'].lower() or name_l in r.get('restaurant_name', '').lower():
+                matched = r
+                break
+    if not matched:
+        matched = SRI_LANKA_RESTAURANTS[0]
+
+    lat = matched['lat']
+    lon = matched['lon']
+    res = {
+        'success': True,
+        'detected_slug': 'restaurant',
+        'is_restaurant': True,
+        'is_predefined': True,
+        'manually_selected': True,
+        'poi_name': matched['name'],
+        'location_name': 'Popular Restaurant & Dining',
+        'address': f"{matched['name']}, {matched['city']}, {matched['district']} District",
+        'restaurant_phone': matched.get('phone', ''),
+        'restaurant_info': matched,
+        'area_name': f"{matched['city']}, Sri Lanka",
+        'lat': lat,
+        'lon': lon
+    }
+    return _attach_preset(res, 'restaurant', lat, lon)
+
 def detect_place_by_coordinates(lat, lon):
     """
     Attempts to reverse geocode lat/lon into a location category:
@@ -2775,47 +3511,60 @@ def detect_place_by_coordinates(lat, lon):
     lat_f = float(lat)
     lon_f = float(lon)
     try:
-        # 1. Check if coordinates match known Sri Lanka hospitals within ~0.8km (800m)
-        nearby_sl_hospitals = []
+        # Find closest venue among known Sri Lanka hospitals, banks, and restaurants within ~0.8km (800m)
+        closest_candidates = []
+
         for hosp in SRI_LANKA_HOSPITALS:
             dist = calculate_distance_km(lat_f, lon_f, hosp['lat'], hosp['lon'])
             if dist <= 0.8:
-                nearby_sl_hospitals.append((dist, hosp))
-        
-        if nearby_sl_hospitals:
-            nearby_sl_hospitals.sort(key=lambda x: x[0])
-            best_dist, best_hosp = nearby_sl_hospitals[0]
-            res = {
-                'success': True,
-                'detected_slug': 'hospital',
-                'is_hospital': True,
-                'poi_name': best_hosp['name'],
-                'address': f"{best_hosp['name']}, {best_hosp['city']} ({round(best_dist*1000)}m away)",
-                'emergency_hotline': best_hosp.get('emergency', '1990'),
-                'hospital_info': best_hosp
-            }
-            return _attach_preset(res, 'hospital', lat_f, lon_f)
+                closest_candidates.append((dist, 'hospital', hosp))
 
-        # 2. Check if coordinates match known Sri Lanka banks within ~0.8km (800m)
-        nearby_sl_banks = []
         for bank in SRI_LANKA_BANKS:
             dist = calculate_distance_km(lat_f, lon_f, bank['lat'], bank['lon'])
             if dist <= 0.8:
-                nearby_sl_banks.append((dist, bank))
+                closest_candidates.append((dist, 'bank', bank))
 
-        if nearby_sl_banks:
-            nearby_sl_banks.sort(key=lambda x: x[0])
-            best_dist, best_bank = nearby_sl_banks[0]
-            res = {
-                'success': True,
-                'detected_slug': 'bank',
-                'is_bank': True,
-                'poi_name': best_bank['name'],
-                'address': f"{best_bank['name']}, {best_bank['city']} ({round(best_dist*1000)}m away)",
-                'bank_hotline': best_bank.get('hotline', '1975'),
-                'bank_info': best_bank
-            }
-            return _attach_preset(res, 'bank', lat_f, lon_f)
+        for rest in SRI_LANKA_RESTAURANTS:
+            dist = calculate_distance_km(lat_f, lon_f, rest['lat'], rest['lon'])
+            if dist <= 0.8:
+                closest_candidates.append((dist, 'restaurant', rest))
+
+        if closest_candidates:
+            closest_candidates.sort(key=lambda x: x[0])
+            best_dist, best_type, best_item = closest_candidates[0]
+            if best_type == 'hospital':
+                res = {
+                    'success': True,
+                    'detected_slug': 'hospital',
+                    'is_hospital': True,
+                    'poi_name': best_item['name'],
+                    'address': f"{best_item['name']}, {best_item['city']} ({round(best_dist*1000)}m away)",
+                    'emergency_hotline': best_item.get('emergency', '1990'),
+                    'hospital_info': best_item
+                }
+                return _attach_preset(res, 'hospital', lat_f, lon_f)
+            elif best_type == 'bank':
+                res = {
+                    'success': True,
+                    'detected_slug': 'bank',
+                    'is_bank': True,
+                    'poi_name': best_item['name'],
+                    'address': f"{best_item['name']}, {best_item['city']} ({round(best_dist*1000)}m away)",
+                    'bank_hotline': best_item.get('hotline', '1975'),
+                    'bank_info': best_item
+                }
+                return _attach_preset(res, 'bank', lat_f, lon_f)
+            elif best_type == 'restaurant':
+                res = {
+                    'success': True,
+                    'detected_slug': 'restaurant',
+                    'is_restaurant': True,
+                    'poi_name': best_item['name'],
+                    'address': f"{best_item['name']}, {best_item['city']} ({round(best_dist*1000)}m away)",
+                    'restaurant_phone': best_item.get('phone', ''),
+                    'restaurant_info': best_item
+                }
+                return _attach_preset(res, 'restaurant', lat_f, lon_f)
 
         # Check if coordinates match predefined simulation points within ~0.005 deg (~500m)
         for key, ref in PREDEFINED_COORDINATES.items():

@@ -420,8 +420,115 @@ class TestMobileInterface(unittest.TestCase):
         self.assertIn(b'id="modal-manual-bank-select"', resp.data)
         self.assertIn(b'gps-bank-sim-chip', resp.data)
 
+    def test_sri_lanka_restaurants_api(self):
+        # Verify /api/sri-lanka-restaurants returns all 25 restaurants and calculates distances
+        res = self.client.get('/api/sri-lanka-restaurants?lat=6.9115&lon=79.8635')
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['count'], 25)
+        restaurants = data['restaurants']
+        rest_names = [r['short_name'] for r in restaurants]
+        self.assertIn("Upali's Colombo", rest_names)
+        self.assertIn('Ministry of Crab', rest_names)
+        self.assertIn('Kaema Sutra', rest_names)
+        self.assertIn('The Lagoon', rest_names)
+        self.assertIn('Shanmugas', rest_names)
+        # Check distance was computed
+        self.assertIn('distance_km', restaurants[0])
+        self.assertEqual(restaurants[0]['short_name'], "Upali's Colombo")
+
+    def test_sri_lanka_restaurant_proximity_detection(self):
+        # When user GPS is near Upali's Colombo (6.9115, 79.8635)
+        res = self.client.post('/api/detect-location', json={'lat': 6.9115, 'lon': 79.8635})
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['detected_slug'], 'restaurant')
+        self.assertTrue(data['is_restaurant'])
+        self.assertTrue(data['is_predefined'])
+        self.assertIn("Upali's", data['poi_name'])
+        self.assertIn('restaurant_categories', data)
+        self.assertEqual(len(data['restaurant_categories']), 4)
+
+    def test_manual_restaurant_selection_api(self):
+        # Select Ministry of Crab
+        res = self.client.post('/api/select-restaurant', json={'restaurant_id': 'ministry-of-crab'})
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['detected_slug'], 'restaurant')
+        self.assertTrue(data['is_restaurant'])
+        self.assertTrue(data['manually_selected'])
+        self.assertIn('Ministry of Crab', data['poi_name'])
+        # Verify restaurant categories and messages attached
+        self.assertIn('restaurant_categories', data)
+        rest_cats = data['restaurant_categories']
+        self.assertIn('rest-basic-comm', rest_cats)
+        self.assertIn('rest-ordering', rest_cats)
+        self.assertIn('rest-allergies', rest_cats)
+        self.assertIn('rest-billing', rest_cats)
+        self.assertEqual(len(rest_cats['rest-basic-comm']), 6)
+        self.assertEqual(len(rest_cats['rest-ordering']), 8)
+        self.assertEqual(len(rest_cats['rest-allergies']), 6)
+        self.assertEqual(len(rest_cats['rest-billing']), 6)
+
+    def test_restaurant_communication_messages_content(self):
+        # Verify Restaurant Category messages in dual-language English & Sinhala
+        res = self.client.post('/api/select-restaurant', json={'restaurant_id': 'upalis-colombo'})
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        cats = data['restaurant_categories']
+
+        # Category 1: Basic communication
+        basic_msgs = cats['rest-basic-comm']
+        self.assertEqual(len(basic_msgs), 6)
+        self.assertEqual(basic_msgs[0]['template_en'], 'A table for one, please.')
+        self.assertEqual(basic_msgs[0]['template_si'], 'කරුණාකර එක් අයෙකුට මේසයක් ලබාදෙන්න.')
+        self.assertEqual(basic_msgs[2]['template_en'], 'I am deaf / non-verbal. Please write down instructions.')
+        self.assertEqual(basic_msgs[2]['template_si'], 'මම බිහිරි/කතා කළ නොහැකි අයෙක්. කරුණාකර ලියා පෙන්වන්න.')
+
+        # Category 2: Ordering food
+        order_msgs = cats['rest-ordering']
+        self.assertEqual(len(order_msgs), 8)
+        self.assertEqual(order_msgs[0]['template_en'], 'I am ready to order.')
+        self.assertEqual(order_msgs[0]['template_si'], 'මම ඇනවුම් කිරීමට සූදානම්.')
+        self.assertEqual(order_msgs[5]['template_en'], 'Please make it less spicy.')
+        self.assertEqual(order_msgs[5]['template_si'], 'කරුණාකර සැර අඩුවෙන් සාදන්න.')
+
+        # Category 3: Allergies and preferences
+        allergy_msgs = cats['rest-allergies']
+        self.assertEqual(len(allergy_msgs), 6)
+        self.assertEqual(allergy_msgs[0]['template_en'], 'I have a food allergy.')
+        self.assertEqual(allergy_msgs[0]['template_si'], 'මට ආහාර අසාත්මිකතාවයක් තියෙනවා.')
+        self.assertEqual(allergy_msgs[1]['template_en'], 'Is this dish vegetarian / vegan?')
+        self.assertEqual(allergy_msgs[1]['template_si'], 'මෙම කෑම නිර්මාංශද?')
+
+        # Category 4: Billing and payment
+        bill_msgs = cats['rest-billing']
+        self.assertEqual(len(bill_msgs), 6)
+        self.assertEqual(bill_msgs[0]['template_en'], 'Can I have the bill, please?')
+        self.assertEqual(bill_msgs[0]['template_si'], 'කරුණාකර බිල ලබාදෙන්න.')
+        self.assertEqual(bill_msgs[4]['template_en'], 'Thank you, the food was delicious!')
+        self.assertEqual(bill_msgs[4]['template_si'], 'ස්තූතියි, කෑම ඉතා රසවත්!')
+
+    def test_mobile_restaurant_ui_elements(self):
+        # Verify /mobile/restaurant renders all 4 restaurant category buttons and badge
+        resp = self.client.get('/mobile/restaurant')
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b'id="restaurant-category-selector-bar"', resp.data)
+        self.assertIn(b'id="btn-cat-rest-basic-comm"', resp.data)
+        self.assertIn(b'id="btn-cat-rest-ordering"', resp.data)
+        self.assertIn(b'id="btn-cat-rest-allergies"', resp.data)
+        self.assertIn(b'id="btn-cat-rest-billing"', resp.data)
+        self.assertIn(b'Restaurant Message Criteria', resp.data)
+        self.assertIn(b'4 Categories', resp.data)
+        self.assertIn(b'id="modal-manual-restaurant-select"', resp.data)
+        self.assertIn(b'gps-restaurant-sim-chip', resp.data)
+
 
 if __name__ == '__main__':
     unittest.main()
+
 
 

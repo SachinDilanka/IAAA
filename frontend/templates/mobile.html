@@ -118,7 +118,7 @@
               <!-- Integrated Location Header -->
               <header class="location-hero-card" id="location-hero-card" style="margin-bottom:0; border:none; border-bottom:1px solid var(--border-color, #e2e8f0); border-radius:0; padding:12px 14px; box-shadow:none; background:transparent;">
                 <div class="location-hero-top" style="display:flex; align-items:center; gap:12px;">
-                  <div class="location-pin-avatar {% if location_slug == 'bank' %}is-bank{% endif %}" id="location-pin-avatar" 
+                  <div class="location-pin-avatar {% if location_slug == 'bank' %}is-bank{% elif location_slug == 'restaurant' %}is-restaurant{% endif %}" id="location-pin-avatar" 
                        aria-hidden="true">
                     <i class="fa-solid {{ badge_icon|default('fa-location-dot') }}" id="location-badge-icon"></i>
                   </div>
@@ -148,10 +148,10 @@
                 
                 <!-- Floating Map Instruction Badge -->
                 <div class="map-tap-instruction-badge" id="map-tap-instruction-badge">
-                  <span style="color:#ef4444; font-weight:700;"><i class="fa-solid fa-square-h"></i> Hospitals (Red)</span> &bull; <span style="color:#2563eb; font-weight:700;"><i class="fa-solid fa-building-columns"></i> Banks (Blue)</span> &bull; Tap pin to select
+                  <span style="color:#ef4444; font-weight:700;"><i class="fa-solid fa-square-h"></i> Hospitals (Red)</span> &bull; <span style="color:#2563eb; font-weight:700;"><i class="fa-solid fa-building-columns"></i> Banks (Blue)</span> &bull; <span style="color:#f59e0b; font-weight:700;"><i class="fa-solid fa-utensils"></i> Restaurants (Amber)</span> &bull; Tap pin to select
                 </div>
 
-                <!-- Map Overlay Floating Recenter, Hospital & Bank Controls -->
+                <!-- Map Overlay Floating Recenter, Hospital, Bank & Restaurant Controls -->
                 <div class="map-overlay-controls">
                   <button id="map-recenter-btn" class="map-overlay-btn" type="button" title="Center on my GPS position">
                     <i class="fa-solid fa-crosshairs"></i>
@@ -162,6 +162,9 @@
                   <button id="map-sl-banks-quick-btn" class="map-overlay-btn" type="button" title="Show All Sri Lanka Banks (Blue)" style="color:#2563eb;">
                     <i class="fa-solid fa-building-columns"></i>
                   </button>
+                  <button id="map-sl-restaurants-quick-btn" class="map-overlay-btn" type="button" title="Show All Sri Lanka Restaurants (Amber)" style="color:#f59e0b;">
+                    <i class="fa-solid fa-utensils"></i>
+                  </button>
                   <button id="map-hospitals-focus-btn" class="map-overlay-btn" type="button" title="Focus Colombo Venues" style="color:#6366f1;">
                     <i class="fa-solid fa-hospital"></i>
                   </button>
@@ -171,11 +174,11 @@
                 </div>
               </div>
 
-              <!-- Integrated Map Hospital & Bank Quick Selector Strip (Select Directly From Map) -->
-              <div class="map-hospital-selector-strip" id="map-hospital-selector-strip" role="region" aria-label="Select Hospital or Bank from Map">
+              <!-- Integrated Map Hospital, Bank & Restaurant Quick Selector Strip (Select Directly From Map) -->
+              <div class="map-hospital-selector-strip" id="map-hospital-selector-strip" role="region" aria-label="Select Hospital, Bank or Restaurant from Map">
                 <div class="map-strip-header">
                   <span class="map-strip-title">
-                    <i class="fa-solid fa-map-location-dot" style="color:#2563eb;"></i> Select on Map (🔴 Hospitals | 🔵 Banks):
+                    <i class="fa-solid fa-map-location-dot" style="color:#2563eb;"></i> Select on Map (🔴 Hospitals | 🔵 Banks | 🟠 Restaurants):
                   </span>
                   <span class="map-strip-badge" id="map-strip-badge">Tap Pin on Map</span>
                 </div>
@@ -191,20 +194,24 @@
               </footer>
             </article>
 
-            <!-- Section: Message Criteria (Revealed when a Hospital or Bank is detected or selected) -->
-            <div id="section-category-criteria" class="{% if location_slug in ['hospital', 'bank'] and not auto_detect %}category-criteria-shown{% else %}category-criteria-hidden{% endif %}">
+            <!-- Section: Message Criteria (Revealed when a Hospital, Bank, or Restaurant is detected or selected) -->
+            <div id="section-category-criteria" class="{% if location_slug in ['hospital', 'bank', 'restaurant'] and not auto_detect %}category-criteria-shown{% else %}category-criteria-hidden{% endif %}">
               <div class="section-heading-wrap" style="display: flex; flex-direction: column; gap: 4px; margin: 14px 0 10px 0;">
                 <div style="display: flex; align-items: center; justify-content: space-between;">
                   <h3 class="section-messages-title" id="section-messages-heading" style="margin: 0; font-size: 15px; font-weight: 800;">
                     {% if location_slug == 'bank' %}
                     <i class="fa-solid fa-building-columns" style="color: #2563eb; margin-right: 6px;"></i> Bank Message Criteria / බැංකු කාණ්ඩ
+                    {% elif location_slug == 'restaurant' %}
+                    <i class="fa-solid fa-utensils" style="color: #f59e0b; margin-right: 6px;"></i> Restaurant Message Criteria / ආපනශාලා කාණ්ඩ
                     {% else %}
                     <i class="fa-solid fa-list-check" style="color: #ef4444; margin-right: 6px;"></i> Hospital Message Criteria / රෝහල් කාණ්ඩ
                     {% endif %}
                   </h3>
-                  <span id="hospital-status-badge" class="hospital-status-badge {% if location_slug == 'bank' %}badge-bank-theme{% endif %}" style="display: inline-flex;">
+                  <span id="hospital-status-badge" class="hospital-status-badge {% if location_slug == 'bank' %}badge-bank-theme{% elif location_slug == 'restaurant' %}badge-restaurant-theme{% endif %}" style="display: inline-flex;">
                     {% if location_slug == 'bank' %}
                     <i class="fa-solid fa-building-columns"></i> 10 Categories
+                    {% elif location_slug == 'restaurant' %}
+                    <i class="fa-solid fa-utensils"></i> 4 Categories
                     {% else %}
                     <i class="fa-solid fa-square-h"></i> 9 Categories
                     {% endif %}
@@ -216,7 +223,7 @@
               </div>
 
               <!-- Hospital Message Criteria Buttons (9 buttons) -->
-              <div id="category-selector-bar" class="category-selector-bar {% if location_slug == 'bank' %}bar-hidden{% endif %}">
+              <div id="category-selector-bar" class="category-selector-bar {% if location_slug in ['bank', 'restaurant'] %}bar-hidden{% endif %}">
                 <button type="button" class="category-active-btn" id="btn-cat-basic-comm" data-cat="basic-comm" aria-label="1. මූලික සන්නිවේදනය / Basic communication" title="Tap to view suggested messages">
                   <i class="fa-solid fa-comments"></i>
                   <span class="cat-btn-text">1. මූලික සන්නිවේදනය / Basic communication</span>
@@ -391,16 +398,55 @@
                   </div>
                 </button>
               </div>
+
+              <!-- Restaurant Message Criteria Buttons (4 buttons) -->
+              <div id="restaurant-category-selector-bar" class="category-selector-bar {% if location_slug != 'restaurant' %}bar-hidden{% endif %}">
+                <button type="button" class="category-active-btn category-restaurant-btn" id="btn-cat-rest-basic-comm" data-cat="rest-basic-comm" aria-label="1. මූලික සන්නිවේදනය / Basic communication" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-comments"></i>
+                  <span class="cat-btn-text">1. මූලික සන්නිවේදනය / Basic communication</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-rest-basic-comm">6</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-rest-chevron-icon-1"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-restaurant-btn" id="btn-cat-rest-ordering" data-cat="rest-ordering" aria-label="2. කෑම ඇනවුම් කිරීම / Ordering food" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-bowl-food"></i>
+                  <span class="cat-btn-text">2. කෑම ඇනවුම් කිරීම / Ordering food</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-rest-ordering">8</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-rest-chevron-icon-2"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-restaurant-btn" id="btn-cat-rest-allergies" data-cat="rest-allergies" aria-label="3. අසාත්මිකතා සහ මනාපයන් / Allergies and preferences" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-wheat-awn-circle-exclamation"></i>
+                  <span class="cat-btn-text">3. අසාත්මිකතා සහ මනාපයන් / Allergies and preferences</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-rest-allergies">6</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-rest-chevron-icon-3"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-restaurant-btn" id="btn-cat-rest-billing" data-cat="rest-billing" aria-label="4. ගෙවීම් සහ සමුගැනීම / Billing and payment" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-receipt"></i>
+                  <span class="cat-btn-text">4. ගෙවීම් සහ සමුගැනීම / Billing and payment</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-rest-billing">6</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-rest-chevron-icon-4"></i>
+                  </div>
+                </button>
+              </div>
             </div>
 
-            <!-- Waiting for Hospital or Bank Detection State (Visible when scanning or outside) -->
-            <div id="waiting-hospital-state" class="waiting-hospital-card {% if location_slug in ['hospital', 'bank'] and not auto_detect %}waiting-hidden{% endif %}">
+            <!-- Waiting for Hospital, Bank or Restaurant Detection State (Visible when scanning or outside) -->
+            <div id="waiting-hospital-state" class="waiting-hospital-card {% if location_slug in ['hospital', 'bank', 'restaurant'] and not auto_detect %}waiting-hidden{% endif %}">
               <div class="waiting-icon-pulse">
                 <i class="fa-solid fa-location-crosshairs"></i>
               </div>
               <h4 class="waiting-title">GPS Detection Active</h4>
               <p class="waiting-desc">
-                Select a hospital (🔴) or bank (🔵) on the map, or wait for GPS to detect your location to view message categories.
+                Select a hospital (🔴), bank (🔵), or restaurant (🟠) on the map, or wait for GPS to detect your location to view message categories.
               </p>
               <button id="btn-quick-sim-nhsl" class="btn-quick-sim-nhsl" type="button" style="display:none;" onclick="triggerSimulateHospital('nhsl-colombo')">
                 <i class="fa-solid fa-hospital"></i> Select NHSL Hospital
@@ -908,6 +954,63 @@
               </button>
               <button type="button" class="gps-sim-chip gps-bank-sim-chip" data-id="seylan-towers" data-lat="6.9152" data-lon="79.8505" data-name="Seylan Bank - Head Office">
                 <i class="fa-solid fa-building-columns" style="color:#2563eb;"></i> Seylan Bank
+              </button>
+            </div>
+          </div>
+
+          <div style="margin-top:14px;">
+            <span class="gps-dialog-section-label"><i class="fa-solid fa-utensils" style="color:#f59e0b;"></i> Manually Select Restaurant</span>
+            <div class="manual-selector-input-row" style="margin-top:6px;">
+              <select id="modal-manual-restaurant-select" class="manual-hospital-dropdown">
+                <option value="" disabled selected>-- Choose Restaurant in Sri Lanka --</option>
+                <option value="upalis-colombo">Upali's by Nawaloka - Colombo 07</option>
+                <option value="ministry-of-crab">Ministry of Crab - Old Dutch Hospital</option>
+                <option value="the-lagoon-cinnamon-grand">The Lagoon - Cinnamon Grand</option>
+                <option value="nuga-gama">Nuga Gama - Cinnamon Grand</option>
+                <option value="shanmugas-wellawatte">Shanmugas Restaurant - Wellawatte</option>
+                <option value="green-cabin-colombo">Green Cabin - Colombo 03</option>
+                <option value="raja-bojun">Raja Bojun - Liberty Arcade</option>
+                <option value="galle-face-sea-spray">Sea Spray - The Galle Face Hotel</option>
+                <option value="pilawoos-kollupitiya">Hotel de Pilawoos - Kollupitiya</option>
+                <option value="the-gallery-cafe">The Gallery Café - Paradise Road</option>
+                <option value="kaema-sutra-shangrila">Kaema Sutra - Shangri-La Colombo</option>
+                <option value="monsoon-colombo">Monsoon Colombo - Park Street Mews</option>
+                <option value="bavarian-german-restaurant">Bavarian German Restaurant</option>
+                <option value="graze-kitchen-hilton">Graze Kitchen - Hilton Colombo</option>
+                <option value="dinemore-thurstan">Dinemore - Thurstan Road</option>
+                <option value="chola-authentic-indian">Chola Authentic Indian Restaurant</option>
+                <option value="the-kandy-house">The Kandy House Restaurant - Kandy</option>
+                <option value="slightly-chilled-kandy">Slightly Chilled Lounge - Kandy</option>
+                <option value="pedlars-inn-galle">Pedlar's Inn Café - Galle Fort</option>
+                <option value="a-minute-by-tuk-tuk">A Minute by Tuk Tuk - Galle Fort</option>
+                <option value="lords-restaurant-negombo">Lords Restaurant Complex - Negombo</option>
+              </select>
+              <button type="button" id="btn-modal-apply-restaurant" class="btn-apply-manual-hospital" style="background:#f59e0b;">
+                Select
+              </button>
+            </div>
+          </div>
+
+          <div style="margin-top:14px;">
+            <span class="gps-dialog-section-label">Quick Restaurant Selection</span>
+            <div class="gps-sim-grid">
+              <button type="button" class="gps-sim-chip gps-restaurant-sim-chip" data-id="upalis-colombo" data-lat="6.9115" data-lon="79.8635" data-name="Upali's by Nawaloka">
+                <i class="fa-solid fa-utensils" style="color:#f59e0b;"></i> Upali's Colombo
+              </button>
+              <button type="button" class="gps-sim-chip gps-restaurant-sim-chip" data-id="ministry-of-crab" data-lat="6.9345" data-lon="79.8437" data-name="Ministry of Crab">
+                <i class="fa-solid fa-utensils" style="color:#f59e0b;"></i> Ministry of Crab
+              </button>
+              <button type="button" class="gps-sim-chip gps-restaurant-sim-chip" data-id="the-lagoon-cinnamon-grand" data-lat="6.9167" data-lon="79.8492" data-name="The Lagoon - Cinnamon Grand">
+                <i class="fa-solid fa-utensils" style="color:#f59e0b;"></i> The Lagoon
+              </button>
+              <button type="button" class="gps-sim-chip gps-restaurant-sim-chip" data-id="shanmugas-wellawatte" data-lat="6.8785" data-lon="79.8601" data-name="Shanmugas Restaurant">
+                <i class="fa-solid fa-utensils" style="color:#f59e0b;"></i> Shanmugas
+              </button>
+              <button type="button" class="gps-sim-chip gps-restaurant-sim-chip" data-id="pilawoos-kollupitiya" data-lat="6.9080" data-lon="79.8510" data-name="Hotel de Pilawoos">
+                <i class="fa-solid fa-utensils" style="color:#f59e0b;"></i> Pilawoos
+              </button>
+              <button type="button" class="gps-sim-chip gps-restaurant-sim-chip" data-id="the-gallery-cafe" data-lat="6.8988" data-lon="79.8550" data-name="The Gallery Café">
+                <i class="fa-solid fa-utensils" style="color:#f59e0b;"></i> Gallery Café
               </button>
             </div>
           </div>

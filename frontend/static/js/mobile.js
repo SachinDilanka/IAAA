@@ -813,6 +813,410 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   ];
 
+  // Major & Popular Restaurants in Sri Lanka (Famous Dining, Traditional, Seafood & Heritage Venues)
+  const SRI_LANKA_RESTAURANTS_DATA = [
+    {
+      id: 'upalis-colombo',
+      name: "Upali's by Nawaloka",
+      short_name: "Upali's Colombo",
+      restaurant_name: "Upali's by Nawaloka",
+      cuisine: 'Authentic Sri Lankan Cuisine',
+      branch: 'Colombo 07',
+      city: 'C.W.W. Kannangara Mw, Town Hall, Colombo 07',
+      district: 'Colombo',
+      province: 'Western',
+      lat: 6.9115,
+      lon: 79.8635,
+      phone: '+94 11 269 5812',
+      slug: 'restaurant',
+      color: '#f59e0b'
+    },
+    {
+      id: 'ministry-of-crab',
+      name: 'Ministry of Crab',
+      short_name: 'Ministry of Crab',
+      restaurant_name: 'Ministry of Crab',
+      cuisine: 'Seafood & Lagoon Crab Fine Dining',
+      branch: 'Old Dutch Hospital',
+      city: 'Old Dutch Hospital, Fort, Colombo 01',
+      district: 'Colombo',
+      province: 'Western',
+      lat: 6.9345,
+      lon: 79.8437,
+      phone: '+94 11 540 2722',
+      slug: 'restaurant',
+      color: '#f59e0b'
+    },
+    {
+      id: 'the-lagoon-cinnamon-grand',
+      name: 'The Lagoon - Cinnamon Grand',
+      short_name: 'The Lagoon',
+      restaurant_name: 'The Lagoon',
+      cuisine: 'Premium Seafood Market & Dining',
+      branch: 'Cinnamon Grand',
+      city: 'Galle Road, Kollupitiya, Colombo 03',
+      district: 'Colombo',
+      province: 'Western',
+      lat: 6.9167,
+      lon: 79.8492,
+      phone: '+94 11 249 7371',
+      slug: 'restaurant',
+      color: '#f59e0b'
+    },
+    {
+      id: 'nuga-gama',
+      name: 'Nuga Gama - Cinnamon Grand',
+      short_name: 'Nuga Gama',
+      restaurant_name: 'Nuga Gama',
+      cuisine: 'Traditional Sri Lankan Village Dining',
+      branch: 'Cinnamon Grand',
+      city: 'Galle Road, Colombo 03',
+      district: 'Colombo',
+      province: 'Western',
+      lat: 6.9172,
+      lon: 79.8488,
+      phone: '+94 11 249 7369',
+      slug: 'restaurant',
+      color: '#f59e0b'
+    },
+    {
+      id: 'shanmugas-wellawatte',
+      name: 'Shanmugas Restaurant',
+      short_name: 'Shanmugas',
+      restaurant_name: 'Shanmugas',
+      cuisine: 'South Indian Vegetarian',
+      branch: 'Wellawatte',
+      city: 'Ramakrishna Rd, Wellawatte, Colombo 06',
+      district: 'Colombo',
+      province: 'Western',
+      lat: 6.8785,
+      lon: 79.8601,
+      phone: '+94 11 236 1384',
+      slug: 'restaurant',
+      color: '#f59e0b'
+    },
+    {
+      id: 'green-cabin-colombo',
+      name: 'Green Cabin Restaurant',
+      short_name: 'Green Cabin',
+      restaurant_name: 'Green Cabin',
+      cuisine: 'Traditional Sri Lankan & Bakery',
+      branch: 'Kollupitiya',
+      city: 'Galle Road, Colombo 03',
+      district: 'Colombo',
+      province: 'Western',
+      lat: 6.8970,
+      lon: 79.8565,
+      phone: '+94 11 258 8811',
+      slug: 'restaurant',
+      color: '#f59e0b'
+    },
+    {
+      id: 'raja-bojun',
+      name: 'Raja Bojun',
+      short_name: 'Raja Bojun',
+      restaurant_name: 'Raja Bojun',
+      cuisine: 'Authentic Sri Lankan Buffet',
+      branch: 'Liberty Arcade',
+      city: 'R.A. De Mel Mw, Colombo 03',
+      district: 'Colombo',
+      province: 'Western',
+      lat: 6.9038,
+      lon: 79.8530,
+      phone: '+94 11 471 6171',
+      slug: 'restaurant',
+      color: '#f59e0b'
+    },
+    {
+      id: 'galle-face-sea-spray',
+      name: 'Sea Spray - The Galle Face Hotel',
+      short_name: 'Sea Spray Galle Face',
+      restaurant_name: 'Sea Spray',
+      cuisine: 'Oceanfront Seafood & Grill',
+      branch: 'Galle Face Hotel',
+      city: 'Galle Road, Kollupitiya, Colombo 03',
+      district: 'Colombo',
+      province: 'Western',
+      lat: 6.9205,
+      lon: 79.8448,
+      phone: '+94 11 254 1010',
+      slug: 'restaurant',
+      color: '#f59e0b'
+    },
+    {
+      id: 'pilawoos-kollupitiya',
+      name: 'Hotel de Pilawoos',
+      short_name: 'Pilawoos Kollupitiya',
+      restaurant_name: 'Hotel de Pilawoos',
+      cuisine: 'Sri Lankan Street Food & Kottu',
+      branch: 'Kollupitiya',
+      city: 'Galle Road, Kollupitiya, Colombo 03',
+      district: 'Colombo',
+      province: 'Western',
+      lat: 6.9080,
+      lon: 79.8510,
+      phone: '+94 11 257 4333',
+      slug: 'restaurant',
+      color: '#f59e0b'
+    },
+    {
+      id: 'the-gallery-cafe',
+      name: 'The Gallery Café (Paradise Road)',
+      short_name: 'The Gallery Café',
+      restaurant_name: 'The Gallery Café',
+      cuisine: 'Contemporary Fusion & Desserts',
+      branch: 'Bambalapitiya',
+      city: 'Alfred House Rd, Colombo 03',
+      district: 'Colombo',
+      province: 'Western',
+      lat: 6.8988,
+      lon: 79.8550,
+      phone: '+94 11 258 2162',
+      slug: 'restaurant',
+      color: '#f59e0b'
+    },
+    {
+      id: 'kaema-sutra-shangrila',
+      name: 'Kaema Sutra - Shangri-La Colombo',
+      short_name: 'Kaema Sutra',
+      restaurant_name: 'Kaema Sutra',
+      cuisine: 'Modern Creative Sri Lankan',
+      branch: 'Shangri-La Hotel',
+      city: 'One Galle Face, Colombo 01',
+      district: 'Colombo',
+      province: 'Western',
+      lat: 6.9272,
+      lon: 79.8442,
+      phone: '+94 11 788 8288',
+      slug: 'restaurant',
+      color: '#f59e0b'
+    },
+    {
+      id: 'monsoon-colombo',
+      name: 'Monsoon Colombo',
+      short_name: 'Monsoon Colombo',
+      restaurant_name: 'Monsoon',
+      cuisine: 'Southeast Asian Street Food',
+      branch: 'Park Street Mews',
+      city: 'Park Street Mews, Colombo 02',
+      district: 'Colombo',
+      province: 'Western',
+      lat: 6.9185,
+      lon: 79.8580,
+      phone: '+94 11 230 4333',
+      slug: 'restaurant',
+      color: '#f59e0b'
+    },
+    {
+      id: 'bavarian-german-restaurant',
+      name: 'Bavarian German Restaurant',
+      short_name: 'Bavarian Colombo',
+      restaurant_name: 'Bavarian German Restaurant',
+      cuisine: 'European & German Grill',
+      branch: 'Galle Face Terrace',
+      city: 'Galle Face Terrace, Colombo 03',
+      district: 'Colombo',
+      province: 'Western',
+      lat: 6.9200,
+      lon: 79.8475,
+      phone: '+94 11 242 2233',
+      slug: 'restaurant',
+      color: '#f59e0b'
+    },
+    {
+      id: 'graze-kitchen-hilton',
+      name: 'Graze Kitchen - Hilton Colombo',
+      short_name: 'Graze Kitchen',
+      restaurant_name: 'Graze Kitchen',
+      cuisine: 'International Live Stations & Buffet',
+      branch: 'Hilton Colombo',
+      city: 'Sir Chittampalam A Gardiner Mw, Colombo 02',
+      district: 'Colombo',
+      province: 'Western',
+      lat: 6.9320,
+      lon: 79.8465,
+      phone: '+94 11 249 2492',
+      slug: 'restaurant',
+      color: '#f59e0b'
+    },
+    {
+      id: 'dinemore-thurstan',
+      name: 'Dinemore - Thurstan Road',
+      short_name: 'Dinemore Thurstan',
+      restaurant_name: 'Dinemore',
+      cuisine: 'Submarines, Grill & Fast Casual',
+      branch: 'Thurstan Road',
+      city: 'Thurstan Rd, Colombo 03',
+      district: 'Colombo',
+      province: 'Western',
+      lat: 6.9040,
+      lon: 79.8585,
+      phone: '+94 11 255 6000',
+      slug: 'restaurant',
+      color: '#f59e0b'
+    },
+    {
+      id: 'chola-authentic-indian',
+      name: 'Chola Authentic Indian Restaurant',
+      short_name: 'Chola Restaurant',
+      restaurant_name: 'Chola',
+      cuisine: 'North & South Indian Cuisine',
+      branch: 'Wellawatte',
+      city: 'Lily Ave, Wellawatte, Colombo 06',
+      district: 'Colombo',
+      province: 'Western',
+      lat: 6.8770,
+      lon: 79.8595,
+      phone: '+94 11 436 4364',
+      slug: 'restaurant',
+      color: '#f59e0b'
+    },
+    {
+      id: 'the-kandy-house',
+      name: 'The Kandy House Restaurant',
+      short_name: 'The Kandy House',
+      restaurant_name: 'The Kandy House',
+      cuisine: 'Gourmet Fusion & Fine Dining',
+      branch: 'Amunugama',
+      city: 'Amunugama, Gunnepana, Kandy',
+      district: 'Kandy',
+      province: 'Central',
+      lat: 7.3080,
+      lon: 80.6720,
+      phone: '+94 81 492 1394',
+      slug: 'restaurant',
+      color: '#f59e0b'
+    },
+    {
+      id: 'slightly-chilled-kandy',
+      name: 'Slightly Chilled Lounge & Restaurant',
+      short_name: 'Slightly Chilled Kandy',
+      restaurant_name: 'Slightly Chilled Lounge',
+      cuisine: 'Asian, Continental & Lake View Dining',
+      branch: 'Kandy Lake',
+      city: 'Anagarika Dharmapala Mw, Kandy',
+      district: 'Kandy',
+      province: 'Central',
+      lat: 7.2925,
+      lon: 80.6410,
+      phone: '+94 81 223 8238',
+      slug: 'restaurant',
+      color: '#f59e0b'
+    },
+    {
+      id: 'pedlars-inn-galle',
+      name: "Pedlar's Inn Café & Restaurant",
+      short_name: "Pedlar's Inn Galle",
+      restaurant_name: "Pedlar's Inn Café",
+      cuisine: 'Italian, Continental & Gelato',
+      branch: 'Galle Fort',
+      city: 'Pedlar St, Galle Fort, Galle',
+      district: 'Galle',
+      province: 'Southern',
+      lat: 6.0270,
+      lon: 80.2175,
+      phone: '+94 91 222 5333',
+      slug: 'restaurant',
+      color: '#f59e0b'
+    },
+    {
+      id: 'a-minute-by-tuk-tuk',
+      name: 'A Minute by Tuk Tuk',
+      short_name: 'A Minute by Tuk Tuk',
+      restaurant_name: 'A Minute by Tuk Tuk',
+      cuisine: 'Sri Lankan Fusion & Seafood',
+      branch: 'Dutch Hospital Galle',
+      city: 'Old Dutch Hospital, Galle Fort, Galle',
+      district: 'Galle',
+      province: 'Southern',
+      lat: 6.0260,
+      lon: 80.2185,
+      phone: '+94 91 224 4550',
+      slug: 'restaurant',
+      color: '#f59e0b'
+    },
+    {
+      id: 'lords-restaurant-negombo',
+      name: 'Lords Restaurant Complex',
+      short_name: 'Lords Negombo',
+      restaurant_name: 'Lords Restaurant',
+      cuisine: 'Seafood, Sri Lankan & International',
+      branch: 'Porutota',
+      city: 'Porutota Rd, Negombo',
+      district: 'Gampaha',
+      province: 'Western',
+      lat: 7.2340,
+      lon: 79.8420,
+      phone: '+94 31 227 5000',
+      slug: 'restaurant',
+      color: '#f59e0b'
+    },
+    {
+      id: 'black-pepper-colombo',
+      name: 'Black Pepper Restaurant',
+      short_name: 'Black Pepper',
+      restaurant_name: 'Black Pepper',
+      cuisine: 'Authentic Sri Lankan Crab & Spices',
+      branch: 'Dutch Hospital Fort',
+      city: 'Old Dutch Hospital, Fort, Colombo 01',
+      district: 'Colombo',
+      province: 'Western',
+      lat: 6.9342,
+      lon: 79.8440,
+      phone: '+94 11 232 0544',
+      slug: 'restaurant',
+      color: '#f59e0b'
+    },
+    {
+      id: 't-lounge-dilmah',
+      name: 't-Lounge by Dilmah',
+      short_name: 'Dilmah t-Lounge',
+      restaurant_name: 't-Lounge by Dilmah',
+      cuisine: 'Gourmet Tea, Crepes & High Tea',
+      branch: 'Chatham Street',
+      city: 'Chatham St, Fort, Colombo 01',
+      district: 'Colombo',
+      province: 'Western',
+      lat: 6.9338,
+      lon: 79.8442,
+      phone: '+94 11 244 7168',
+      slug: 'restaurant',
+      color: '#f59e0b'
+    },
+    {
+      id: 'sultans-biryani-colombo',
+      name: "Sultan's Biryani & Grill",
+      short_name: "Sultan's Biryani",
+      restaurant_name: "Sultan's Biryani",
+      cuisine: 'Biryani, Tandoor & Middle Eastern',
+      branch: 'Bambalapitiya',
+      city: 'Marine Drive, Colombo 04',
+      district: 'Colombo',
+      province: 'Western',
+      lat: 6.8890,
+      lon: 79.8545,
+      phone: '+94 11 250 8800',
+      slug: 'restaurant',
+      color: '#f59e0b'
+    },
+    {
+      id: 'manhattan-fish-market',
+      name: 'The Manhattan Fish Market',
+      short_name: 'Manhattan Fish Market',
+      restaurant_name: 'The Manhattan Fish Market',
+      cuisine: 'American Style Seafood & Platters',
+      branch: 'Kollupitiya',
+      city: 'Deal Place, Kollupitiya, Colombo 03',
+      district: 'Colombo',
+      province: 'Western',
+      lat: 6.9042,
+      lon: 79.8535,
+      phone: '+94 11 237 0044',
+      slug: 'restaurant',
+      color: '#f59e0b'
+    }
+  ];
+
   // Predefined Reference Coordinates (Primary in Sri Lanka)
   const REFERENCE_GPS_COORDINATES = {
     'hospital': { lat: 6.9197, lon: 79.8693, name: 'National Hospital of Sri Lanka (NHSL), Colombo' },
@@ -839,12 +1243,15 @@ document.addEventListener('DOMContentLoaded', () => {
   let venueMarkersGroup = null;
   let sriLankaHospitalsLayer = null;
   let sriLankaBanksLayer = null;
+  let sriLankaRestaurantsLayer = null;
   let currentCoordinates = null;
   let isMapExpanded = false;
   let allHospitalsData = [...SRI_LANKA_HOSPITALS_DATA];
   let allBanksData = [...SRI_LANKA_BANKS_DATA];
+  let allRestaurantsData = [...SRI_LANKA_RESTAURANTS_DATA];
   let hospitalMarkersMap = {};
   let bankMarkersMap = {};
+  let restaurantMarkersMap = {};
 
   // LocalStorage state
   let historyData = JSON.parse(localStorage.getItem('assistcomm_history') || '[]');
@@ -1355,6 +1762,85 @@ document.addEventListener('DOMContentLoaded', () => {
     'bank-closing-courtesy'
   ];
 
+  let cachedRestaurantCategories = {
+    'rest-basic-comm': [
+      { id: 1, template: "A table for one, please.", template_en: "A table for one, please.", template_si: "කරුණාකර එක් අයෙකුට මේසයක් ලබාදෙන්න.", icon: "fa-user", category: "Basic communication" },
+      { id: 2, template: "A table for two, please.", template_en: "A table for two, please.", template_si: "කරුණාකර දෙදෙනෙකුට මේසයක් ලබාදෙන්න.", icon: "fa-user-group", category: "Basic communication" },
+      { id: 3, template: "I am deaf / non-verbal. Please write down instructions.", template_en: "I am deaf / non-verbal. Please write down instructions.", template_si: "මම බිහිරි/කතා කළ නොහැකි අයෙක්. කරුණාකර ලියා පෙන්වන්න.", icon: "fa-ear-deaf", category: "Basic communication" },
+      { id: 4, template: "Can I see the menu, please?", template_en: "Can I see the menu, please?", template_si: "කරුණාකර මෙනුව බලන්න පුළුවන් ද?", icon: "fa-book-open", category: "Basic communication" },
+      { id: 5, template: "Please wait a moment.", template_en: "Please wait a moment.", template_si: "කරුණාකර මොහොතක් රැඳී සිටින්න.", icon: "fa-hourglass-half", category: "Basic communication" },
+      { id: 6, template: "Where is the restroom?", template_en: "Where is the restroom?", template_si: "වැසිකිළිය කොහෙද?", icon: "fa-restroom", category: "Basic communication" }
+    ],
+    'rest-ordering': [
+      { id: 1, template: "I am ready to order.", template_en: "I am ready to order.", template_si: "මම ඇනවුම් කිරීමට සූදානම්.", icon: "fa-circle-check", category: "Ordering food" },
+      { id: 2, template: "What do you recommend?", template_en: "What do you recommend?", template_si: "ඔබ නිර්දේශ කරන්නේ කුමන කෑමද?", icon: "fa-star", category: "Ordering food" },
+      { id: 3, template: "I would like a glass of water, please.", template_en: "I would like a glass of water, please.", template_si: "කරුණාකර මට වතුර වීදුරුවක් දෙන්න.", icon: "fa-glass-water", category: "Ordering food" },
+      { id: 4, template: "I would like to order rice.", template_en: "I would like to order rice.", template_si: "මට බත් ඇනවුම් කිරීමට අවශ්‍යයි.", icon: "fa-bowl-rice", category: "Ordering food" },
+      { id: 5, template: "I would like to order noodles / pasta.", template_en: "I would like to order noodles / pasta.", template_si: "මට නූඩ්ල්ස් / පැස්ටා ඇනවුම් කිරීමට අවශ්‍යයි.", icon: "fa-plate-wheat", category: "Ordering food" },
+      { id: 6, template: "Please make it less spicy.", template_en: "Please make it less spicy.", template_si: "කරුණාකර සැර අඩුවෙන් සාදන්න.", icon: "fa-pepper-hot", category: "Ordering food" },
+      { id: 7, template: "Can I change my order?", template_en: "Can I change my order?", template_si: "මගේ ඇනවුම වෙනස් කළ හැකිද?", icon: "fa-pen-to-square", category: "Ordering food" },
+      { id: 8, template: "How long will the food take?", template_en: "How long will the food take?", template_si: "කෑම ලැබීමට කොපමණ වේලාවක් ගතවේද?", icon: "fa-clock", category: "Ordering food" }
+    ],
+    'rest-allergies': [
+      { id: 1, template: "I have a food allergy.", template_en: "I have a food allergy.", template_si: "මට ආහාර අසාත්මිකතාවයක් තියෙනවා.", icon: "fa-triangle-exclamation", category: "Allergies and preferences" },
+      { id: 2, template: "Is this dish vegetarian / vegan?", template_en: "Is this dish vegetarian / vegan?", template_si: "මෙම කෑම නිර්මාංශද?", icon: "fa-seedling", category: "Allergies and preferences" },
+      { id: 3, template: "Does this contain nuts or dairy?", template_en: "Does this contain nuts or dairy?", template_si: "මෙහි රටකජු හෝ කිරි අඩංගුද?", icon: "fa-shield-halved", category: "Allergies and preferences" },
+      { id: 4, template: "Does this contain seafood?", template_en: "Does this contain seafood?", template_si: "මෙහි මුහුදු ආහාර අඩංගුද?", icon: "fa-shrimp", category: "Allergies and preferences" },
+      { id: 5, template: "No sugar / less sugar, please.", template_en: "No sugar / less sugar, please.", template_si: "සීනි නොමැතිව / සීනි අඩුවෙන් දෙන්න.", icon: "fa-cubes-stacked", category: "Allergies and preferences" },
+      { id: 6, template: "Is this food Halal?", template_en: "Is this food Halal?", template_si: "මෙම ආහාර හලාල් ද?", icon: "fa-certificate", category: "Allergies and preferences" }
+    ],
+    'rest-billing': [
+      { id: 1, template: "Can I have the bill, please?", template_en: "Can I have the bill, please?", template_si: "කරුණාකර බිල ලබාදෙන්න.", icon: "fa-receipt", category: "Billing and payment" },
+      { id: 2, template: "Are card payments accepted?", template_en: "Are card payments accepted?", template_si: "කාඩ්පත් මඟින් ගෙවීම් පිළිගන්නවාද?", icon: "fa-credit-card", category: "Billing and payment" },
+      { id: 3, template: "Can I pay by cash?", template_en: "Can I pay by cash?", template_si: "මට මුදලින් ගෙවිය හැකිද?", icon: "fa-money-bill-wave", category: "Billing and payment" },
+      { id: 4, template: "Can I have a receipt?", template_en: "Can I have a receipt?", template_si: "කරුණාකර රිසිට්පතක් ලබාදෙන්න.", icon: "fa-file-invoice", category: "Billing and payment" },
+      { id: 5, template: "Thank you, the food was delicious!", template_en: "Thank you, the food was delicious!", template_si: "ස්තූතියි, කෑම ඉතා රසවත්!", icon: "fa-thumbs-up", category: "Billing and payment" },
+      { id: 6, template: "Thank you for your service.", template_en: "Thank you for your service.", template_si: "ඔබේ සේවයට ස්තූතියි.", icon: "fa-heart", category: "Billing and payment" }
+    ]
+  };
+
+  const RESTAURANT_CATEGORY_METADATA = {
+    'rest-basic-comm': {
+      titleSi: '1. මූලික සන්නිවේදනය',
+      titleEn: 'Basic communication',
+      label: '1. මූලික සන්නිවේදනය / Basic communication',
+      icon: 'fa-comments',
+      buttonId: 'btn-cat-rest-basic-comm',
+      badgeId: 'cat-badge-rest-basic-comm'
+    },
+    'rest-ordering': {
+      titleSi: '2. කෑම ඇනවුම් කිරීම',
+      titleEn: 'Ordering food',
+      label: '2. කෑම ඇනවුම් කිරීම / Ordering food',
+      icon: 'fa-bowl-food',
+      buttonId: 'btn-cat-rest-ordering',
+      badgeId: 'cat-badge-rest-ordering'
+    },
+    'rest-allergies': {
+      titleSi: '3. අසාත්මිකතා සහ මනාපයන්',
+      titleEn: 'Allergies and preferences',
+      label: '3. අසාත්මිකතා සහ මනාපයන් / Allergies and preferences',
+      icon: 'fa-wheat-awn-circle-exclamation',
+      buttonId: 'btn-cat-rest-allergies',
+      badgeId: 'cat-badge-rest-allergies'
+    },
+    'rest-billing': {
+      titleSi: '4. ගෙවීම් සහ සමුගැනීම',
+      titleEn: 'Billing and payment',
+      label: '4. ගෙවීම් සහ සමුගැනීම / Billing and payment',
+      icon: 'fa-receipt',
+      buttonId: 'btn-cat-rest-billing',
+      badgeId: 'cat-badge-rest-billing'
+    }
+  };
+
+  const ALL_RESTAURANT_CAT_KEYS = [
+    'rest-basic-comm',
+    'rest-ordering',
+    'rest-allergies',
+    'rest-billing'
+  ];
+
   // Screen 1 & Screen 2 Navigation:
   // First screen displays only the Map and the Message Criteria for the detected/selected venue.
   // Tapping any criteria navigates to Screen 2 displaying the suggested messages for that criterion.
@@ -1362,7 +1848,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const screenMainHome = document.getElementById('screen-main-home');
     const screenCategoryMessages = document.getElementById('screen-category-messages');
     const messagesGrid = document.getElementById('messages-grid');
-    const meta = HOSPITAL_CATEGORY_METADATA[catKey] || BANK_CATEGORY_METADATA[catKey] || {
+    const meta = HOSPITAL_CATEGORY_METADATA[catKey] || BANK_CATEGORY_METADATA[catKey] || RESTAURANT_CATEGORY_METADATA[catKey] || {
       titleSi: catKey,
       titleEn: catKey,
       label: catKey,
@@ -1374,6 +1860,8 @@ document.addEventListener('DOMContentLoaded', () => {
       msgs = cachedHospitalCategories[catKey];
     } else if (cachedBankCategories && cachedBankCategories[catKey]) {
       msgs = cachedBankCategories[catKey];
+    } else if (cachedRestaurantCategories && cachedRestaurantCategories[catKey]) {
+      msgs = cachedRestaurantCategories[catKey];
     }
 
     // Populate Screen 2 Subscreen Header
@@ -1466,6 +1954,17 @@ document.addEventListener('DOMContentLoaded', () => {
   // Bind all Bank Criteria Buttons to navigate to Screen 2
   ALL_BANK_CAT_KEYS.forEach(catKey => {
     const meta = BANK_CATEGORY_METADATA[catKey];
+    if (meta) {
+      const btn = document.getElementById(meta.buttonId);
+      if (btn) {
+        btn.addEventListener('click', () => openCategoryMessagesScreen(catKey));
+      }
+    }
+  });
+
+  // Bind all Restaurant Criteria Buttons to navigate to Screen 2
+  ALL_RESTAURANT_CAT_KEYS.forEach(catKey => {
+    const meta = RESTAURANT_CATEGORY_METADATA[catKey];
     if (meta) {
       const btn = document.getElementById(meta.buttonId);
       if (btn) {
@@ -1764,12 +2263,16 @@ document.addEventListener('DOMContentLoaded', () => {
       // Layer group for Sri Lanka Banks (Blue Financial Pins)
       sriLankaBanksLayer = L.layerGroup().addTo(areaMap);
 
+      // Layer group for Sri Lanka Restaurants (Amber Dining Pins)
+      sriLankaRestaurantsLayer = L.layerGroup().addTo(areaMap);
+
       // Layer group for other facility pins
       venueMarkersGroup = L.layerGroup().addTo(areaMap);
 
-      // Render all Sri Lanka hospitals and banks onto the map immediately
+      // Render all Sri Lanka hospitals, banks, and restaurants onto the map immediately
       renderSriLankaHospitals(allHospitalsData);
       renderSriLankaBanks(allBanksData);
+      renderSriLankaRestaurants(allRestaurantsData);
 
       // Recenter Button
       const recenterBtn = document.getElementById('map-recenter-btn');
@@ -1800,11 +2303,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });
       }
 
+      // Sri Lanka Restaurants Quick View Button (Shows all restaurants across Sri Lanka)
+      const slRestaurantsQuickBtn = document.getElementById('map-sl-restaurants-quick-btn');
+      if (slRestaurantsQuickBtn) {
+        slRestaurantsQuickBtn.addEventListener('click', () => {
+          fitAllSriLankaRestaurants();
+        });
+      }
+
       const slHospitalsFocusBtn = document.getElementById('map-hospitals-focus-btn');
       if (slHospitalsFocusBtn) {
         slHospitalsFocusBtn.addEventListener('click', () => {
           areaMap.flyTo([6.9197, 79.8693], 14, { animate: true, duration: 1 });
-          showGpsToast("🏙️ Focused on Central Colombo Venues (Hospitals & Banks)", 2500);
+          showGpsToast("🏙️ Focused on Central Colombo Venues (Hospitals, Banks & Dining)", 2500);
         });
       }
 
@@ -1830,7 +2341,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
       }
 
-      // Map click handler: clicking near any hospital or bank on the map selects it directly
+      // Map click handler: clicking near any hospital, bank or restaurant on the map selects it directly
       areaMap.on('click', (e) => {
         let closestHosp = null;
         let minDHosp = Infinity;
@@ -1856,10 +2367,24 @@ document.addEventListener('DOMContentLoaded', () => {
           });
         }
 
-        if (minDHosp <= minDBank && closestHosp && minDHosp < 0.04) {
+        let closestRest = null;
+        let minDRest = Infinity;
+        if (allRestaurantsData && allRestaurantsData.length > 0) {
+          allRestaurantsData.forEach(r => {
+            const d = Math.hypot(e.latlng.lat - r.lat, e.latlng.lng - r.lon);
+            if (d < minDRest) {
+              minDRest = d;
+              closestRest = r;
+            }
+          });
+        }
+
+        if (minDHosp <= minDBank && minDHosp <= minDRest && closestHosp && minDHosp < 0.04) {
           selectHospitalFromMap(closestHosp.id, closestHosp.lat, closestHosp.lon, closestHosp.name);
-        } else if (closestBank && minDBank < 0.04) {
+        } else if (minDBank <= minDRest && closestBank && minDBank < 0.04) {
           selectBankFromMap(closestBank.id, closestBank.lat, closestBank.lon, closestBank.name);
+        } else if (closestRest && minDRest < 0.04) {
+          selectRestaurantFromMap(closestRest.id, closestRest.lat, closestRest.lon, closestRest.name);
         }
       });
     } catch (err) {
@@ -1976,7 +2501,62 @@ document.addEventListener('DOMContentLoaded', () => {
     renderMapCombinedPills();
   }
 
-  // Render Horizontal Pills Strip on Map (Hospitals in Red, Banks in Blue)
+  // Render Sri Lanka Restaurant Markers with High-Visibility AMBER Pins & Direct 1-Tap Selection
+  function renderSriLankaRestaurants(restaurantsList) {
+    if (!sriLankaRestaurantsLayer || typeof L === 'undefined') return;
+    sriLankaRestaurantsLayer.clearLayers();
+    restaurantMarkersMap = {};
+
+    restaurantsList.forEach(rest => {
+      const distanceLabel = rest.distance_km !== undefined 
+        ? `<div style="font-size:11px; color:#d97706; font-weight:700; margin-bottom:4px;"><i class="fa-solid fa-route"></i> ${rest.distance_km} km away</div>` 
+        : '';
+
+      const restIcon = L.divIcon({
+        className: 'custom-rest-pin-wrapper',
+        html: `
+          <div class="map-restaurant-pin" id="map-pin-${rest.id}" title="Tap on map to select Restaurant: ${rest.name}">
+            <div class="restaurant-pin-icon-wrap"><i class="fa-solid fa-utensils"></i></div>
+            <span class="restaurant-pin-title">${rest.short_name || rest.name}</span>
+          </div>
+        `,
+        iconSize: [null, 28],
+        iconAnchor: [15, 14],
+        popupAnchor: [0, -14]
+      });
+
+      const marker = L.marker([rest.lat, rest.lon], { icon: restIcon, zIndexOffset: 460 });
+      marker.restaurantData = rest;
+      restaurantMarkersMap[rest.id] = marker;
+
+      marker.bindPopup(`
+        <div class="restaurant-leaflet-popup">
+          <div class="restaurant-popup-header" style="color:#d97706;">
+            <i class="fa-solid fa-utensils"></i> Restaurant (Amber Pin)
+          </div>
+          <h4 class="restaurant-popup-name">${rest.name}</h4>
+          <p class="restaurant-popup-meta"><strong>Location:</strong> ${rest.city || (rest.district + ' District')}</p>
+          <p class="restaurant-popup-meta"><strong>Cuisine:</strong> ${rest.cuisine || 'Dining & Cafe'}</p>
+          ${rest.phone ? `<p class="restaurant-popup-phone"><i class="fa-solid fa-phone"></i> Tel: ${rest.phone}</p>` : ''}
+          ${distanceLabel}
+          <div style="font-size:11.5px; font-weight:700; color:#d97706; margin:6px 0; background:#fef3c7; padding:5px 8px; border-radius:6px; text-align:center;">
+            <i class="fa-solid fa-check"></i> Tap to select restaurant
+          </div>
+        </div>
+      `);
+
+      // DIRECT 1-TAP SELECTION WHEN TAPPING PIN ON THE MAP
+      marker.on('click', () => {
+        selectRestaurantFromMap(rest.id, rest.lat, rest.lon, rest.name);
+      });
+
+      sriLankaRestaurantsLayer.addLayer(marker);
+    });
+
+    renderMapCombinedPills();
+  }
+
+  // Render Horizontal Pills Strip on Map (Hospitals in Red, Banks in Blue, Restaurants in Amber)
   function renderMapCombinedPills() {
     const pillsRow = document.getElementById('map-hospital-pills-row');
     if (!pillsRow) return;
@@ -2009,6 +2589,20 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       pillsRow.appendChild(btn);
     });
+
+    // 3. Render Restaurant Pills (Amber)
+    (allRestaurantsData || []).forEach(rest => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'map-restaurant-pill-btn';
+      btn.setAttribute('data-id', rest.id);
+      btn.innerHTML = `<i class="fa-solid fa-utensils"></i> ${rest.short_name || rest.name}`;
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectRestaurantFromMap(rest.id, rest.lat, rest.lon, rest.name);
+      });
+      pillsRow.appendChild(btn);
+    });
   }
 
   function renderMapHospitalPills(hospitalsList) {
@@ -2019,19 +2613,19 @@ document.addEventListener('DOMContentLoaded', () => {
   // Core Function: Select Hospital Directly From Map
   function selectHospitalFromMap(id, lat, lon, name) {
     // 1. Highlight map pin
-    document.querySelectorAll('.map-hospital-pin, .map-bank-pin').forEach(p => p.classList.remove('selected-map-pin'));
+    document.querySelectorAll('.map-hospital-pin, .map-bank-pin, .map-restaurant-pin').forEach(p => p.classList.remove('selected-map-pin'));
     const targetPin = document.getElementById(`map-pin-${id}`);
     if (targetPin) {
       targetPin.classList.add('selected-map-pin');
     }
 
     // 2. Highlight map pill button
-    document.querySelectorAll('.map-hospital-pill-btn, .map-bank-pill-btn').forEach(btn => {
+    document.querySelectorAll('.map-hospital-pill-btn, .map-bank-pill-btn, .map-restaurant-pill-btn').forEach(btn => {
       if (btn.getAttribute('data-id') === id) {
         btn.classList.add('active-hospital-pill');
         btn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
       } else {
-        btn.classList.remove('active-hospital-pill', 'active-bank-pill');
+        btn.classList.remove('active-hospital-pill', 'active-bank-pill', 'active-restaurant-pill');
       }
     });
 
@@ -2047,19 +2641,19 @@ document.addEventListener('DOMContentLoaded', () => {
   // Core Function: Select Bank Directly From Map
   function selectBankFromMap(id, lat, lon, name) {
     // 1. Highlight map pin
-    document.querySelectorAll('.map-hospital-pin, .map-bank-pin').forEach(p => p.classList.remove('selected-map-pin'));
+    document.querySelectorAll('.map-hospital-pin, .map-bank-pin, .map-restaurant-pin').forEach(p => p.classList.remove('selected-map-pin'));
     const targetPin = document.getElementById(`map-pin-${id}`);
     if (targetPin) {
       targetPin.classList.add('selected-map-pin');
     }
 
     // 2. Highlight map pill button
-    document.querySelectorAll('.map-hospital-pill-btn, .map-bank-pill-btn').forEach(btn => {
+    document.querySelectorAll('.map-hospital-pill-btn, .map-bank-pill-btn, .map-restaurant-pill-btn').forEach(btn => {
       if (btn.getAttribute('data-id') === id) {
         btn.classList.add('active-bank-pill');
         btn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
       } else {
-        btn.classList.remove('active-hospital-pill', 'active-bank-pill');
+        btn.classList.remove('active-hospital-pill', 'active-bank-pill', 'active-restaurant-pill');
       }
     });
 
@@ -2070,6 +2664,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 4. Trigger selection
     manuallySelectBank(id, lat, lon, name);
+  }
+
+  // Core Function: Select Restaurant Directly From Map
+  function selectRestaurantFromMap(id, lat, lon, name) {
+    // 1. Highlight map pin
+    document.querySelectorAll('.map-hospital-pin, .map-bank-pin, .map-restaurant-pin').forEach(p => p.classList.remove('selected-map-pin'));
+    const targetPin = document.getElementById(`map-pin-${id}`);
+    if (targetPin) {
+      targetPin.classList.add('selected-map-pin');
+    }
+
+    // 2. Highlight map pill button
+    document.querySelectorAll('.map-hospital-pill-btn, .map-bank-pill-btn, .map-restaurant-pill-btn').forEach(btn => {
+      if (btn.getAttribute('data-id') === id) {
+        btn.classList.add('active-restaurant-pill');
+        btn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      } else {
+        btn.classList.remove('active-hospital-pill', 'active-bank-pill', 'active-restaurant-pill');
+      }
+    });
+
+    // 3. Open marker popup
+    if (restaurantMarkersMap[id]) {
+      restaurantMarkersMap[id].openPopup();
+    }
+
+    // 4. Trigger selection
+    manuallySelectRestaurant(id, lat, lon, name);
   }
 
   function fitAllSriLankaHospitals() {
@@ -2086,17 +2708,26 @@ document.addEventListener('DOMContentLoaded', () => {
     showGpsToast(`🏦 Displaying all ${allBanksData.length} major banks (Blue) across Sri Lanka`, 2500);
   }
 
+  function fitAllSriLankaRestaurants() {
+    if (!areaMap || allRestaurantsData.length === 0 || typeof L === 'undefined') return;
+    const bounds = L.latLngBounds(allRestaurantsData.map(r => [r.lat, r.lon]));
+    areaMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
+    showGpsToast(`🍽️ Displaying all ${allRestaurantsData.length} popular restaurants (Amber) across Sri Lanka`, 2500);
+  }
+
   function renderVenuePins(facilities) {
     if (!venueMarkersGroup || typeof L === 'undefined') return;
     venueMarkersGroup.clearLayers();
   }
 
-  // Global helper for Leaflet popups and manual buttons to select a hospital or bank
+  // Global helper for Leaflet popups and manual buttons to select a hospital, bank, or restaurant
   window.selectHospitalFromMap = selectHospitalFromMap;
   window.selectHospitalManually = selectHospitalFromMap;
   window.triggerSimulateHospital = selectHospitalFromMap;
   window.selectBankFromMap = selectBankFromMap;
   window.selectBankManually = selectBankFromMap;
+  window.selectRestaurantFromMap = selectRestaurantFromMap;
+  window.selectRestaurantManually = selectRestaurantFromMap;
 
   window.triggerSimulateFromMap = function(slug) {
     simulateGpsLocation(slug);
@@ -2125,6 +2756,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const areaName = data.area_name || placeName;
     const isHospital = data.detected_slug === 'hospital' || data.is_hospital === true;
     const isBank = data.detected_slug === 'bank' || data.is_bank === true;
+    const isRestaurant = data.detected_slug === 'restaurant' || data.is_restaurant === true;
 
     // 1. Update Hero Card
     if (data.manually_selected) {
@@ -2132,28 +2764,39 @@ document.addEventListener('DOMContentLoaded', () => {
       if (locEyebrow) {
         if (isHospital) locEyebrow.textContent = `HOSPITAL SELECTED FROM MAP • සිතියමෙන් තෝරාගත් රෝහල`;
         else if (isBank) locEyebrow.textContent = `BANK SELECTED FROM MAP • සිතියමෙන් තෝරාගත් බැංකුව`;
+        else if (isRestaurant) locEyebrow.textContent = `RESTAURANT SELECTED FROM MAP • සිතියමෙන් තෝරාගත් ආපනශාලාව`;
         else locEyebrow.textContent = `SELECTED FROM MAP • සිතියමෙන් තෝරාගත් ස්ථානය`;
       }
-      if (locSub) locSub.textContent = data.address || (isHospital ? `Selected on map • Hospital communication ready` : (isBank ? `Selected on map • Bank communication ready` : `Selected on map`));
-      if (liveBadgeText) liveBadgeText.textContent = isHospital ? `MAP • HOSPITAL` : (isBank ? `MAP • BANK` : `MAP • VENUE`);
+      if (locSub) locSub.textContent = data.address || (isHospital ? `Selected on map • Hospital communication ready` : (isBank ? `Selected on map • Bank communication ready` : (isRestaurant ? `Selected on map • Restaurant communication ready` : `Selected on map`)));
+      if (liveBadgeText) liveBadgeText.textContent = isHospital ? `MAP • HOSPITAL` : (isBank ? `MAP • BANK` : (isRestaurant ? `MAP • RESTAURANT` : `MAP • VENUE`));
     } else if (isPredefined) {
       if (locTitle) locTitle.textContent = placeName;
       if (locEyebrow) {
         if (isHospital) locEyebrow.textContent = `GPS DETECTED HOSPITAL • රෝහල හඳුනා ගන්නා ලදී`;
         else if (isBank) locEyebrow.textContent = `GPS DETECTED BANK • බැංකුව හඳුනා ගන්නා ලදී`;
+        else if (isRestaurant) locEyebrow.textContent = `GPS DETECTED RESTAURANT • ආපනශාලාව හඳුනා ගන්නා ලදී`;
         else locEyebrow.textContent = `GPS DETECTED VENUE • ${facilityName.toUpperCase()}`;
       }
       if (locSub) locSub.textContent = data.address || `GPS Lock • Accuracy ±${Math.round(accuracy)}m`;
-      if (liveBadgeText) liveBadgeText.textContent = isHospital ? `LIVE • HOSPITAL` : (isBank ? `LIVE • BANK` : `LIVE • ${facilityName.toUpperCase()}`);
+      if (liveBadgeText) liveBadgeText.textContent = isHospital ? `LIVE • HOSPITAL` : (isBank ? `LIVE • BANK` : (isRestaurant ? `LIVE • RESTAURANT` : `LIVE • ${facilityName.toUpperCase()}`));
     } else {
       // User is OUTSIDE predefined facilities
       if (locTitle) locTitle.textContent = areaName;
       if (locEyebrow) locEyebrow.textContent = `GPS AREA LOCATION • OUTSIDE VENUE`;
-      if (locSub) locSub.textContent = data.address ? `Near ${data.address} • Venue scanning active` : `GPS Coordinates Lock (±${Math.round(accuracy)}m) • Ready to detect hospital or bank`;
+      if (locSub) locSub.textContent = data.address ? `Near ${data.address} • Venue scanning active` : `GPS Coordinates Lock (±${Math.round(accuracy)}m) • Ready to detect hospital, bank, or restaurant`;
       if (liveBadgeText) liveBadgeText.textContent = `LIVE • SCANNING`;
     }
 
     if (avatar) {
+      if (isRestaurant) {
+        avatar.classList.add('is-restaurant');
+        avatar.classList.remove('is-bank');
+      } else if (isBank) {
+        avatar.classList.add('is-bank');
+        avatar.classList.remove('is-restaurant');
+      } else {
+        avatar.classList.remove('is-restaurant', 'is-bank');
+      }
       if (data.theme_color) avatar.style.color = data.theme_color;
       if (data.bg_color) avatar.style.background = data.bg_color;
     }
@@ -2161,11 +2804,12 @@ document.addEventListener('DOMContentLoaded', () => {
       badgeIcon.className = `fa-solid ${data.badge_icon}`;
     }
 
-    // 2. Hospital / Bank Detection vs Waiting State Message Delivery
+    // 2. Hospital / Bank / Restaurant Detection vs Waiting State Message Delivery
     const waitingCard = document.getElementById('waiting-hospital-state');
     const categorySection = document.getElementById('section-category-criteria');
     const hospitalCategoryBar = document.getElementById('category-selector-bar');
     const bankCategoryBar = document.getElementById('bank-category-selector-bar');
+    const restaurantCategoryBar = document.getElementById('restaurant-category-selector-bar');
     const hospitalBadge = document.getElementById('hospital-status-badge');
     const sectionHeading = document.getElementById('section-messages-heading');
     const messagesGrid = document.getElementById('messages-grid');
@@ -2187,13 +2831,17 @@ document.addEventListener('DOMContentLoaded', () => {
         bankCategoryBar.classList.add('bar-hidden');
         bankCategoryBar.style.display = 'none';
       }
+      if (restaurantCategoryBar) {
+        restaurantCategoryBar.classList.add('bar-hidden');
+        restaurantCategoryBar.style.display = 'none';
+      }
       if (hospitalCategoryBar) {
         hospitalCategoryBar.classList.remove('bar-hidden');
         hospitalCategoryBar.style.display = 'flex';
         hospitalCategoryBar.style.flexDirection = 'column';
       }
       if (hospitalBadge) {
-        hospitalBadge.classList.remove('badge-bank-theme');
+        hospitalBadge.classList.remove('badge-bank-theme', 'badge-restaurant-theme');
         hospitalBadge.style.display = 'inline-flex';
         hospitalBadge.innerHTML = '<i class="fa-solid fa-square-h"></i> 9 Categories';
         hospitalBadge.style.background = '#fee2e2';
@@ -2220,7 +2868,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.classList.remove('active-hospital-pill');
           }
         });
-        document.querySelectorAll('.map-hospital-pin').forEach(p => p.classList.remove('selected-map-pin'));
+        document.querySelectorAll('.map-hospital-pin, .map-bank-pin, .map-restaurant-pin').forEach(p => p.classList.remove('selected-map-pin'));
         const targetPin = document.getElementById(`map-pin-${targetHospId}`);
         if (targetPin) targetPin.classList.add('selected-map-pin');
       }
@@ -2270,12 +2918,17 @@ document.addEventListener('DOMContentLoaded', () => {
         hospitalCategoryBar.classList.add('bar-hidden');
         hospitalCategoryBar.style.display = 'none';
       }
+      if (restaurantCategoryBar) {
+        restaurantCategoryBar.classList.add('bar-hidden');
+        restaurantCategoryBar.style.display = 'none';
+      }
       if (bankCategoryBar) {
         bankCategoryBar.classList.remove('bar-hidden');
         bankCategoryBar.style.display = 'flex';
         bankCategoryBar.style.flexDirection = 'column';
       }
       if (hospitalBadge) {
+        hospitalBadge.classList.remove('badge-restaurant-theme');
         hospitalBadge.classList.add('badge-bank-theme');
         hospitalBadge.style.display = 'inline-flex';
         hospitalBadge.innerHTML = '<i class="fa-solid fa-building-columns"></i> 10 Categories';
@@ -2303,7 +2956,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.classList.remove('active-bank-pill');
           }
         });
-        document.querySelectorAll('.map-bank-pin').forEach(p => p.classList.remove('selected-map-pin'));
+        document.querySelectorAll('.map-hospital-pin, .map-bank-pin, .map-restaurant-pin').forEach(p => p.classList.remove('selected-map-pin'));
         const targetPin = document.getElementById(`map-pin-${targetBankId}`);
         if (targetPin) targetPin.classList.add('selected-map-pin');
       }
@@ -2333,8 +2986,93 @@ document.addEventListener('DOMContentLoaded', () => {
         hintText.style.display = 'block';
         hintText.innerHTML = '<i class="fa-solid fa-hand-pointer"></i> Press a category button above to suggest communication messages';
       }
+    } else if (isRestaurant) {
+      backToFirstScreen();
+      currentActiveHospitalCategory = null;
+
+      if (waitingCard) {
+        waitingCard.classList.add('waiting-hidden');
+        waitingCard.style.display = 'none';
+      }
+      if (categorySection) {
+        categorySection.classList.remove('category-criteria-hidden');
+        categorySection.classList.add('category-criteria-shown');
+        categorySection.style.display = 'block';
+      }
+      if (hospitalCategoryBar) {
+        hospitalCategoryBar.classList.add('bar-hidden');
+        hospitalCategoryBar.style.display = 'none';
+      }
+      if (bankCategoryBar) {
+        bankCategoryBar.classList.add('bar-hidden');
+        bankCategoryBar.style.display = 'none';
+      }
+      if (restaurantCategoryBar) {
+        restaurantCategoryBar.classList.remove('bar-hidden');
+        restaurantCategoryBar.style.display = 'flex';
+        restaurantCategoryBar.style.flexDirection = 'column';
+      }
+      if (hospitalBadge) {
+        hospitalBadge.classList.remove('badge-bank-theme');
+        hospitalBadge.classList.add('badge-restaurant-theme');
+        hospitalBadge.style.display = 'inline-flex';
+        hospitalBadge.innerHTML = '<i class="fa-solid fa-utensils"></i> 4 Categories';
+        hospitalBadge.style.background = '#fef3c7';
+        hospitalBadge.style.color = '#d97706';
+      }
+      if (sectionHeading) {
+        sectionHeading.innerHTML = '<i class="fa-solid fa-utensils" style="color: #f59e0b; margin-right: 6px;"></i> Restaurant Message Criteria / ආපනශාලා කාණ්ඩ';
+      }
+
+      // Highlight map pill and pin if in restaurant
+      let targetRestId = '';
+      if (data.restaurant_info && data.restaurant_info.id) {
+        targetRestId = data.restaurant_info.id;
+      } else {
+        const found = allRestaurantsData.find(r => r.name.toLowerCase().includes(placeName.toLowerCase()) || (r.short_name && placeName.toLowerCase().includes(r.short_name.toLowerCase())));
+        if (found) targetRestId = found.id;
+      }
+      if (targetRestId) {
+        document.querySelectorAll('.map-restaurant-pill-btn').forEach(btn => {
+          if (btn.getAttribute('data-id') === targetRestId) {
+            btn.classList.add('active-restaurant-pill');
+            btn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+          } else {
+            btn.classList.remove('active-restaurant-pill');
+          }
+        });
+        document.querySelectorAll('.map-hospital-pin, .map-bank-pin, .map-restaurant-pin').forEach(p => p.classList.remove('selected-map-pin'));
+        const targetPin = document.getElementById(`map-pin-${targetRestId}`);
+        if (targetPin) targetPin.classList.add('selected-map-pin');
+      }
+
+      // Sync backend returned restaurant categories into cache
+      if (data.restaurant_categories) {
+        ALL_RESTAURANT_CAT_KEYS.forEach(k => {
+          if (Array.isArray(data.restaurant_categories[k])) {
+            cachedRestaurantCategories[k] = data.restaurant_categories[k];
+          }
+        });
+      }
+
+      // Update count badge numbers on restaurant criteria buttons
+      ALL_RESTAURANT_CAT_KEYS.forEach(k => {
+        const meta = RESTAURANT_CATEGORY_METADATA[k];
+        if (meta && meta.badgeId) {
+          const badgeEl = document.getElementById(meta.badgeId);
+          if (badgeEl && cachedRestaurantCategories[k]) {
+            badgeEl.textContent = cachedRestaurantCategories[k].length;
+          }
+        }
+      });
+
+      const hintText = document.getElementById('category-hint-text');
+      if (hintText) {
+        hintText.style.display = 'block';
+        hintText.innerHTML = '<i class="fa-solid fa-hand-pointer"></i> Press a category button above to suggest communication messages';
+      }
     } else {
-      // User is NOT in hospital or bank: hide categories, show waiting card
+      // User is NOT in hospital, bank, or restaurant: hide categories, show waiting card
       backToFirstScreen();
       currentActiveHospitalCategory = null;
 
@@ -2343,7 +3081,7 @@ document.addEventListener('DOMContentLoaded', () => {
         waitingCard.style.display = 'block';
         const waitingDesc = waitingCard.querySelector('.waiting-desc');
         if (waitingDesc) {
-          waitingDesc.innerHTML = `Currently at <strong>${placeName || areaName}</strong>. Select a hospital (🔴) or bank (🔵) on the map, or wait for GPS to detect your venue.`;
+          waitingDesc.innerHTML = `Currently at <strong>${placeName || areaName}</strong>. Select a hospital (🔴), bank (🔵), or restaurant (🟠) on the map, or wait for GPS to detect your venue.`;
         }
       }
       if (categorySection) {
@@ -2358,6 +3096,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (bankCategoryBar) {
         bankCategoryBar.classList.add('bar-hidden');
         bankCategoryBar.style.display = 'none';
+      }
+      if (restaurantCategoryBar) {
+        restaurantCategoryBar.classList.add('bar-hidden');
+        restaurantCategoryBar.style.display = 'none';
       }
       if (hospitalBadge) hospitalBadge.style.display = 'none';
       if (messagesGrid) {
@@ -2432,6 +3174,12 @@ document.addEventListener('DOMContentLoaded', () => {
       renderSriLankaBanks(allBanksData);
     }
 
+    // Refresh Sri Lanka restaurants if returned in backend payload
+    if (data.sri_lanka_restaurants && Array.isArray(data.sri_lanka_restaurants)) {
+      allRestaurantsData = data.sri_lanka_restaurants;
+      renderSriLankaRestaurants(allRestaurantsData);
+    }
+
     // 4. Update Map Status Bar and Live Status Tag
     const mapStatusBar = document.getElementById('map-status-bar');
     const mapStatusIcon = document.getElementById('map-status-icon');
@@ -2464,10 +3212,10 @@ document.addEventListener('DOMContentLoaded', () => {
         mapStatusIcon.style.color = '#6366f1';
       }
       if (mapStatusText) {
-        mapStatusText.textContent = `Current Area (${areaName}). Tap red pin for hospital or blue pin for bank.`;
+        mapStatusText.textContent = `Current Area (${areaName}). Tap red pin for hospital, blue pin for bank, or orange pin for restaurant.`;
       }
       if (mapLiveStatusTag) {
-        mapLiveStatusTag.textContent = `Select Hospital / Bank on Map`;
+        mapLiveStatusTag.textContent = `Select Hospital / Bank / Dining on Map`;
         mapLiveStatusTag.style.color = '#6366f1';
       }
     }
@@ -2492,7 +3240,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // 7. Toast Feedback
-    if (data.manually_selected && data.is_bank) {
+    if (data.manually_selected && data.is_restaurant) {
+      showGpsToast(`🍽️ Selected Restaurant from Map: ${placeName}`, 3200);
+    } else if (data.is_restaurant) {
+      showGpsToast(`🍽️ Detected Restaurant via GPS: ${placeName}`, 3200);
+    } else if (data.manually_selected && data.is_bank) {
       showGpsToast(`🏦 Selected Bank from Map: ${placeName}`, 3200);
     } else if (data.is_bank) {
       showGpsToast(`🏦 Detected Bank via GPS: ${placeName}`, 3200);
@@ -2503,7 +3255,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (isPredefined) {
       showGpsToast(`📍 Detected ${facilityName}`, 2800);
     } else {
-      showGpsToast(`📍 Area: ${areaName}. Tap red pin for hospital or blue pin for bank.`, 3000);
+      showGpsToast(`📍 Area: ${areaName}. Tap red pin for hospital, blue pin for bank, or orange pin for restaurant.`, 3000);
     }
   }
 
@@ -2539,9 +3291,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await resp.json();
             applyDetectedLocation(data, accuracy);
 
-            // Fetch Sri Lanka hospitals & banks sorted by distance from current GPS position
+            // Fetch Sri Lanka hospitals, banks & restaurants sorted by distance from current GPS position
             fetchNearbySriLankaHospitals(lat, lon);
             fetchNearbySriLankaBanks(lat, lon);
+            fetchNearbySriLankaRestaurants(lat, lon);
           } else {
             showGpsToast("Location detection server returned an error.", 2500);
           }
@@ -2592,6 +3345,22 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     } catch (e) {
       console.warn("Could not fetch distance-sorted banks:", e);
+    }
+  }
+
+  // Fetch Sri Lanka restaurants sorted by distance
+  async function fetchNearbySriLankaRestaurants(lat, lon) {
+    try {
+      const res = await fetch(`/api/sri-lanka-restaurants?lat=${lat}&lon=${lon}`);
+      if (res.ok) {
+        const payload = await res.json();
+        if (payload.restaurants && payload.restaurants.length > 0) {
+          allRestaurantsData = payload.restaurants;
+          renderSriLankaRestaurants(allRestaurantsData);
+        }
+      }
+    } catch (e) {
+      console.warn("Could not fetch distance-sorted restaurants:", e);
     }
   }
 
@@ -2724,12 +3493,82 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // Manually select a restaurant (by ID, coordinates, or name)
+  async function manuallySelectRestaurant(restaurantId, lat, lon, name) {
+    closeGpsDialog();
+    if (drawerBackdrop) drawerBackdrop.classList.remove('open');
+    switchTab('home');
+
+    // Find restaurant details if ID is provided
+    let matchedRest = null;
+    if (restaurantId) {
+      matchedRest = allRestaurantsData.find(r => r.id === restaurantId) || SRI_LANKA_RESTAURANTS_DATA.find(r => r.id === restaurantId);
+    }
+    if (!matchedRest && name) {
+      const nl = name.toLowerCase();
+      matchedRest = allRestaurantsData.find(r => r.name.toLowerCase().includes(nl) || (r.short_name && r.short_name.toLowerCase().includes(nl)));
+    }
+
+    const targetLat = typeof lat === 'number' ? lat : (matchedRest ? matchedRest.lat : 6.9115);
+    const targetLon = typeof lon === 'number' ? lon : (matchedRest ? matchedRest.lon : 79.8635);
+    const targetName = name || (matchedRest ? matchedRest.name : 'Selected Restaurant');
+    const targetId = restaurantId || (matchedRest ? matchedRest.id : 'upalis-colombo');
+
+    showGpsToast(`🍽️ Selecting ${targetName}...`, 0);
+    if (gpsStripStatus) {
+      gpsStripStatus.textContent = `Restaurant Selected: ${targetName}`;
+    }
+
+    try {
+      const resp = await fetch('/api/select-restaurant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ restaurant_id: targetId, lat: targetLat, lon: targetLon, name: targetName })
+      });
+
+      if (resp.ok) {
+        const data = await resp.json();
+        data.manually_selected = true;
+        setTimeout(() => {
+          applyDetectedLocation(data, 5);
+          if (areaMap) {
+            areaMap.flyTo([targetLat, targetLon], 16, { animate: true, duration: 1 });
+          }
+        }, 150);
+      } else {
+        const fbResp = await fetch('/api/detect-location', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lat: targetLat, lon: targetLon })
+        });
+        if (fbResp.ok) {
+          const data = await fbResp.json();
+          data.manually_selected = true;
+          applyDetectedLocation(data, 5);
+          if (areaMap) {
+            areaMap.flyTo([targetLat, targetLon], 16, { animate: true, duration: 1 });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Manual restaurant selection error:", err);
+      showGpsToast(`🍽️ Switched to ${targetName}`, 2500);
+      if (gpsStripStatus) {
+        gpsStripStatus.textContent = `Restaurant: ${targetName}`;
+      }
+    }
+  }
+
   function simulateHospitalCoordinates(lat, lon, name) {
     return manuallySelectHospital(null, lat, lon, name);
   }
 
   function simulateBankCoordinates(lat, lon, name) {
     return manuallySelectBank(null, lat, lon, name);
+  }
+
+  function simulateRestaurantCoordinates(lat, lon, name) {
+    return manuallySelectRestaurant(null, lat, lon, name);
   }
 
   // Simulate generic venue coordinates
@@ -2861,6 +3700,39 @@ document.addEventListener('DOMContentLoaded', () => {
       const lon = parseFloat(btn.getAttribute('data-lon'));
       const name = btn.getAttribute('data-name');
       manuallySelectBank(id, lat, lon, name);
+    });
+  });
+
+  // Wire up Manual Restaurant Selectors
+  const modalManualRestaurantSelect = document.getElementById('modal-manual-restaurant-select');
+  const btnModalApplyRestaurant = document.getElementById('btn-modal-apply-restaurant');
+  if (modalManualRestaurantSelect) {
+    modalManualRestaurantSelect.addEventListener('change', () => {
+      const selectedId = modalManualRestaurantSelect.value;
+      if (selectedId) {
+        manuallySelectRestaurant(selectedId);
+      }
+    });
+  }
+  if (btnModalApplyRestaurant) {
+    btnModalApplyRestaurant.addEventListener('click', () => {
+      const selectedId = modalManualRestaurantSelect ? modalManualRestaurantSelect.value : '';
+      if (selectedId) {
+        manuallySelectRestaurant(selectedId);
+      } else {
+        showGpsToast("Please choose a restaurant from the list.", 2500);
+      }
+    });
+  }
+
+  // Wire up Sri Lanka Restaurant simulation chips
+  document.querySelectorAll('.gps-restaurant-sim-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id');
+      const lat = parseFloat(btn.getAttribute('data-lat'));
+      const lon = parseFloat(btn.getAttribute('data-lon'));
+      const name = btn.getAttribute('data-name');
+      manuallySelectRestaurant(id, lat, lon, name);
     });
   });
 

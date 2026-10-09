@@ -6,7 +6,9 @@ from app.services.geo_service import (
     get_sri_lanka_hospitals,
     select_hospital_by_id,
     get_sri_lanka_banks,
-    select_bank_by_id
+    select_bank_by_id,
+    get_sri_lanka_restaurants,
+    select_restaurant_by_id
 )
 
 api_bp = Blueprint('api', __name__)
@@ -114,4 +116,34 @@ def select_bank():
 
     result = select_bank_by_id(bank_id, bank_name)
     return jsonify(result)
+
+@api_bp.route('/sri-lanka-restaurants', methods=['GET'])
+def get_sri_lanka_restaurants_route():
+    lat = request.args.get('lat', type=float)
+    lon = request.args.get('lon', type=float)
+    restaurants = get_sri_lanka_restaurants(lat, lon)
+    return jsonify({
+        'success': True,
+        'country': 'Sri Lanka',
+        'count': len(restaurants),
+        'restaurants': restaurants
+    })
+
+@api_bp.route('/select-restaurant', methods=['POST'])
+def select_restaurant():
+    data = request.get_json() or {}
+    restaurant_id = data.get('restaurant_id') or data.get('id')
+    restaurant_name = data.get('restaurant_name') or data.get('name')
+    lat = data.get('lat')
+    lon = data.get('lon')
+
+    if not restaurant_id and lat is not None and lon is not None:
+        res = detect_place_by_coordinates(lat, lon)
+        if res.get('is_restaurant'):
+            res['manually_selected'] = True
+            return jsonify(res)
+
+    result = select_restaurant_by_id(restaurant_id, restaurant_name)
+    return jsonify(result)
+
 
