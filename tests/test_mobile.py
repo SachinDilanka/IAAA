@@ -329,6 +329,8 @@ class TestMobileInterface(unittest.TestCase):
         self.assertIn(b'id="btn-cat-bank-reception-queue"', resp.data)
         self.assertIn(b'Bank Message Criteria', resp.data)
         self.assertIn(b'2 Categories', resp.data)
+        self.assertIn(b'id="modal-manual-bank-select"', resp.data)
+        self.assertIn(b'gps-bank-sim-chip', resp.data)
 
 
 if __name__ == '__main__':

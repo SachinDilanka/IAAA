@@ -2781,11 +2781,11 @@ body.dark-mode .category-active-btn.category-bank-btn .cat-msg-count-pill {
 }
 
 .category-selector-bar.bar-hidden {
-  display: none !important;
+  display: none;
 }
 
 .waiting-hospital-card.waiting-hidden {
-  display: none !important;
+  display: none;
 }
 
 

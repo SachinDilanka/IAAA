@@ -789,6 +789,56 @@
               </button>
             </div>
           </div>
+
+          <div style="margin-top:14px;">
+            <span class="gps-dialog-section-label"><i class="fa-solid fa-building-columns" style="color:#2563eb;"></i> Manually Select Bank</span>
+            <div class="manual-selector-input-row" style="margin-top:6px;">
+              <select id="modal-manual-bank-select" class="manual-hospital-dropdown">
+                <option value="" disabled selected>-- Choose Bank in Sri Lanka --</option>
+                <option value="boc-head-office">Bank of Ceylon (BOC) - Head Office</option>
+                <option value="combank-head-office">Commercial Bank of Ceylon - Head Office</option>
+                <option value="peoples-bank-head-office">People's Bank - Head Office</option>
+                <option value="hnb-towers">Hatton National Bank (HNB) - Head Office</option>
+                <option value="sampath-bank-head-office">Sampath Bank - Head Office</option>
+                <option value="seylan-towers">Seylan Bank - Head Office</option>
+                <option value="nsb-head-office">National Savings Bank (NSB) - Head Office</option>
+                <option value="ntb-head-office">Nations Trust Bank (NTB) - Head Office</option>
+                <option value="dfcc-head-office">DFCC Bank - Head Office</option>
+                <option value="pan-asia-head-office">Pan Asia Bank - Head Office</option>
+                <option value="ndb-bank-head-office">National Development Bank (NDB)</option>
+                <option value="union-bank-head-office">Union Bank of Colombo</option>
+                <option value="standard-chartered-main">Standard Chartered Bank</option>
+                <option value="hsbc-head-office">HSBC Sri Lanka</option>
+              </select>
+              <button type="button" id="btn-modal-apply-bank" class="btn-apply-manual-hospital" style="background:#2563eb;">
+                Select
+              </button>
+            </div>
+          </div>
+
+          <div style="margin-top:14px;">
+            <span class="gps-dialog-section-label">Quick Bank Selection</span>
+            <div class="gps-sim-grid">
+              <button type="button" class="gps-sim-chip gps-bank-sim-chip" data-id="boc-head-office" data-lat="6.9348" data-lon="79.8436" data-name="Bank of Ceylon (BOC) - Head Office">
+                <i class="fa-solid fa-building-columns" style="color:#2563eb;"></i> BOC HQ
+              </button>
+              <button type="button" class="gps-sim-chip gps-bank-sim-chip" data-id="combank-head-office" data-lat="6.9340" data-lon="79.8444" data-name="Commercial Bank - Head Office">
+                <i class="fa-solid fa-building-columns" style="color:#2563eb;"></i> Commercial Bank
+              </button>
+              <button type="button" class="gps-sim-chip gps-bank-sim-chip" data-id="peoples-bank-head-office" data-lat="6.9312" data-lon="79.8510" data-name="People's Bank - Head Office">
+                <i class="fa-solid fa-building-columns" style="color:#2563eb;"></i> People's Bank
+              </button>
+              <button type="button" class="gps-sim-chip gps-bank-sim-chip" data-id="hnb-towers" data-lat="6.9208" data-lon="79.8652" data-name="Hatton National Bank (HNB)">
+                <i class="fa-solid fa-building-columns" style="color:#2563eb;"></i> HNB Towers
+              </button>
+              <button type="button" class="gps-sim-chip gps-bank-sim-chip" data-id="sampath-bank-head-office" data-lat="6.9215" data-lon="79.8540" data-name="Sampath Bank - Head Office">
+                <i class="fa-solid fa-building-columns" style="color:#2563eb;"></i> Sampath Bank
+              </button>
+              <button type="button" class="gps-sim-chip gps-bank-sim-chip" data-id="seylan-towers" data-lat="6.9152" data-lon="79.8505" data-name="Seylan Bank - Head Office">
+                <i class="fa-solid fa-building-columns" style="color:#2563eb;"></i> Seylan Bank
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

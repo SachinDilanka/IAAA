@@ -2001,14 +2001,29 @@ document.addEventListener('DOMContentLoaded', () => {
     const messagesGrid = document.getElementById('messages-grid');
 
     if (isHospital) {
-      if (waitingCard) waitingCard.style.display = 'none';
-      if (categorySection) categorySection.style.display = 'block';
+      backToFirstScreen();
+      currentActiveHospitalCategory = null;
+
+      if (waitingCard) {
+        waitingCard.classList.add('waiting-hidden');
+        waitingCard.style.display = 'none';
+      }
+      if (categorySection) {
+        categorySection.classList.remove('category-criteria-hidden');
+        categorySection.classList.add('category-criteria-shown');
+        categorySection.style.display = 'block';
+      }
+      if (bankCategoryBar) {
+        bankCategoryBar.classList.add('bar-hidden');
+        bankCategoryBar.style.display = 'none';
+      }
       if (hospitalCategoryBar) {
+        hospitalCategoryBar.classList.remove('bar-hidden');
         hospitalCategoryBar.style.display = 'flex';
         hospitalCategoryBar.style.flexDirection = 'column';
       }
-      if (bankCategoryBar) bankCategoryBar.style.display = 'none';
       if (hospitalBadge) {
+        hospitalBadge.classList.remove('badge-bank-theme');
         hospitalBadge.style.display = 'inline-flex';
         hospitalBadge.innerHTML = '<i class="fa-solid fa-square-h"></i> 9 Categories';
         hospitalBadge.style.background = '#fee2e2';
@@ -2063,33 +2078,35 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
 
-      // If user is currently on Screen 2, refresh its displayed messages
-      const screenCatMessages = document.getElementById('screen-category-messages');
-      if (screenCatMessages && screenCatMessages.style.display !== 'none' && currentActiveHospitalCategory) {
-        const msgs = (cachedHospitalCategories[currentActiveHospitalCategory] || cachedBankCategories[currentActiveHospitalCategory]) || [];
-        renderHospitalMessages(msgs);
-        if (messagesGrid) {
-          messagesGrid.style.display = 'flex';
-          messagesGrid.style.flexDirection = 'column';
-        }
-        const subCount = document.getElementById('subscreen-count-pill');
-        if (subCount) subCount.textContent = msgs.length;
-      }
-
       const hintText = document.getElementById('category-hint-text');
       if (hintText) {
         hintText.style.display = 'block';
-        hintText.innerHTML = '<i class="fa-solid fa-hand-pointer"></i> Press a category button above to view suggested messages';
+        hintText.innerHTML = '<i class="fa-solid fa-hand-pointer"></i> Press a category button above to suggest communication messages';
       }
     } else if (isBank) {
-      if (waitingCard) waitingCard.style.display = 'none';
-      if (categorySection) categorySection.style.display = 'block';
-      if (hospitalCategoryBar) hospitalCategoryBar.style.display = 'none';
+      backToFirstScreen();
+      currentActiveHospitalCategory = null;
+
+      if (waitingCard) {
+        waitingCard.classList.add('waiting-hidden');
+        waitingCard.style.display = 'none';
+      }
+      if (categorySection) {
+        categorySection.classList.remove('category-criteria-hidden');
+        categorySection.classList.add('category-criteria-shown');
+        categorySection.style.display = 'block';
+      }
+      if (hospitalCategoryBar) {
+        hospitalCategoryBar.classList.add('bar-hidden');
+        hospitalCategoryBar.style.display = 'none';
+      }
       if (bankCategoryBar) {
+        bankCategoryBar.classList.remove('bar-hidden');
         bankCategoryBar.style.display = 'flex';
         bankCategoryBar.style.flexDirection = 'column';
       }
       if (hospitalBadge) {
+        hospitalBadge.classList.add('badge-bank-theme');
         hospitalBadge.style.display = 'inline-flex';
         hospitalBadge.innerHTML = '<i class="fa-solid fa-building-columns"></i> 2 Categories';
         hospitalBadge.style.background = '#dbeafe';
@@ -2141,36 +2158,37 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
 
-      // If user is currently on Screen 2, refresh its displayed messages
-      const screenCatMessages = document.getElementById('screen-category-messages');
-      if (screenCatMessages && screenCatMessages.style.display !== 'none' && currentActiveHospitalCategory) {
-        const msgs = (cachedBankCategories[currentActiveHospitalCategory] || cachedHospitalCategories[currentActiveHospitalCategory]) || [];
-        renderHospitalMessages(msgs);
-        if (messagesGrid) {
-          messagesGrid.style.display = 'flex';
-          messagesGrid.style.flexDirection = 'column';
-        }
-        const subCount = document.getElementById('subscreen-count-pill');
-        if (subCount) subCount.textContent = msgs.length;
-      }
-
       const hintText = document.getElementById('category-hint-text');
       if (hintText) {
         hintText.style.display = 'block';
-        hintText.innerHTML = '<i class="fa-solid fa-hand-pointer"></i> Press a category button above to view suggested messages';
+        hintText.innerHTML = '<i class="fa-solid fa-hand-pointer"></i> Press a category button above to suggest communication messages';
       }
     } else {
       // User is NOT in hospital or bank: hide categories, show waiting card
+      backToFirstScreen();
+      currentActiveHospitalCategory = null;
+
       if (waitingCard) {
+        waitingCard.classList.remove('waiting-hidden');
         waitingCard.style.display = 'block';
         const waitingDesc = waitingCard.querySelector('.waiting-desc');
         if (waitingDesc) {
           waitingDesc.innerHTML = `Currently at <strong>${placeName || areaName}</strong>. Select a hospital (🔴) or bank (🔵) on the map, or wait for GPS to detect your venue.`;
         }
       }
-      if (categorySection) categorySection.style.display = 'none';
-      if (hospitalCategoryBar) hospitalCategoryBar.style.display = 'none';
-      if (bankCategoryBar) bankCategoryBar.style.display = 'none';
+      if (categorySection) {
+        categorySection.classList.remove('category-criteria-shown');
+        categorySection.classList.add('category-criteria-hidden');
+        categorySection.style.display = 'none';
+      }
+      if (hospitalCategoryBar) {
+        hospitalCategoryBar.classList.add('bar-hidden');
+        hospitalCategoryBar.style.display = 'none';
+      }
+      if (bankCategoryBar) {
+        bankCategoryBar.classList.add('bar-hidden');
+        bankCategoryBar.style.display = 'none';
+      }
       if (hospitalBadge) hospitalBadge.style.display = 'none';
       if (messagesGrid) {
         messagesGrid.innerHTML = '';
@@ -2643,6 +2661,38 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  const modalManualBankSelect = document.getElementById('modal-manual-bank-select');
+  const btnModalApplyBank = document.getElementById('btn-modal-apply-bank');
+  if (modalManualBankSelect) {
+    modalManualBankSelect.addEventListener('change', () => {
+      const selectedId = modalManualBankSelect.value;
+      if (selectedId) {
+        manuallySelectBank(selectedId);
+      }
+    });
+  }
+  if (btnModalApplyBank) {
+    btnModalApplyBank.addEventListener('click', () => {
+      const selectedId = modalManualBankSelect ? modalManualBankSelect.value : '';
+      if (selectedId) {
+        manuallySelectBank(selectedId);
+      } else {
+        showGpsToast("Please choose a bank from the list.", 2500);
+      }
+    });
+  }
+
+  // Wire up Sri Lanka Bank simulation chips
+  document.querySelectorAll('.gps-bank-sim-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id');
+      const lat = parseFloat(btn.getAttribute('data-lat'));
+      const lon = parseFloat(btn.getAttribute('data-lon'));
+      const name = btn.getAttribute('data-name');
+      manuallySelectBank(id, lat, lon, name);
+    });
+  });
 
   // Frame View Toggle for Desktop Preview
   if (previewFrameToggle && phoneMockup) {
