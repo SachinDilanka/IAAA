@@ -549,21 +549,25 @@ class AudioClassifierService {
     // 1. Spoken words transcribe live to the speech box and trigger emergency alert cards
     // 2. Direct word match on the 8 Sinhala emergency keywords (near or far from mic)
     // 3. Environmental sounds ONLY trigger when no speech is occurring (prevents wrong sounds!)
-    if (!_isAnimatingTranscript && _total16kPushed >= 2000) {
-      if (nowMs - _lastMlTimeMs >= 100 && (rms >= 0.003 || maxAmp >= 0.010)) {
+    if (!_isAnimatingTranscript && _total16kPushed >= 14000) {
+      if (nowMs - _lastMlTimeMs >= 100 && (rms >= 0.006 || maxAmp >= 0.025)) {
         _lastMlTimeMs = nowMs;
 
         final List<double> window1s = List<double>.filled(16000, 0.0);
         double peakAmp = 0.0;
+        double sumSq1s = 0.0;
         for (int i = 0; i < 16000; i++) {
           final double val = _rollingBuf16k[(_rollingIdx - 16000 + i + 16000) % 16000];
           window1s[i] = val;
           final a = val.abs();
           if (a > peakAmp) peakAmp = a;
+          sumSq1s += val * val;
         }
 
+        final double rms1s = math.sqrt(sumSq1s / 16000);
+
         // Only evaluate when genuine sound or speech energy is present (ignores quiet ambient hiss)
-        if (peakAmp >= 0.015) {
+        if (peakAmp >= 0.035 && rms1s >= 0.008) {
           // Standardize acoustic power for speech distance invariance (near or far from mic)
           final sBoosted = List<double>.generate(
             16000,
@@ -701,7 +705,7 @@ class AudioClassifierService {
     if (!_sinhalaClasses.contains(topLabel)) return null;
 
     final double topP = allProbs[topLabel] ?? 0.0;
-    if (topP < 0.70) return null;
+    if (topP < 0.75) return null;
 
     double runnerUp = 0.0;
     allProbs.forEach((name, p) {
@@ -711,7 +715,7 @@ class AudioClassifierService {
     });
 
     final double margin = topP - runnerUp;
-    if (margin >= 0.35) {
+    if (margin >= 0.40) {
       return _SinhalaHit(topLabel, topP);
     }
     return null;

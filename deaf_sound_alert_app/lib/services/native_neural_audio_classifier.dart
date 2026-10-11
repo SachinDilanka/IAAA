@@ -288,7 +288,8 @@ class NativeNeuralAudioClassifier {
     //                a steady siren/hum is not)
     //   delta (40) - first-order change between frames (the transitions
     //                that separate "udaw" from "anathurak")
-    final List<double> feat = List<double>.filled(120, 0.0);
+    final int inputDim = _W0.length;
+    final List<double> feat = List<double>.filled(inputDim, 0.0);
 
     for (int i = 0; i < 40; i++) {
       double sum = 0.0;
@@ -297,23 +298,25 @@ class NativeNeuralAudioClassifier {
       }
       final double mean = sum / nFrames;
 
-      double varSum = 0.0;
-      for (int f = 0; f < nFrames; f++) {
-        final double d = frameMfccs[f][i] - mean;
-        varSum += d * d;
-      }
-      final double std = math.sqrt(varSum / nFrames);
-
-      // Delta: mean absolute first-order difference between adjacent frames.
-      double deltaSum = 0.0;
-      for (int f = 1; f < nFrames; f++) {
-        deltaSum += (frameMfccs[f][i] - frameMfccs[f - 1][i]).abs();
-      }
-      final double delta = nFrames > 1 ? deltaSum / (nFrames - 1) : 0.0;
-
       feat[i] = (mean - _mean[i]) / (_std[i] > 0 ? _std[i] : 1.0);
-      feat[40 + i] = (std - _mean[40 + i]) / (_std[40 + i] > 0 ? _std[40 + i] : 1.0);
-      feat[80 + i] = (delta - _mean[80 + i]) / (_std[80 + i] > 0 ? _std[80 + i] : 1.0);
+
+      if (inputDim >= 120) {
+        double varSum = 0.0;
+        for (int f = 0; f < nFrames; f++) {
+          final double d = frameMfccs[f][i] - mean;
+          varSum += d * d;
+        }
+        final double std = math.sqrt(varSum / nFrames);
+
+        double deltaSum = 0.0;
+        for (int f = 1; f < nFrames; f++) {
+          deltaSum += (frameMfccs[f][i] - frameMfccs[f - 1][i]).abs();
+        }
+        final double delta = nFrames > 1 ? deltaSum / (nFrames - 1) : 0.0;
+
+        feat[40 + i] = (std - _mean[40 + i]) / (_std[40 + i] > 0 ? _std[40 + i] : 1.0);
+        feat[80 + i] = (delta - _mean[80 + i]) / (_std[80 + i] > 0 ? _std[80 + i] : 1.0);
+      }
     }
 
     final Map<String, double> probs = _evaluateDenseNN(feat);
