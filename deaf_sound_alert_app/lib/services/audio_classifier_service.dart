@@ -478,8 +478,13 @@ class AudioClassifierService {
           if (mappedKey.startsWith('sinhala_')) {
             _lastSpeechTimeMs = nowMs;
 
-            // Trigger when speech confidence is strong (>= 0.75), ensuring lively detection even when screen is locked/off
-            if (topProb >= 0.75) {
+            // When Speech-To-Text (STT) is active, STT handles full live sentence speech transcription & exact emergency keyword card popups!
+            if (_speech.isListening) {
+              return;
+            }
+
+            // Offline Fallback Mode (when STT is idle/offline): require high confidence topProb >= 0.85 to avoid false popups
+            if (topProb >= 0.85) {
               final lastTime = _lastKeywordTriggerTimes[mappedKey];
               if (lastTime != null && (nowMs - lastTime.millisecondsSinceEpoch < 1500)) {
                 return;
@@ -497,10 +502,10 @@ class AudioClassifierService {
           }
 
           // 2. ENVIRONMENTAL SOUNDS (Fire Truck, Dog Barking, Baby Crying, Ambulance Siren, Vehicle Horns, Traffic Noise)
-          // Environmental sounds evaluate when speech is idle (>= 1500ms and totalSpeechProb < 0.10)
-          final bool isSpeechIdle = (nowMs - _lastSpeechTimeMs >= 1500);
+          // Environmental sounds evaluate ONLY when speech has been idle for >= 3000ms AND totalSpeechProb < 0.05
+          final bool isSpeechIdle = (nowMs - _lastSpeechTimeMs >= 3000);
 
-          if (isSpeechIdle && totalSpeechProb < 0.10) {
+          if (isSpeechIdle && totalSpeechProb < 0.05) {
             // Vehicle Horns
             if (mappedKey == 'vehicle horns' || topLabel == 'vehicle_horn') {
               if (topProb >= 0.75 && (rms >= 0.025 || maxAmp >= 0.060)) {
