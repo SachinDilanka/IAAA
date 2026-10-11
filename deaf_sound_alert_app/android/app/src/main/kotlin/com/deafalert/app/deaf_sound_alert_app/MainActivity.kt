@@ -22,14 +22,14 @@ class MainActivity : FlutterActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
-        } else {
-            @Suppress("DEPRECATION")
-            window.addFlags(
-                android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-                android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
-            )
         }
+        @Suppress("DEPRECATION")
+        window.addFlags(
+            android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+            android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+            android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+            android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        )
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -51,6 +51,12 @@ class MainActivity : FlutterActivity() {
                         setShowWhenLocked(true)
                         setTurnScreenOn(true)
                     }
+                    @Suppress("DEPRECATION")
+                    window.addFlags(
+                        android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                        android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                        android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                    )
                     result.success(true)
                 }
                 else -> result.notImplemented()

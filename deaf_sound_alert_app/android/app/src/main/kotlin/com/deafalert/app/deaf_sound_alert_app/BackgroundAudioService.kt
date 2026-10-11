@@ -46,12 +46,21 @@ class BackgroundAudioService : Service() {
                 val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
                 @Suppress("DEPRECATION")
                 val screenLock = powerManager.newWakeLock(
-                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
+                    PowerManager.FULL_WAKE_LOCK or
                     PowerManager.ACQUIRE_CAUSES_WAKEUP or
                     PowerManager.ON_AFTER_RELEASE,
                     "DeafSoundAlert:AlertWakeScreen"
                 )
-                screenLock.acquire(3000)
+                screenLock.acquire(4000)
+
+                val intent = Intent(context, MainActivity::class.java).apply {
+                    addFlags(
+                        Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                        Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                    )
+                }
+                context.startActivity(intent)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
