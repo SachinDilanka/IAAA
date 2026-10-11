@@ -478,9 +478,8 @@ class AudioClassifierService {
           if (mappedKey.startsWith('sinhala_')) {
             _lastSpeechTimeMs = nowMs;
 
-            // When Speech-To-Text (STT) is actively transcribing, let STT handle it.
-            // When screen is off, offline, or STT is idle, evaluate offline neural classifier!
-            if (_speech.isListening && (nowMs - _lastSpeechTimeMs < 1000)) {
+            // When Speech-To-Text (STT) is active, STT handles full live sentence speech transcription & exact emergency keyword card popups!
+            if (_speech.isListening) {
               return;
             }
 
