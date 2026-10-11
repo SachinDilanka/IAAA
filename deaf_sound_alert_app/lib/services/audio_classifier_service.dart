@@ -587,7 +587,7 @@ class AudioClassifierService {
               _lastSpeechTimeMs = nowMs;
             }
 
-            final sinhalaHit = (!_speech.isListening) ? _matchSinhalaKeyword(allProbs, pred.label) : null;
+            final sinhalaHit = (!_speech.isListening && canAlert) ? _matchSinhalaKeyword(allProbs, pred.label) : null;
 
             if (sinhalaHit != null) {
               // Reset any pending environmental sound tracking
@@ -614,6 +614,13 @@ class AudioClassifierService {
                 if (canAlert && classCooldownOk) {
                   _lastGlobalAlertTime = now;
                   _lastKeywordTriggerTimes[mappedKey] = now;
+                  _lastSpeechTimeMs = nowMs + 4500;
+                  _rollingBuf16k.fillRange(0, 16000, 0.0);
+                  _total16kPushed = 0;
+                  _pendingSinhalaClass = null;
+                  _pendingSinhalaHits = 0;
+                  _pendingEnvClass = null;
+                  _pendingEnvHits = 0;
                   _animateOfflineTranscriptAndAlert(mappedKey);
                   return;
                 }
@@ -972,7 +979,7 @@ class AudioClassifierService {
   }
 
   void feedAudioChunk(List<double> chunk) {
-    if (!_isListening) return;
+    if (!_isListening || _isAnimatingTranscript) return;
     _processPcmBuffer(chunk);
   }
 
