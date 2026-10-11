@@ -469,47 +469,61 @@ class AudioClassifierService {
         final double dogProb = pred.allProbabilities['dog_barking'] ?? 0.0;
         final double babyProb = pred.allProbabilities['baby_crying'] ?? 0.0;
 
-        // Compute total speech probability across all speech classes in neural model output
+        // 1. Check all 8 Sinhala Speech Emergency Keywords first!
+        const sinhalaSpeechMap = {
+          'udaw': 'sinhala_udaw_',
+          'beeraganna': 'sinhala_beraganna_',
+          'ginnak': 'sinhala_ginnak_',
+          'anathurak': 'sinhala_anathurak_',
+          'karadarayak': 'sinhala_karadarayak_',
+          'balagena': 'sinhala_balagena_',
+          'ehata_wenna': 'sinhala_ehata_wenna_',
+          'parissamin': 'sinhala_parissamin_',
+        };
+
+        String? topSpeechKey;
+        double topSpeechProb = 0.0;
         double totalSpeechProb = 0.0;
-        const speechClasses = ['udaw', 'beeraganna', 'ginnak', 'anathurak', 'karadarayak', 'balagena', 'parissamin', 'ehata_wenna'];
-        for (var sc in speechClasses) {
-          totalSpeechProb += (pred.allProbabilities[sc] ?? 0.0);
+
+        for (final entry in sinhalaSpeechMap.entries) {
+          final prob = pred.allProbabilities[entry.key] ?? 0.0;
+          totalSpeechProb += prob;
+          if (prob > topSpeechProb) {
+            topSpeechProb = prob;
+            topSpeechKey = entry.value;
+          }
         }
 
-        // Whenever speech energy/probability is detected (far or near), update speech active timestamp
-        if (totalSpeechProb >= 0.05 || mappedKey.startsWith('sinhala_')) {
+        // Whenever human speech energy is detected, mark speech active timestamp
+        if (totalSpeechProb >= 0.15 || topSpeechProb >= 0.35) {
           _lastSpeechTimeMs = nowMs;
         }
 
-        // 1. SINHALA SPEECH KEYWORDS (100% OFFLINE Pure Dart Neural Classifier)
-        if (mappedKey.startsWith('sinhala_')) {
+        // When a Sinhala emergency keyword is spoken (topSpeechProb >= 0.38 & totalSpeechProb >= 0.45):
+        if (topSpeechKey != null && topSpeechProb >= 0.38 && totalSpeechProb >= 0.45 && (rms >= 0.015 || maxAmp >= 0.035)) {
           _lastSpeechTimeMs = nowMs;
+          final lastTime = _lastKeywordTriggerTimes[topSpeechKey];
+          if (lastTime == null || (nowMs - lastTime.millisecondsSinceEpoch >= 1500)) {
+            _lastKeywordTriggerTimes[topSpeechKey] = DateTime.fromMillisecondsSinceEpoch(nowMs);
+            _lastSpeechAlertTimeMs = nowMs;
+            _activeSpeechAlertKey = topSpeechKey;
 
-          // Trigger emergency keyword card & update Live Speech box 100% OFFLINE when spoken!
-          if (topProb >= 0.65 && (rms >= 0.020 || maxAmp >= 0.045)) {
-            final lastTime = _lastKeywordTriggerTimes[mappedKey];
-            if (lastTime == null || (nowMs - lastTime.millisecondsSinceEpoch >= 1500)) {
-              _lastKeywordTriggerTimes[mappedKey] = DateTime.fromMillisecondsSinceEpoch(nowMs);
-              _lastSpeechAlertTimeMs = nowMs;
-              _activeSpeechAlertKey = mappedKey;
-
-              final String displayName = _displayNames[mappedKey] ?? mappedKey;
-              _transcriptController.add(displayName);
-              simulateSoundDetection(mappedKey, confidence: topProb, overrideCooldown: true);
-              return;
-            }
+            final String displayName = _displayNames[topSpeechKey] ?? topSpeechKey;
+            _transcriptController.add(displayName);
+            simulateSoundDetection(topSpeechKey, confidence: topSpeechProb, overrideCooldown: true);
+            return;
           }
           return;
         }
 
         // 2. ENVIRONMENTAL SOUNDS (Fire Truck, Dog Barking, Baby Crying, Siren / Ambulance, Vehicle Horns, Traffic Noise)
-        // Environmental sounds evaluate ONLY when speech has been idle for >= 1500ms AND totalSpeechProb < 0.03
-        final bool isSpeechIdle = (nowMs - _lastSpeechTimeMs >= 1500);
+        // Environmental sounds evaluate ONLY when speech has been idle for >= 3000ms AND totalSpeechProb < 0.02
+        final bool isSpeechIdle = (nowMs - _lastSpeechTimeMs >= 3000);
 
-        if (isSpeechIdle && totalSpeechProb < 0.03 && !mappedKey.startsWith('sinhala_')) {
+        if (isSpeechIdle && totalSpeechProb < 0.02 && !mappedKey.startsWith('sinhala_')) {
           // Vehicle Horns
           if (mappedKey == 'vehicle horns' || topLabel == 'vehicle_horn') {
-            if (topProb >= 0.75 && (rms >= 0.035 || maxAmp >= 0.080)) {
+            if (topProb >= 0.85 && (rms >= 0.060 || maxAmp >= 0.120)) {
               simulateSoundDetection('vehicle horns', confidence: topProb);
               return;
             }
@@ -517,7 +531,7 @@ class AudioClassifierService {
 
           // Siren Sound / Ambulance Siren
           if (mappedKey == 'siren' || mappedKey == 'ambulance' || topLabel == 'ambulance_siren') {
-            if (topProb >= 0.75 && (rms >= 0.035 || maxAmp >= 0.080)) {
+            if (topProb >= 0.85 && (rms >= 0.060 || maxAmp >= 0.120)) {
               final String targetKey = SoundConfigService().getConfig('siren')?.isEnabled == true ? 'siren' : 'ambulance';
               simulateSoundDetection(targetKey, confidence: topProb);
               return;
@@ -526,23 +540,23 @@ class AudioClassifierService {
 
           // Fire Truck Siren / Fire Alarm
           if (mappedKey == 'fire_truck' || topLabel == 'fire_truck' || topLabel == 'fire_alarm' || topLabel == 'fire_engine' || topLabel == 'fire_siren') {
-            if (topProb >= 0.75 && (rms >= 0.035 || maxAmp >= 0.080)) {
+            if (topProb >= 0.88 && (rms >= 0.060 || maxAmp >= 0.120)) {
               simulateSoundDetection('fire_truck', confidence: topProb);
               return;
             }
           }
 
           // Dog Barking
-          if (mappedKey == 'dog_bark_dataset' || dogProb >= 0.75 || topLabel == 'dog_barking') {
-            if (math.max(dogProb, topProb) >= 0.75 && (rms >= 0.030 || maxAmp >= 0.075)) {
+          if (mappedKey == 'dog_bark_dataset' || dogProb >= 0.85 || topLabel == 'dog_barking') {
+            if (math.max(dogProb, topProb) >= 0.85 && (rms >= 0.050 || maxAmp >= 0.100)) {
               simulateSoundDetection('dog_bark_dataset', confidence: math.max(dogProb, topProb));
               return;
             }
           }
 
-          // Baby Crying (Strict 0.85 threshold + totalSpeechProb < 0.02 so adult speech vowels e.g. 'karanna' never trigger it)
-          if (mappedKey == 'baby crying' || babyProb >= 0.85 || topLabel == 'baby_crying') {
-            if (math.max(babyProb, topProb) >= 0.85 && totalSpeechProb < 0.02 && (rms >= 0.030 || maxAmp >= 0.075)) {
+          // Baby Crying (Strict 0.88 threshold + totalSpeechProb < 0.01)
+          if (mappedKey == 'baby crying' || babyProb >= 0.88 || topLabel == 'baby_crying') {
+            if (math.max(babyProb, topProb) >= 0.88 && totalSpeechProb < 0.01 && (rms >= 0.050 || maxAmp >= 0.100)) {
               simulateSoundDetection('baby crying', confidence: math.max(babyProb, topProb));
               return;
             }
@@ -550,7 +564,7 @@ class AudioClassifierService {
 
           // Traffic Noise (High energy required: quiet fan/room defaults to traffic, so real traffic needs genuine sustained volume)
           if (mappedKey == 'traffic' || topLabel == 'background_traffic') {
-            if (topProb >= 0.85 && (rms >= 0.055 || maxAmp >= 0.120)) {
+            if (topProb >= 0.90 && (rms >= 0.075 || maxAmp >= 0.150)) {
               simulateSoundDetection('traffic', confidence: topProb);
               return;
             }
