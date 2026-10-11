@@ -1764,38 +1764,122 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let cachedRestaurantCategories = {
     'rest-basic-comm': [
-      { id: 1, template: "A table for one, please.", template_en: "A table for one, please.", template_si: "කරුණාකර එක් අයෙකුට මේසයක් ලබාදෙන්න.", icon: "fa-user", category: "Basic communication" },
-      { id: 2, template: "A table for two, please.", template_en: "A table for two, please.", template_si: "කරුණාකර දෙදෙනෙකුට මේසයක් ලබාදෙන්න.", icon: "fa-user-group", category: "Basic communication" },
-      { id: 3, template: "I am deaf / non-verbal. Please write down instructions.", template_en: "I am deaf / non-verbal. Please write down instructions.", template_si: "මම බිහිරි/කතා කළ නොහැකි අයෙක්. කරුණාකර ලියා පෙන්වන්න.", icon: "fa-ear-deaf", category: "Basic communication" },
-      { id: 4, template: "Can I see the menu, please?", template_en: "Can I see the menu, please?", template_si: "කරුණාකර මෙනුව බලන්න පුළුවන් ද?", icon: "fa-book-open", category: "Basic communication" },
+      { id: 1, template: "I am deaf.", template_en: "I am deaf.", template_si: "මම බිහිරි කෙනෙක්.", icon: "fa-ear-deaf", category: "Basic communication" },
+      { id: 2, template: "I cannot speak.", template_en: "I cannot speak.", template_si: "මට කතා කරන්න බැහැ.", icon: "fa-comment-slash", category: "Basic communication" },
+      { id: 3, template: "Please write down your message.", template_en: "Please write down your message.", template_si: "කරුණාකර ඔබේ පණිවිඩය ලියන්න.", icon: "fa-pen", category: "Basic communication" },
+      { id: 4, template: "Please speak slowly and face me.", template_en: "Please speak slowly and face me.", template_si: "කරුණාකර සෙමින් කතා කර මා දෙස බලන්න.", icon: "fa-eye", category: "Basic communication" },
       { id: 5, template: "Please wait a moment.", template_en: "Please wait a moment.", template_si: "කරුණාකර මොහොතක් රැඳී සිටින්න.", icon: "fa-hourglass-half", category: "Basic communication" },
-      { id: 6, template: "Where is the restroom?", template_en: "Where is the restroom?", template_si: "වැසිකිළිය කොහෙද?", icon: "fa-restroom", category: "Basic communication" }
+      { id: 6, template: "Please repeat that.", template_en: "Please repeat that.", template_si: "කරුණාකර නැවත කියන්න.", icon: "fa-rotate-left", category: "Basic communication" },
+      { id: 7, template: "I do not understand.", template_en: "I do not understand.", template_si: "මට තේරෙන්නේ නැහැ.", icon: "fa-circle-question", category: "Basic communication" },
+      { id: 8, template: "Yes.", template_en: "Yes.", template_si: "ඔව්.", icon: "fa-circle-check", category: "Basic communication" },
+      { id: 9, template: "No.", template_en: "No.", template_si: "නැහැ.", icon: "fa-circle-xmark", category: "Basic communication" },
+      { id: 10, template: "Thank you.", template_en: "Thank you.", template_si: "ස්තූතියි.", icon: "fa-heart", category: "Basic communication" }
     ],
-    'rest-ordering': [
-      { id: 1, template: "I am ready to order.", template_en: "I am ready to order.", template_si: "මම ඇනවුම් කිරීමට සූදානම්.", icon: "fa-circle-check", category: "Ordering food" },
-      { id: 2, template: "What do you recommend?", template_en: "What do you recommend?", template_si: "ඔබ නිර්දේශ කරන්නේ කුමන කෑමද?", icon: "fa-star", category: "Ordering food" },
-      { id: 3, template: "I would like a glass of water, please.", template_en: "I would like a glass of water, please.", template_si: "කරුණාකර මට වතුර වීදුරුවක් දෙන්න.", icon: "fa-glass-water", category: "Ordering food" },
-      { id: 4, template: "I would like to order rice.", template_en: "I would like to order rice.", template_si: "මට බත් ඇනවුම් කිරීමට අවශ්‍යයි.", icon: "fa-bowl-rice", category: "Ordering food" },
-      { id: 5, template: "I would like to order noodles / pasta.", template_en: "I would like to order noodles / pasta.", template_si: "මට නූඩ්ල්ස් / පැස්ටා ඇනවුම් කිරීමට අවශ්‍යයි.", icon: "fa-plate-wheat", category: "Ordering food" },
-      { id: 6, template: "Please make it less spicy.", template_en: "Please make it less spicy.", template_si: "කරුණාකර සැර අඩුවෙන් සාදන්න.", icon: "fa-pepper-hot", category: "Ordering food" },
-      { id: 7, template: "Can I change my order?", template_en: "Can I change my order?", template_si: "මගේ ඇනවුම වෙනස් කළ හැකිද?", icon: "fa-pen-to-square", category: "Ordering food" },
-      { id: 8, template: "How long will the food take?", template_en: "How long will the food take?", template_si: "කෑම ලැබීමට කොපමණ වේලාවක් ගතවේද?", icon: "fa-clock", category: "Ordering food" }
+    'rest-seating': [
+      { id: 1, template: "A table for one, please.", template_en: "A table for one, please.", template_si: "කරුණාකර එක් අයෙකුට මේසයක් දෙන්න.", icon: "fa-user", category: "Arrival and seating" },
+      { id: 2, template: "A table for two, please.", template_en: "A table for two, please.", template_si: "කරුණාකර දෙදෙනෙකුට මේසයක් දෙන්න.", icon: "fa-user-group", category: "Arrival and seating" },
+      { id: 3, template: "A table for three, please.", template_en: "A table for three, please.", template_si: "කරුණාකර තුන් දෙනෙකුට මේසයක් දෙන්න.", icon: "fa-users", category: "Arrival and seating" },
+      { id: 4, template: "A table for four, please.", template_en: "A table for four, please.", template_si: "කරුණාකර හතර දෙනෙකුට මේසයක් දෙන්න.", icon: "fa-users-rectangle", category: "Arrival and seating" },
+      { id: 5, template: "A table for a larger group, please.", template_en: "A table for a larger group, please.", template_si: "කරුණාකර විශාල කණ්ඩායමකට මේසයක් දෙන්න.", icon: "fa-people-group", category: "Arrival and seating" },
+      { id: 6, template: "I have a reservation.", template_en: "I have a reservation.", template_si: "මම මේසයක් වෙන්කරගෙන තියෙනවා.", icon: "fa-calendar-check", category: "Arrival and seating" },
+      { id: 7, template: "The reservation is under my name.", template_en: "The reservation is under my name.", template_si: "වෙන්කිරීම මගේ නමින්.", icon: "fa-id-card", category: "Arrival and seating" },
+      { id: 8, template: "How long is the waiting time?", template_en: "How long is the waiting time?", template_si: "බලා සිටිය යුතු කාලය කොපමණ ද?", icon: "fa-clock", category: "Arrival and seating" },
+      { id: 9, template: "May we sit near the window?", template_en: "May we sit near the window?", template_si: "අපිට ජනේලය ළඟ ඉන්න පුළුවන් ද?", icon: "fa-table", category: "Arrival and seating" },
+      { id: 10, template: "May we sit in a quiet area?", template_en: "May we sit in a quiet area?", template_si: "අපිට නිශ්ශබ්ද ස්ථානයක ඉන්න පුළුවන් ද?", icon: "fa-volume-xmark", category: "Arrival and seating" },
+      { id: 11, template: "May we sit in a well-lit area?", template_en: "May we sit in a well-lit area?", template_si: "අපිට හොඳ ආලෝකයක් ඇති ස්ථානයක ඉන්න පුළුවන් ද?", icon: "fa-lightbulb", category: "Arrival and seating" },
+      { id: 12, template: "Where is the toilet?", template_en: "Where is the toilet?", template_si: "වැසිකිළිය කොහෙද?", icon: "fa-restroom", category: "Arrival and seating" }
     ],
-    'rest-allergies': [
-      { id: 1, template: "I have a food allergy.", template_en: "I have a food allergy.", template_si: "මට ආහාර අසාත්මිකතාවයක් තියෙනවා.", icon: "fa-triangle-exclamation", category: "Allergies and preferences" },
-      { id: 2, template: "Is this dish vegetarian / vegan?", template_en: "Is this dish vegetarian / vegan?", template_si: "මෙම කෑම නිර්මාංශද?", icon: "fa-seedling", category: "Allergies and preferences" },
-      { id: 3, template: "Does this contain nuts or dairy?", template_en: "Does this contain nuts or dairy?", template_si: "මෙහි රටකජු හෝ කිරි අඩංගුද?", icon: "fa-shield-halved", category: "Allergies and preferences" },
-      { id: 4, template: "Does this contain seafood?", template_en: "Does this contain seafood?", template_si: "මෙහි මුහුදු ආහාර අඩංගුද?", icon: "fa-shrimp", category: "Allergies and preferences" },
-      { id: 5, template: "No sugar / less sugar, please.", template_en: "No sugar / less sugar, please.", template_si: "සීනි නොමැතිව / සීනි අඩුවෙන් දෙන්න.", icon: "fa-cubes-stacked", category: "Allergies and preferences" },
-      { id: 6, template: "Is this food Halal?", template_en: "Is this food Halal?", template_si: "මෙම ආහාර හලාල් ද?", icon: "fa-certificate", category: "Allergies and preferences" }
+    'rest-menu-ordering': [
+      { id: 1, template: "May I see the menu, please?", template_en: "May I see the menu, please?", template_si: "කරුණාකර මට මෙනුව බලන්න පුළුවන් ද?", icon: "fa-book-open", category: "Menu and ordering" },
+      { id: 2, template: "Is there a menu with pictures?", template_en: "Is there a menu with pictures?", template_si: "පින්තූර සහිත මෙනුවක් තියෙනවා ද?", icon: "fa-image", category: "Menu and ordering" },
+      { id: 3, template: "I am ready to order.", template_en: "I am ready to order.", template_si: "මම ඇණවුම් කිරීමට සූදානම්.", icon: "fa-bell-concierge", category: "Menu and ordering" },
+      { id: 4, template: "I need a little more time.", template_en: "I need a little more time.", template_si: "මට තව ටිකක් කාලය අවශ්යයි.", icon: "fa-hourglass-start", category: "Menu and ordering" },
+      { id: 5, template: "What do you recommend?", template_en: "What do you recommend?", template_si: "ඔබ නිර්දේශ කරන්නේ කුමක්ද?", icon: "fa-star", category: "Menu and ordering" },
+      { id: 6, template: "What is the most popular dish?", template_en: "What is the most popular dish?", template_si: "වැඩිපුරම ජනප්රිය කෑම වර්ගය කුමක්ද?", icon: "fa-fire", category: "Menu and ordering" },
+      { id: 7, template: "I would like this one. (pointing at the menu)", template_en: "I would like this one. (pointing at the menu)", template_si: "මට මෙය අවශ්යයි.", icon: "fa-hand-pointer", category: "Menu and ordering" },
+      { id: 8, template: "I would like rice and curry.", template_en: "I would like rice and curry.", template_si: "මට බත් සහ ව්යංජන අවශ්යයි.", icon: "fa-bowl-rice", category: "Menu and ordering" },
+      { id: 9, template: "I would like fried rice.", template_en: "I would like fried rice.", template_si: "මට ෆ්රයිඩ් රයිස් අවශ්යයි.", icon: "fa-bowl-rice", category: "Menu and ordering" },
+      { id: 10, template: "I would like kottu.", template_en: "I would like kottu.", template_si: "මට කොත්තු අවශ්යයි.", icon: "fa-utensils", category: "Menu and ordering" },
+      { id: 11, template: "I would like noodles.", template_en: "I would like noodles.", template_si: "මට නූඩ්ල්ස් අවශ්යයි.", icon: "fa-plate-wheat", category: "Menu and ordering" },
+      { id: 12, template: "I would like string hoppers.", template_en: "I would like string hoppers.", template_si: "මට ඉඳිආප්ප අවශ්යයි.", icon: "fa-circle-notch", category: "Menu and ordering" },
+      { id: 13, template: "I would like hoppers.", template_en: "I would like hoppers.", template_si: "මට ආප්ප අවශ්යයි.", icon: "fa-circle", category: "Menu and ordering" },
+      { id: 14, template: "I would like a sandwich or a burger.", template_en: "I would like a sandwich or a burger.", template_si: "මට සැන්ඩ්විච් එකක් හෝ බර්ගර් එකක් අවශ්යයි.", icon: "fa-burger", category: "Menu and ordering" },
+      { id: 15, template: "I would like the same as that table.", template_en: "I would like the same as that table.", template_si: "මට අර මේසයේ තියෙන දේම අවශ්යයි.", icon: "fa-clone", category: "Menu and ordering" },
+      { id: 16, template: "Is this dish available today?", template_en: "Is this dish available today?", template_si: "මෙම කෑම අද තියෙනවා ද?", icon: "fa-calendar-day", category: "Menu and ordering" },
+      { id: 17, template: "Please repeat my order.", template_en: "Please repeat my order.", template_si: "කරුණාකර මගේ ඇණවුම නැවත කියන්න.", icon: "fa-list-check", category: "Menu and ordering" },
+      { id: 18, template: "That is all for now.", template_en: "That is all for now.", template_si: "දැනට ඒ ඇති.", icon: "fa-check", category: "Menu and ordering" }
     ],
-    'rest-billing': [
-      { id: 1, template: "Can I have the bill, please?", template_en: "Can I have the bill, please?", template_si: "කරුණාකර බිල ලබාදෙන්න.", icon: "fa-receipt", category: "Billing and payment" },
-      { id: 2, template: "Are card payments accepted?", template_en: "Are card payments accepted?", template_si: "කාඩ්පත් මඟින් ගෙවීම් පිළිගන්නවාද?", icon: "fa-credit-card", category: "Billing and payment" },
-      { id: 3, template: "Can I pay by cash?", template_en: "Can I pay by cash?", template_si: "මට මුදලින් ගෙවිය හැකිද?", icon: "fa-money-bill-wave", category: "Billing and payment" },
-      { id: 4, template: "Can I have a receipt?", template_en: "Can I have a receipt?", template_si: "කරුණාකර රිසිට්පතක් ලබාදෙන්න.", icon: "fa-file-invoice", category: "Billing and payment" },
-      { id: 5, template: "Thank you, the food was delicious!", template_en: "Thank you, the food was delicious!", template_si: "ස්තූතියි, කෑම ඉතා රසවත්!", icon: "fa-thumbs-up", category: "Billing and payment" },
-      { id: 6, template: "Thank you for your service.", template_en: "Thank you for your service.", template_si: "ඔබේ සේවයට ස්තූතියි.", icon: "fa-heart", category: "Billing and payment" }
+    'rest-drinks': [
+      { id: 1, template: "May I have some water, please?", template_en: "May I have some water, please?", template_si: "කරුණාකර මට වතුර ටිකක් දෙන්න.", icon: "fa-glass-water", category: "Drinks" },
+      { id: 2, template: "I would like hot water.", template_en: "I would like hot water.", template_si: "මට උණු වතුර අවශ්යයි.", icon: "fa-mug-hot", category: "Drinks" },
+      { id: 3, template: "I would like a cup of tea.", template_en: "I would like a cup of tea.", template_si: "මට තේ කෝප්පයක් අවශ්යයි.", icon: "fa-mug-saucer", category: "Drinks" },
+      { id: 4, template: "I would like a cup of coffee.", template_en: "I would like a cup of coffee.", template_si: "මට කෝපි කෝප්පයක් අවශ්යයි.", icon: "fa-coffee", category: "Drinks" },
+      { id: 5, template: "I would like a fresh juice.", template_en: "I would like a fresh juice.", template_si: "මට පළතුරු යුෂ වීදුරුවක් අවශ්යයි.", icon: "fa-wine-glass", category: "Drinks" },
+      { id: 6, template: "I would like a soft drink.", template_en: "I would like a soft drink.", template_si: "මට සීතල බීමක් අවශ්යයි.", icon: "fa-bottle-water", category: "Drinks" },
+      { id: 7, template: "I would like a king coconut.", template_en: "I would like a king coconut.", template_si: "මට තැඹිලි පොල් එකක් අවශ්යයි.", icon: "fa-circle-dot", category: "Drinks" },
+      { id: 8, template: "I would like a drink without ice.", template_en: "I would like a drink without ice.", template_si: "මට අයිස් නැති බීමක් අවශ්යයි.", icon: "fa-temperature-arrow-up", category: "Drinks" },
+      { id: 9, template: "Without sugar, please.", template_en: "Without sugar, please.", template_si: "කරුණාකර සීනි නැතිව.", icon: "fa-cubes-stacked", category: "Drinks" },
+      { id: 10, template: "May I have a refill, please?", template_en: "May I have a refill, please?", template_si: "කරුණාකර මට නැවත පුරවා දෙන්න පුළුවන් ද?", icon: "fa-arrows-rotate", category: "Drinks" }
+    ],
+    'rest-dietary-allergies': [
+      { id: 1, template: "I am vegetarian.", template_en: "I am vegetarian.", template_si: "මම නිර්මාංශිකයි.", icon: "fa-seedling", category: "Dietary needs and allergies" },
+      { id: 2, template: "I do not eat meat.", template_en: "I do not eat meat.", template_si: "මම මස් කන්නේ නැහැ.", icon: "fa-drumstick-bite", category: "Dietary needs and allergies" },
+      { id: 3, template: "I do not eat pork.", template_en: "I do not eat pork.", template_si: "මම ඌරු මස් කන්නේ නැහැ.", icon: "fa-ban", category: "Dietary needs and allergies" },
+      { id: 4, template: "I do not eat beef.", template_en: "I do not eat beef.", template_si: "මම හරක් මස් කන්නේ නැහැ.", icon: "fa-ban", category: "Dietary needs and allergies" },
+      { id: 5, template: "I do not eat fish.", template_en: "I do not eat fish.", template_si: "මම මාළු කන්නේ නැහැ.", icon: "fa-fish", category: "Dietary needs and allergies" },
+      { id: 6, template: "Is this halal?", template_en: "Is this halal?", template_si: "මෙය හලාල් ද?", icon: "fa-certificate", category: "Dietary needs and allergies" },
+      { id: 7, template: "I am allergic to nuts.", template_en: "I am allergic to nuts.", template_si: "මට පරිප්පු වර්ග වලට අසාත්මිකතාවක් තියෙනවා.", icon: "fa-shield-halved", category: "Dietary needs and allergies" },
+      { id: 8, template: "I am allergic to seafood.", template_en: "I am allergic to seafood.", template_si: "මට මුහුදු ආහාර වලට අසාත්මිකතාවක් තියෙනවා.", icon: "fa-shrimp", category: "Dietary needs and allergies" },
+      { id: 9, template: "I am allergic to eggs.", template_en: "I am allergic to eggs.", template_si: "මට බිත්තර වලට අසාත්මිකතාවක් තියෙනවා.", icon: "fa-egg", category: "Dietary needs and allergies" },
+      { id: 10, template: "I am allergic to milk and dairy.", template_en: "I am allergic to milk and dairy.", template_si: "මට කිරි සහ කිරි නිෂ්පාදන වලට අසාත්මිකතාවක් තියෙනවා.", icon: "fa-cow", category: "Dietary needs and allergies" },
+      { id: 11, template: "Does this dish contain nuts?", template_en: "Does this dish contain nuts?", template_si: "මෙම කෑමේ පරිප්පු අඩංගු ද?", icon: "fa-triangle-exclamation", category: "Dietary needs and allergies" },
+      { id: 12, template: "I am diabetic. Please give me no sugar.", template_en: "I am diabetic. Please give me no sugar.", template_si: "මම දියවැඩියා රෝගියෙක්. කරුණාකර සීනි නැතිව දෙන්න.", icon: "fa-square-plus", category: "Dietary needs and allergies" },
+      { id: 13, template: "Please check with the kitchen about allergies.", template_en: "Please check with the kitchen about allergies.", template_si: "කරුණාකර අසාත්මිකතා ගැන කුස්සියෙන් විමසන්න.", icon: "fa-kitchen-set", category: "Dietary needs and allergies" },
+      { id: 14, template: "Please write down the ingredients.", template_en: "Please write down the ingredients.", template_si: "කරුණාකර අමුද්රව්ය ලියන්න.", icon: "fa-clipboard-list", category: "Dietary needs and allergies" }
+    ],
+    'rest-customizing': [
+      { id: 1, template: "Not too spicy, please.", template_en: "Not too spicy, please.", template_si: "කරුණාකර වැඩි ඇඹුල් හෝ සැර නැතිව.", icon: "fa-pepper-hot", category: "Customizing the food" },
+      { id: 2, template: "Please make it mild.", template_en: "Please make it mild.", template_si: "කරුණාකර සැර අඩුවෙන් දෙන්න.", icon: "fa-temperature-low", category: "Customizing the food" },
+      { id: 3, template: "I like it spicy.", template_en: "I like it spicy.", template_si: "මම සැර කෑම කැමතියි.", icon: "fa-fire-flame-curved", category: "Customizing the food" },
+      { id: 4, template: "Less salt, please.", template_en: "Less salt, please.", template_si: "කරුණාකර ලුණු අඩුවෙන් දාන්න.", icon: "fa-mortar-pestle", category: "Customizing the food" },
+      { id: 5, template: "Without onions, please.", template_en: "Without onions, please.", template_si: "කරුණාකර ලූණු නැතිව.", icon: "fa-circle-minus", category: "Customizing the food" },
+      { id: 6, template: "Without chili, please.", template_en: "Without chili, please.", template_si: "කරුණාකර මිරිස් නැතිව.", icon: "fa-circle-minus", category: "Customizing the food" },
+      { id: 7, template: "A small portion, please.", template_en: "A small portion, please.", template_si: "කරුණාකර කුඩා කොටසක් දෙන්න.", icon: "fa-compress", category: "Customizing the food" },
+      { id: 8, template: "A large portion, please.", template_en: "A large portion, please.", template_si: "කරුණාකර විශාල කොටසක් දෙන්න.", icon: "fa-expand", category: "Customizing the food" },
+      { id: 9, template: "May I have extra rice?", template_en: "May I have extra rice?", template_si: "මට අමතර බත් ටිකක් දෙන්න පුළුවන් ද?", icon: "fa-plus", category: "Customizing the food" },
+      { id: 10, template: "May I have extra gravy?", template_en: "May I have extra gravy?", template_si: "මට අමතර ග්රේවි ටිකක් දෙන්න පුළුවන් ද?", icon: "fa-plus", category: "Customizing the food" },
+      { id: 11, template: "May I have a spoon and fork?", template_en: "May I have a spoon and fork?", template_si: "මට හැන්දක් සහ ගෑරුප්පුවක් දෙන්න පුළුවන් ද?", icon: "fa-utensils", category: "Customizing the food" },
+      { id: 12, template: "May I have a napkin or tissue?", template_en: "May I have a napkin or tissue?", template_si: "මට නැප්කින් එකක් හෝ ටිෂූ එකක් දෙන්න පුළුවන් ද?", icon: "fa-box-tissue", category: "Customizing the food" }
+    ],
+    'rest-during-meal': [
+      { id: 1, template: "How long will my food take?", template_en: "How long will my food take?", template_si: "මගේ කෑම ලැබෙන්න කොපමණ කාලයක් යයිද?", icon: "fa-stopwatch", category: "During the meal" },
+      { id: 2, template: "This is not what I ordered.", template_en: "This is not what I ordered.", template_si: "මෙය මා ඇණවුම් කළ දේ නොවේ.", icon: "fa-circle-exclamation", category: "During the meal" },
+      { id: 3, template: "My food is cold. Please heat it.", template_en: "My food is cold. Please heat it.", template_si: "මගේ කෑම සීතලයි. කරුණාකර රත් කරන්න.", icon: "fa-snowflake", category: "During the meal" },
+      { id: 4, template: "This is too spicy.", template_en: "This is too spicy.", template_si: "මෙය ඉතා සැරයි.", icon: "fa-pepper-hot", category: "During the meal" },
+      { id: 5, template: "This is too salty.", template_en: "This is too salty.", template_si: "මෙය ඉතා ලුණුයි.", icon: "fa-triangle-exclamation", category: "During the meal" },
+      { id: 6, template: "There is something wrong with this food.", template_en: "There is something wrong with this food.", template_si: "මෙම කෑමේ යම් වැරැද්දක් තියෙනවා.", icon: "fa-bug", category: "During the meal" },
+      { id: 7, template: "Please change this dish.", template_en: "Please change this dish.", template_si: "කරුණාකර මෙම කෑම මාරු කරන්න.", icon: "fa-rotate", category: "During the meal" },
+      { id: 8, template: "The food is delicious.", template_en: "The food is delicious.", template_si: "කෑම ඉතා රසයි.", icon: "fa-face-smile", category: "During the meal" },
+      { id: 9, template: "Please clear the table.", template_en: "Please clear the table.", template_si: "කරුණාකර මේසය පිරිසිදු කරන්න.", icon: "fa-broom", category: "During the meal" },
+      { id: 10, template: "May I have another menu for dessert?", template_en: "May I have another menu for dessert?", template_si: "අතුරුපස සඳහා තවත් මෙනුවක් දෙන්න පුළුවන් ද?", icon: "fa-ice-cream", category: "During the meal" }
+    ],
+    'rest-takeaway-requests': [
+      { id: 1, template: "May I have this packed to take away?", template_en: "May I have this packed to take away?", template_si: "මට මෙය රැගෙන යාමට ඇසුරුම් කරන්න පුළුවන් ද?", icon: "fa-box", category: "Takeaway and special requests" },
+      { id: 2, template: "I would like a takeaway order.", template_en: "I would like a takeaway order.", template_si: "මට රැගෙන යන ඇණවුමක් අවශ්යයි.", icon: "fa-bag-shopping", category: "Takeaway and special requests" },
+      { id: 3, template: "Do you deliver?", template_en: "Do you deliver?", template_si: "ඔබ බෙදාහරින්නේ ද?", icon: "fa-truck", category: "Takeaway and special requests" },
+      { id: 4, template: "Is there Wi-Fi?", template_en: "Is there Wi-Fi?", template_si: "Wi-Fi තියෙනවා ද?", icon: "fa-wifi", category: "Takeaway and special requests" },
+      { id: 5, template: "Please bring a pen and paper.", template_en: "Please bring a pen and paper.", template_si: "කරුණාකර පෑනක් සහ කඩදාසියක් ගෙන එන්න.", icon: "fa-pen-to-square", category: "Takeaway and special requests" },
+      { id: 6, template: "Please tap my shoulder or wave to get my attention.", template_en: "Please tap my shoulder or wave to get my attention.", template_si: "කරුණාකර මගේ අවධානය ලබාගැනීමට උරහිසට තට්ටු කරන්න හෝ අත වනන්න.", icon: "fa-hand", category: "Takeaway and special requests" }
+    ],
+    'rest-bill-payment': [
+      { id: 1, template: "May I have the bill, please?", template_en: "May I have the bill, please?", template_si: "කරුණාකර මට බිල දෙන්න.", icon: "fa-receipt", category: "Bill and payment" },
+      { id: 2, template: "Please write down the total amount.", template_en: "Please write down the total amount.", template_si: "කරුණාකර මුළු මුදල ලියන්න.", icon: "fa-pen-clip", category: "Bill and payment" },
+      { id: 3, template: "Can I pay by card?", template_en: "Can I pay by card?", template_si: "කාඩ්පතෙන් ගෙවන්න පුළුවන් ද?", icon: "fa-credit-card", category: "Bill and payment" },
+      { id: 4, template: "I will pay in cash.", template_en: "I will pay in cash.", template_si: "මම මුදලින් ගෙවන්නම්.", icon: "fa-money-bill-wave", category: "Bill and payment" },
+      { id: 5, template: "Is service charge included?", template_en: "Is service charge included?", template_si: "සේවා ගාස්තුව ඇතුළත් ද?", icon: "fa-percent", category: "Bill and payment" },
+      { id: 6, template: "Can we split the bill?", template_en: "Can we split the bill?", template_si: "අපිට බිල බෙදාගන්න පුළුවන් ද?", icon: "fa-divide", category: "Bill and payment" },
+      { id: 7, template: "Please keep the change.", template_en: "Please keep the change.", template_si: "කරුණාකර ඉතිරි මුදල තියාගන්න.", icon: "fa-coins", category: "Bill and payment" },
+      { id: 8, template: "Thank you, we enjoyed the meal.", template_en: "Thank you, we enjoyed the meal.", template_si: "ස්තූතියි, අපි කෑම රස විඳිමු.", icon: "fa-face-laugh-beam", category: "Bill and payment" }
     ]
   };
 
@@ -1808,37 +1892,82 @@ document.addEventListener('DOMContentLoaded', () => {
       buttonId: 'btn-cat-rest-basic-comm',
       badgeId: 'cat-badge-rest-basic-comm'
     },
-    'rest-ordering': {
-      titleSi: '2. කෑම ඇනවුම් කිරීම',
-      titleEn: 'Ordering food',
-      label: '2. කෑම ඇනවුම් කිරීම / Ordering food',
+    'rest-seating': {
+      titleSi: '2. පැමිණීම සහ අසුන් ගැනීම',
+      titleEn: 'Arrival and seating',
+      label: '2. පැමිණීම සහ අසුන් ගැනීම / Arrival and seating',
+      icon: 'fa-chair',
+      buttonId: 'btn-cat-rest-seating',
+      badgeId: 'cat-badge-rest-seating'
+    },
+    'rest-menu-ordering': {
+      titleSi: '3. මෙනුව සහ ඇණවුම් කිරීම',
+      titleEn: 'Menu and ordering',
+      label: '3. මෙනුව සහ ඇණවුම් කිරීම / Menu and ordering',
       icon: 'fa-bowl-food',
-      buttonId: 'btn-cat-rest-ordering',
-      badgeId: 'cat-badge-rest-ordering'
+      buttonId: 'btn-cat-rest-menu-ordering',
+      badgeId: 'cat-badge-rest-menu-ordering'
     },
-    'rest-allergies': {
-      titleSi: '3. අසාත්මිකතා සහ මනාපයන්',
-      titleEn: 'Allergies and preferences',
-      label: '3. අසාත්මිකතා සහ මනාපයන් / Allergies and preferences',
+    'rest-drinks': {
+      titleSi: '4. බීම වර්ග',
+      titleEn: 'Drinks',
+      label: '4. බීම වර්ග / Drinks',
+      icon: 'fa-mug-hot',
+      buttonId: 'btn-cat-rest-drinks',
+      badgeId: 'cat-badge-rest-drinks'
+    },
+    'rest-dietary-allergies': {
+      titleSi: '5. ආහාර අවශ්‍යතා සහ අසාත්මිකතා',
+      titleEn: 'Dietary needs and allergies',
+      label: '5. ආහාර අවශ්‍යතා සහ අසාත්මිකතා / Dietary needs and allergies',
       icon: 'fa-wheat-awn-circle-exclamation',
-      buttonId: 'btn-cat-rest-allergies',
-      badgeId: 'cat-badge-rest-allergies'
+      buttonId: 'btn-cat-rest-dietary-allergies',
+      badgeId: 'cat-badge-rest-dietary-allergies'
     },
-    'rest-billing': {
-      titleSi: '4. ගෙවීම් සහ සමුගැනීම',
-      titleEn: 'Billing and payment',
-      label: '4. ගෙවීම් සහ සමුගැනීම / Billing and payment',
+    'rest-customizing': {
+      titleSi: '6. කෑම රිසිකරණය',
+      titleEn: 'Customizing the food',
+      label: '6. කෑම රිසිකරණය / Customizing the food',
+      icon: 'fa-pepper-hot',
+      buttonId: 'btn-cat-rest-customizing',
+      badgeId: 'cat-badge-rest-customizing'
+    },
+    'rest-during-meal': {
+      titleSi: '7. කෑම ගන්නා අතරතුර',
+      titleEn: 'During the meal',
+      label: '7. කෑම ගන්නා අතරතුර / During the meal',
+      icon: 'fa-bell-concierge',
+      buttonId: 'btn-cat-rest-during-meal',
+      badgeId: 'cat-badge-rest-during-meal'
+    },
+    'rest-takeaway-requests': {
+      titleSi: '8. රැගෙන යාම සහ විශේෂ ඉල්ලීම්',
+      titleEn: 'Takeaway and special requests',
+      label: '8. රැගෙන යාම සහ විශේෂ ඉල්ලීම් / Takeaway and special requests',
+      icon: 'fa-box',
+      buttonId: 'btn-cat-rest-takeaway-requests',
+      badgeId: 'cat-badge-rest-takeaway-requests'
+    },
+    'rest-bill-payment': {
+      titleSi: '9. බිල සහ ගෙවීම්',
+      titleEn: 'Bill and payment',
+      label: '9. බිල සහ ගෙවීම් / Bill and payment',
       icon: 'fa-receipt',
-      buttonId: 'btn-cat-rest-billing',
-      badgeId: 'cat-badge-rest-billing'
+      buttonId: 'btn-cat-rest-bill-payment',
+      badgeId: 'cat-badge-rest-bill-payment'
     }
   };
 
   const ALL_RESTAURANT_CAT_KEYS = [
     'rest-basic-comm',
-    'rest-ordering',
-    'rest-allergies',
-    'rest-billing'
+    'rest-seating',
+    'rest-menu-ordering',
+    'rest-drinks',
+    'rest-dietary-allergies',
+    'rest-customizing',
+    'rest-during-meal',
+    'rest-takeaway-requests',
+    'rest-bill-payment'
   ];
 
   // Screen 1 & Screen 2 Navigation:
@@ -3016,7 +3145,7 @@ document.addEventListener('DOMContentLoaded', () => {
         hospitalBadge.classList.remove('badge-bank-theme');
         hospitalBadge.classList.add('badge-restaurant-theme');
         hospitalBadge.style.display = 'inline-flex';
-        hospitalBadge.innerHTML = '<i class="fa-solid fa-utensils"></i> 4 Categories';
+        hospitalBadge.innerHTML = '<i class="fa-solid fa-utensils"></i> 9 Categories';
         hospitalBadge.style.background = '#fef3c7';
         hospitalBadge.style.color = '#d97706';
       }

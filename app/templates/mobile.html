@@ -211,7 +211,7 @@
                     {% if location_slug == 'bank' %}
                     <i class="fa-solid fa-building-columns"></i> 10 Categories
                     {% elif location_slug == 'restaurant' %}
-                    <i class="fa-solid fa-utensils"></i> 4 Categories
+                    <i class="fa-solid fa-utensils"></i> 9 Categories
                     {% else %}
                     <i class="fa-solid fa-square-h"></i> 9 Categories
                     {% endif %}
@@ -399,41 +399,86 @@
                 </button>
               </div>
 
-              <!-- Restaurant Message Criteria Buttons (4 buttons) -->
+              <!-- Restaurant Message Criteria Buttons (9 buttons) -->
               <div id="restaurant-category-selector-bar" class="category-selector-bar {% if location_slug != 'restaurant' %}bar-hidden{% endif %}">
                 <button type="button" class="category-active-btn category-restaurant-btn" id="btn-cat-rest-basic-comm" data-cat="rest-basic-comm" aria-label="1. මූලික සන්නිවේදනය / Basic communication" title="Tap to view suggested messages">
                   <i class="fa-solid fa-comments"></i>
                   <span class="cat-btn-text">1. මූලික සන්නිවේදනය / Basic communication</span>
                   <div class="cat-btn-right-meta">
-                    <span class="cat-msg-count-pill" id="cat-badge-rest-basic-comm">6</span>
+                    <span class="cat-msg-count-pill" id="cat-badge-rest-basic-comm">10</span>
                     <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-rest-chevron-icon-1"></i>
                   </div>
                 </button>
 
-                <button type="button" class="category-active-btn category-restaurant-btn" id="btn-cat-rest-ordering" data-cat="rest-ordering" aria-label="2. කෑම ඇනවුම් කිරීම / Ordering food" title="Tap to view suggested messages">
-                  <i class="fa-solid fa-bowl-food"></i>
-                  <span class="cat-btn-text">2. කෑම ඇනවුම් කිරීම / Ordering food</span>
+                <button type="button" class="category-active-btn category-restaurant-btn" id="btn-cat-rest-seating" data-cat="rest-seating" aria-label="2. පැමිණීම සහ අසුන් ගැනීම / Arrival and seating" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-chair"></i>
+                  <span class="cat-btn-text">2. පැමිණීම සහ අසුන් ගැනීම / Arrival and seating</span>
                   <div class="cat-btn-right-meta">
-                    <span class="cat-msg-count-pill" id="cat-badge-rest-ordering">8</span>
+                    <span class="cat-msg-count-pill" id="cat-badge-rest-seating">12</span>
                     <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-rest-chevron-icon-2"></i>
                   </div>
                 </button>
 
-                <button type="button" class="category-active-btn category-restaurant-btn" id="btn-cat-rest-allergies" data-cat="rest-allergies" aria-label="3. අසාත්මිකතා සහ මනාපයන් / Allergies and preferences" title="Tap to view suggested messages">
-                  <i class="fa-solid fa-wheat-awn-circle-exclamation"></i>
-                  <span class="cat-btn-text">3. අසාත්මිකතා සහ මනාපයන් / Allergies and preferences</span>
+                <button type="button" class="category-active-btn category-restaurant-btn" id="btn-cat-rest-menu-ordering" data-cat="rest-menu-ordering" aria-label="3. මෙනුව සහ ඇණවුම් කිරීම / Menu and ordering" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-bowl-food"></i>
+                  <span class="cat-btn-text">3. මෙනුව සහ ඇණවුම් කිරීම / Menu and ordering</span>
                   <div class="cat-btn-right-meta">
-                    <span class="cat-msg-count-pill" id="cat-badge-rest-allergies">6</span>
+                    <span class="cat-msg-count-pill" id="cat-badge-rest-menu-ordering">18</span>
                     <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-rest-chevron-icon-3"></i>
                   </div>
                 </button>
 
-                <button type="button" class="category-active-btn category-restaurant-btn" id="btn-cat-rest-billing" data-cat="rest-billing" aria-label="4. ගෙවීම් සහ සමුගැනීම / Billing and payment" title="Tap to view suggested messages">
-                  <i class="fa-solid fa-receipt"></i>
-                  <span class="cat-btn-text">4. ගෙවීම් සහ සමුගැනීම / Billing and payment</span>
+                <button type="button" class="category-active-btn category-restaurant-btn" id="btn-cat-rest-drinks" data-cat="rest-drinks" aria-label="4. බීම වර්ග / Drinks" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-mug-hot"></i>
+                  <span class="cat-btn-text">4. බීම වර්ග / Drinks</span>
                   <div class="cat-btn-right-meta">
-                    <span class="cat-msg-count-pill" id="cat-badge-rest-billing">6</span>
+                    <span class="cat-msg-count-pill" id="cat-badge-rest-drinks">10</span>
                     <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-rest-chevron-icon-4"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-restaurant-btn" id="btn-cat-rest-dietary-allergies" data-cat="rest-dietary-allergies" aria-label="5. ආහාර අවශ්‍යතා සහ අසාත්මිකතා / Dietary needs and allergies" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-wheat-awn-circle-exclamation"></i>
+                  <span class="cat-btn-text">5. ආහාර අවශ්‍යතා සහ අසාත්මිකතා / Dietary needs and allergies</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-rest-dietary-allergies">14</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-rest-chevron-icon-5"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-restaurant-btn" id="btn-cat-rest-customizing" data-cat="rest-customizing" aria-label="6. කෑම රිසිකරණය / Customizing the food" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-pepper-hot"></i>
+                  <span class="cat-btn-text">6. කෑම රිසිකරණය / Customizing the food</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-rest-customizing">12</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-rest-chevron-icon-6"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-restaurant-btn" id="btn-cat-rest-during-meal" data-cat="rest-during-meal" aria-label="7. කෑම ගන්නා අතරතුර / During the meal" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-bell-concierge"></i>
+                  <span class="cat-btn-text">7. කෑම ගන්නා අතරතුර / During the meal</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-rest-during-meal">10</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-rest-chevron-icon-7"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-restaurant-btn" id="btn-cat-rest-takeaway-requests" data-cat="rest-takeaway-requests" aria-label="8. රැගෙන යාම සහ විශේෂ ඉල්ලීම් / Takeaway and special requests" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-box"></i>
+                  <span class="cat-btn-text">8. රැගෙන යාම සහ විශේෂ ඉල්ලීම් / Takeaway and special requests</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-rest-takeaway-requests">6</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-rest-chevron-icon-8"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-restaurant-btn" id="btn-cat-rest-bill-payment" data-cat="rest-bill-payment" aria-label="9. බිල සහ ගෙවීම් / Bill and payment" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-receipt"></i>
+                  <span class="cat-btn-text">9. බිල සහ ගෙවීම් / Bill and payment</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-rest-bill-payment">8</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-rest-chevron-icon-9"></i>
                   </div>
                 </button>
               </div>

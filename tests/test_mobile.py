@@ -449,7 +449,7 @@ class TestMobileInterface(unittest.TestCase):
         self.assertTrue(data['is_predefined'])
         self.assertIn("Upali's", data['poi_name'])
         self.assertIn('restaurant_categories', data)
-        self.assertEqual(len(data['restaurant_categories']), 4)
+        self.assertEqual(len(data['restaurant_categories']), 9)
 
     def test_manual_restaurant_selection_api(self):
         # Select Ministry of Crab
@@ -461,68 +461,126 @@ class TestMobileInterface(unittest.TestCase):
         self.assertTrue(data['is_restaurant'])
         self.assertTrue(data['manually_selected'])
         self.assertIn('Ministry of Crab', data['poi_name'])
-        # Verify restaurant categories and messages attached
+        # Verify all 9 restaurant categories and 100 messages attached
         self.assertIn('restaurant_categories', data)
         rest_cats = data['restaurant_categories']
+        self.assertEqual(len(rest_cats), 9)
         self.assertIn('rest-basic-comm', rest_cats)
-        self.assertIn('rest-ordering', rest_cats)
-        self.assertIn('rest-allergies', rest_cats)
-        self.assertIn('rest-billing', rest_cats)
-        self.assertEqual(len(rest_cats['rest-basic-comm']), 6)
-        self.assertEqual(len(rest_cats['rest-ordering']), 8)
-        self.assertEqual(len(rest_cats['rest-allergies']), 6)
-        self.assertEqual(len(rest_cats['rest-billing']), 6)
+        self.assertIn('rest-seating', rest_cats)
+        self.assertIn('rest-menu-ordering', rest_cats)
+        self.assertIn('rest-drinks', rest_cats)
+        self.assertIn('rest-dietary-allergies', rest_cats)
+        self.assertIn('rest-customizing', rest_cats)
+        self.assertIn('rest-during-meal', rest_cats)
+        self.assertIn('rest-takeaway-requests', rest_cats)
+        self.assertIn('rest-bill-payment', rest_cats)
+        self.assertEqual(len(rest_cats['rest-basic-comm']), 10)
+        self.assertEqual(len(rest_cats['rest-seating']), 12)
+        self.assertEqual(len(rest_cats['rest-menu-ordering']), 18)
+        self.assertEqual(len(rest_cats['rest-drinks']), 10)
+        self.assertEqual(len(rest_cats['rest-dietary-allergies']), 14)
+        self.assertEqual(len(rest_cats['rest-customizing']), 12)
+        self.assertEqual(len(rest_cats['rest-during-meal']), 10)
+        self.assertEqual(len(rest_cats['rest-takeaway-requests']), 6)
+        self.assertEqual(len(rest_cats['rest-bill-payment']), 8)
+        self.assertEqual(sum(len(msgs) for msgs in rest_cats.values()), 100)
 
     def test_restaurant_communication_messages_content(self):
-        # Verify Restaurant Category messages in dual-language English & Sinhala
+        # Verify Restaurant Category messages in dual-language English & Sinhala (100 total)
         res = self.client.post('/api/select-restaurant', json={'restaurant_id': 'upalis-colombo'})
         self.assertEqual(res.status_code, 200)
         data = res.get_json()
         cats = data['restaurant_categories']
+        self.assertEqual(sum(len(msgs) for msgs in cats.values()), 100)
 
-        # Category 1: Basic communication
+        # Category 1: Basic communication (1-10)
         basic_msgs = cats['rest-basic-comm']
-        self.assertEqual(len(basic_msgs), 6)
-        self.assertEqual(basic_msgs[0]['template_en'], 'A table for one, please.')
-        self.assertEqual(basic_msgs[0]['template_si'], 'කරුණාකර එක් අයෙකුට මේසයක් ලබාදෙන්න.')
-        self.assertEqual(basic_msgs[2]['template_en'], 'I am deaf / non-verbal. Please write down instructions.')
-        self.assertEqual(basic_msgs[2]['template_si'], 'මම බිහිරි/කතා කළ නොහැකි අයෙක්. කරුණාකර ලියා පෙන්වන්න.')
+        self.assertEqual(len(basic_msgs), 10)
+        self.assertEqual(basic_msgs[0]['template_en'], 'I am deaf.')
+        self.assertEqual(basic_msgs[0]['template_si'], 'මම බිහිරි කෙනෙක්.')
+        self.assertEqual(basic_msgs[9]['template_en'], 'Thank you.')
+        self.assertEqual(basic_msgs[9]['template_si'], 'ස්තූතියි.')
 
-        # Category 2: Ordering food
-        order_msgs = cats['rest-ordering']
-        self.assertEqual(len(order_msgs), 8)
-        self.assertEqual(order_msgs[0]['template_en'], 'I am ready to order.')
-        self.assertEqual(order_msgs[0]['template_si'], 'මම ඇනවුම් කිරීමට සූදානම්.')
-        self.assertEqual(order_msgs[5]['template_en'], 'Please make it less spicy.')
-        self.assertEqual(order_msgs[5]['template_si'], 'කරුණාකර සැර අඩුවෙන් සාදන්න.')
+        # Category 2: Arrival and seating (11-22)
+        seating_msgs = cats['rest-seating']
+        self.assertEqual(len(seating_msgs), 12)
+        self.assertEqual(seating_msgs[0]['template_en'], 'A table for one, please.')
+        self.assertEqual(seating_msgs[0]['template_si'], 'කරුණාකර එක් අයෙකුට මේසයක් දෙන්න.')
+        self.assertEqual(seating_msgs[11]['template_en'], 'Where is the toilet?')
+        self.assertEqual(seating_msgs[11]['template_si'], 'වැසිකිළිය කොහෙද?')
 
-        # Category 3: Allergies and preferences
-        allergy_msgs = cats['rest-allergies']
-        self.assertEqual(len(allergy_msgs), 6)
-        self.assertEqual(allergy_msgs[0]['template_en'], 'I have a food allergy.')
-        self.assertEqual(allergy_msgs[0]['template_si'], 'මට ආහාර අසාත්මිකතාවයක් තියෙනවා.')
-        self.assertEqual(allergy_msgs[1]['template_en'], 'Is this dish vegetarian / vegan?')
-        self.assertEqual(allergy_msgs[1]['template_si'], 'මෙම කෑම නිර්මාංශද?')
+        # Category 3: Menu and ordering (23-40)
+        menu_msgs = cats['rest-menu-ordering']
+        self.assertEqual(len(menu_msgs), 18)
+        self.assertEqual(menu_msgs[0]['template_en'], 'May I see the menu, please?')
+        self.assertEqual(menu_msgs[0]['template_si'], 'කරුණාකර මට මෙනුව බලන්න පුළුවන් ද?')
+        self.assertEqual(menu_msgs[9]['template_en'], 'I would like kottu.')
+        self.assertEqual(menu_msgs[9]['template_si'], 'මට කොත්තු අවශ්යයි.')
 
-        # Category 4: Billing and payment
-        bill_msgs = cats['rest-billing']
-        self.assertEqual(len(bill_msgs), 6)
-        self.assertEqual(bill_msgs[0]['template_en'], 'Can I have the bill, please?')
-        self.assertEqual(bill_msgs[0]['template_si'], 'කරුණාකර බිල ලබාදෙන්න.')
-        self.assertEqual(bill_msgs[4]['template_en'], 'Thank you, the food was delicious!')
-        self.assertEqual(bill_msgs[4]['template_si'], 'ස්තූතියි, කෑම ඉතා රසවත්!')
+        # Category 4: Drinks (41-50)
+        drink_msgs = cats['rest-drinks']
+        self.assertEqual(len(drink_msgs), 10)
+        self.assertEqual(drink_msgs[0]['template_en'], 'May I have some water, please?')
+        self.assertEqual(drink_msgs[0]['template_si'], 'කරුණාකර මට වතුර ටිකක් දෙන්න.')
+        self.assertEqual(drink_msgs[6]['template_en'], 'I would like a king coconut.')
+        self.assertEqual(drink_msgs[6]['template_si'], 'මට තැඹිලි පොල් එකක් අවශ්යයි.')
+
+        # Category 5: Dietary needs and allergies (51-64)
+        diet_msgs = cats['rest-dietary-allergies']
+        self.assertEqual(len(diet_msgs), 14)
+        self.assertEqual(diet_msgs[0]['template_en'], 'I am vegetarian.')
+        self.assertEqual(diet_msgs[0]['template_si'], 'මම නිර්මාංශිකයි.')
+        self.assertEqual(diet_msgs[5]['template_en'], 'Is this halal?')
+        self.assertEqual(diet_msgs[5]['template_si'], 'මෙය හලාල් ද?')
+
+        # Category 6: Customizing the food (65-76)
+        custom_msgs = cats['rest-customizing']
+        self.assertEqual(len(custom_msgs), 12)
+        self.assertEqual(custom_msgs[0]['template_en'], 'Not too spicy, please.')
+        self.assertEqual(custom_msgs[0]['template_si'], 'කරුණාකර වැඩි ඇඹුල් හෝ සැර නැතිව.')
+        self.assertEqual(custom_msgs[2]['template_en'], 'I like it spicy.')
+        self.assertEqual(custom_msgs[2]['template_si'], 'මම සැර කෑම කැමතියි.')
+
+        # Category 7: During the meal (77-86)
+        meal_msgs = cats['rest-during-meal']
+        self.assertEqual(len(meal_msgs), 10)
+        self.assertEqual(meal_msgs[0]['template_en'], 'How long will my food take?')
+        self.assertEqual(meal_msgs[0]['template_si'], 'මගේ කෑම ලැබෙන්න කොපමණ කාලයක් යයිද?')
+        self.assertEqual(meal_msgs[7]['template_en'], 'The food is delicious.')
+        self.assertEqual(meal_msgs[7]['template_si'], 'කෑම ඉතා රසයි.')
+
+        # Category 8: Takeaway and special requests (87-92)
+        takeaway_msgs = cats['rest-takeaway-requests']
+        self.assertEqual(len(takeaway_msgs), 6)
+        self.assertEqual(takeaway_msgs[0]['template_en'], 'May I have this packed to take away?')
+        self.assertEqual(takeaway_msgs[0]['template_si'], 'මට මෙය රැගෙන යාමට ඇසුරුම් කරන්න පුළුවන් ද?')
+        self.assertEqual(takeaway_msgs[3]['template_en'], 'Is there Wi-Fi?')
+        self.assertEqual(takeaway_msgs[3]['template_si'], 'Wi-Fi තියෙනවා ද?')
+
+        # Category 9: Bill and payment (93-100)
+        bill_msgs = cats['rest-bill-payment']
+        self.assertEqual(len(bill_msgs), 8)
+        self.assertEqual(bill_msgs[0]['template_en'], 'May I have the bill, please?')
+        self.assertEqual(bill_msgs[0]['template_si'], 'කරුණාකර මට බිල දෙන්න.')
+        self.assertEqual(bill_msgs[7]['template_en'], 'Thank you, we enjoyed the meal.')
+        self.assertEqual(bill_msgs[7]['template_si'], 'ස්තූතියි, අපි කෑම රස විඳිමු.')
 
     def test_mobile_restaurant_ui_elements(self):
-        # Verify /mobile/restaurant renders all 4 restaurant category buttons and badge
+        # Verify /mobile/restaurant renders all 9 restaurant category buttons and badge
         resp = self.client.get('/mobile/restaurant')
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b'id="restaurant-category-selector-bar"', resp.data)
         self.assertIn(b'id="btn-cat-rest-basic-comm"', resp.data)
-        self.assertIn(b'id="btn-cat-rest-ordering"', resp.data)
-        self.assertIn(b'id="btn-cat-rest-allergies"', resp.data)
-        self.assertIn(b'id="btn-cat-rest-billing"', resp.data)
+        self.assertIn(b'id="btn-cat-rest-seating"', resp.data)
+        self.assertIn(b'id="btn-cat-rest-menu-ordering"', resp.data)
+        self.assertIn(b'id="btn-cat-rest-drinks"', resp.data)
+        self.assertIn(b'id="btn-cat-rest-dietary-allergies"', resp.data)
+        self.assertIn(b'id="btn-cat-rest-customizing"', resp.data)
+        self.assertIn(b'id="btn-cat-rest-during-meal"', resp.data)
+        self.assertIn(b'id="btn-cat-rest-takeaway-requests"', resp.data)
+        self.assertIn(b'id="btn-cat-rest-bill-payment"', resp.data)
         self.assertIn(b'Restaurant Message Criteria', resp.data)
-        self.assertIn(b'4 Categories', resp.data)
+        self.assertIn(b'9 Categories', resp.data)
         self.assertIn(b'id="modal-manual-restaurant-select"', resp.data)
         self.assertIn(b'gps-restaurant-sim-chip', resp.data)
 
