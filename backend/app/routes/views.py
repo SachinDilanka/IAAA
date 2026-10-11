@@ -65,6 +65,8 @@ def mobile_view(slug=None):
     categories = cfg.get('categories', []) if not auto_detect else []
     hospital_categories = cfg.get('hospital_categories', {}) if not auto_detect else {}
     bank_categories = cfg.get('bank_categories', {}) if not auto_detect else {}
+    restaurant_categories = cfg.get('restaurant_categories', {}) if not auto_detect else {}
+    supermarket_categories = cfg.get('supermarket_categories', {}) if not auto_detect else {}
 
     # If explicitly requested /mobile/bank
     if slug == 'bank' and not auto_detect:
@@ -73,6 +75,22 @@ def mobile_view(slug=None):
         category_name = cfg.get('category_name', '1. මූලික සන්නිවේදනය / Basic communication')
         categories = list(cfg.get('categories', []))
         bank_categories = dict(cfg.get('bank_categories', {}))
+
+    # If explicitly requested /mobile/restaurant
+    if slug == 'restaurant' and not auto_detect:
+        theme_color = cfg.get('theme_color', '#f59e0b')
+        bg_color = cfg.get('bg_color', '#fef3c7')
+        category_name = cfg.get('category_name', '1. මූලික සන්නිවේදනය / Basic communication')
+        categories = list(cfg.get('categories', []))
+        restaurant_categories = dict(cfg.get('restaurant_categories', {}))
+
+    # If explicitly requested /mobile/supermarket
+    if slug == 'supermarket' and not auto_detect:
+        theme_color = cfg.get('theme_color', '#10b981')
+        bg_color = cfg.get('bg_color', '#d1fae5')
+        category_name = cfg.get('category_name', '1. මූලික සන්නිවේදනය / Basic communication')
+        categories = list(cfg.get('categories', []))
+        supermarket_categories = dict(cfg.get('supermarket_categories', {}))
 
     return render_template(
         'mobile.html',
@@ -85,6 +103,8 @@ def mobile_view(slug=None):
         categories=categories,
         hospital_categories=hospital_categories,
         bank_categories=bank_categories,
+        restaurant_categories=restaurant_categories,
+        supermarket_categories=supermarket_categories,
         messages=messages,
         auto_detect=auto_detect
     )

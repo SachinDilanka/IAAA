@@ -1134,6 +1134,426 @@ def get_sri_lanka_restaurants(user_lat=None, user_lon=None):
             pass
     return restaurants
 
+# Leading Supermarket Chains & Outlets across Sri Lanka (Cargills Food City, Keells, Arpico, SPAR, GLOMARK, Laugfs)
+SRI_LANKA_SUPERMARKETS = [
+    {
+        'id': 'keells-union-place',
+        'name': 'Keells Super - Union Place',
+        'short_name': 'Keells Union Place',
+        'supermarket_name': 'Keells Super',
+        'chain': 'Keells Super',
+        'branch': 'Union Place',
+        'city': 'Union Place, Slave Island, Colombo 02',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.9180,
+        'lon': 79.8580,
+        'phone': '+94 11 230 3500',
+        'slug': 'supermarket',
+        'color': '#10b981'
+    },
+    {
+        'id': 'cargills-food-city-staples',
+        'name': 'Cargills Food City - Staples Street',
+        'short_name': 'Cargills Staples St',
+        'supermarket_name': 'Cargills Food City',
+        'chain': 'Cargills Food City',
+        'branch': 'Staples Street',
+        'city': 'Staples Street, Colombo 02',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.9192,
+        'lon': 79.8596,
+        'phone': '+94 11 242 7777',
+        'slug': 'supermarket',
+        'color': '#10b981'
+    },
+    {
+        'id': 'arpico-supercentre-hyde-park',
+        'name': 'Arpico Supercentre - Hyde Park Corner',
+        'short_name': 'Arpico Hyde Park',
+        'supermarket_name': 'Arpico Supercentre',
+        'chain': 'Arpico Supercentre',
+        'branch': 'Hyde Park Corner',
+        'city': 'Hyde Park Corner, Colombo 02',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.9168,
+        'lon': 79.8608,
+        'phone': '+94 11 268 2888',
+        'slug': 'supermarket',
+        'color': '#10b981'
+    },
+    {
+        'id': 'keells-crescat',
+        'name': 'Keells Super - Crescat Boulevard',
+        'short_name': 'Keells Crescat',
+        'supermarket_name': 'Keells Super',
+        'chain': 'Keells Super',
+        'branch': 'Crescat Boulevard',
+        'city': 'Galle Road, Kollupitiya, Colombo 03',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.9174,
+        'lon': 79.8488,
+        'phone': '+94 11 230 3501',
+        'slug': 'supermarket',
+        'color': '#10b981'
+    },
+    {
+        'id': 'cargills-food-city-kollupitiya',
+        'name': 'Cargills Food City - Kollupitiya',
+        'short_name': 'Cargills Kollupitiya',
+        'supermarket_name': 'Cargills Food City',
+        'chain': 'Cargills Food City',
+        'branch': 'Kollupitiya',
+        'city': 'Dharmapala Mawatha, Kollupitiya, Colombo 03',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.9085,
+        'lon': 79.8525,
+        'phone': '+94 11 257 3881',
+        'slug': 'supermarket',
+        'color': '#10b981'
+    },
+    {
+        'id': 'spar-supermarket-thalawathugoda',
+        'name': 'SPAR Supermarket - Thalawathugoda',
+        'short_name': 'SPAR Thalawathugoda',
+        'supermarket_name': 'SPAR Supermarket',
+        'chain': 'SPAR Supermarket',
+        'branch': 'Thalawathugoda',
+        'city': 'Pannipitiya Road, Thalawathugoda',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.8765,
+        'lon': 79.9320,
+        'phone': '+94 11 757 7727',
+        'slug': 'supermarket',
+        'color': '#10b981'
+    },
+    {
+        'id': 'glomark-kynsey-road',
+        'name': 'Softlogic GLOMARK - Kynsey Road',
+        'short_name': 'GLOMARK Kynsey Rd',
+        'supermarket_name': 'Softlogic GLOMARK',
+        'chain': 'Softlogic GLOMARK',
+        'branch': 'Kynsey Road',
+        'city': 'Kynsey Road, Borella, Colombo 08',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.9189,
+        'lon': 79.8732,
+        'phone': '+94 11 267 8900',
+        'slug': 'supermarket',
+        'color': '#10b981'
+    },
+    {
+        'id': 'laugfs-supermarket-havelock',
+        'name': 'Laugfs Supermarket - Havelock Town',
+        'short_name': 'Laugfs Havelock',
+        'supermarket_name': 'Laugfs Supermarket',
+        'chain': 'Laugfs Supermarket',
+        'branch': 'Havelock Town',
+        'city': 'Havelock Road, Colombo 05',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.8850,
+        'lon': 79.8640,
+        'phone': '+94 11 255 6010',
+        'slug': 'supermarket',
+        'color': '#10b981'
+    },
+    {
+        'id': 'keells-bambalapitiya',
+        'name': 'Keells Super - Bambalapitiya',
+        'short_name': 'Keells Bambalapitiya',
+        'supermarket_name': 'Keells Super',
+        'chain': 'Keells Super',
+        'branch': 'Bambalapitiya',
+        'city': 'Galle Road, Bambalapitiya, Colombo 04',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.8920,
+        'lon': 79.8550,
+        'phone': '+94 11 258 7632',
+        'slug': 'supermarket',
+        'color': '#10b981'
+    },
+    {
+        'id': 'cargills-food-city-wellawatte',
+        'name': 'Cargills Food City - Wellawatte',
+        'short_name': 'Cargills Wellawatte',
+        'supermarket_name': 'Cargills Food City',
+        'chain': 'Cargills Food City',
+        'branch': 'Wellawatte',
+        'city': 'Galle Road, Wellawatte, Colombo 06',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.8745,
+        'lon': 79.8610,
+        'phone': '+94 11 236 1234',
+        'slug': 'supermarket',
+        'color': '#10b981'
+    },
+    {
+        'id': 'arpico-supercentre-battaramulla',
+        'name': 'Arpico Supercentre - Battaramulla',
+        'short_name': 'Arpico Battaramulla',
+        'supermarket_name': 'Arpico Supercentre',
+        'chain': 'Arpico Supercentre',
+        'branch': 'Battaramulla',
+        'city': 'Main Street, Battaramulla',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.8995,
+        'lon': 79.9190,
+        'phone': '+94 11 286 5432',
+        'slug': 'supermarket',
+        'color': '#10b981'
+    },
+    {
+        'id': 'keells-rajagiriya',
+        'name': 'Keells Super - Rajagiriya',
+        'short_name': 'Keells Rajagiriya',
+        'supermarket_name': 'Keells Super',
+        'chain': 'Keells Super',
+        'branch': 'Rajagiriya',
+        'city': 'Sri Jayawardenepura Mw, Rajagiriya',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.9090,
+        'lon': 79.8960,
+        'phone': '+94 11 286 9870',
+        'slug': 'supermarket',
+        'color': '#10b981'
+    },
+    {
+        'id': 'cargills-food-city-dehiwala',
+        'name': 'Cargills Food City - Dehiwala',
+        'short_name': 'Cargills Dehiwala',
+        'supermarket_name': 'Cargills Food City',
+        'chain': 'Cargills Food City',
+        'branch': 'Dehiwala',
+        'city': 'Galle Road, Dehiwala',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.8520,
+        'lon': 79.8660,
+        'phone': '+94 11 271 4567',
+        'slug': 'supermarket',
+        'color': '#10b981'
+    },
+    {
+        'id': 'arpico-supercentre-dehiwala',
+        'name': 'Arpico Supercentre - Dehiwala',
+        'short_name': 'Arpico Dehiwala',
+        'supermarket_name': 'Arpico Supercentre',
+        'chain': 'Arpico Supercentre',
+        'branch': 'Dehiwala',
+        'city': 'Galle Road, Dehiwala Junction',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.8480,
+        'lon': 79.8675,
+        'phone': '+94 11 273 8900',
+        'slug': 'supermarket',
+        'color': '#10b981'
+    },
+    {
+        'id': 'keells-nugegoda',
+        'name': 'Keells Super - Nugegoda',
+        'short_name': 'Keells Nugegoda',
+        'supermarket_name': 'Keells Super',
+        'chain': 'Keells Super',
+        'branch': 'Nugegoda',
+        'city': 'Stanley Thilakarathne Mw, Nugegoda',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.8715,
+        'lon': 79.8985,
+        'phone': '+94 11 281 2345',
+        'slug': 'supermarket',
+        'color': '#10b981'
+    },
+    {
+        'id': 'cargills-food-city-nugegoda',
+        'name': 'Cargills Food City - Nugegoda Super',
+        'short_name': 'Cargills Nugegoda',
+        'supermarket_name': 'Cargills Food City',
+        'chain': 'Cargills Food City',
+        'branch': 'Nugegoda',
+        'city': 'High Level Road, Nugegoda',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.8730,
+        'lon': 79.8940,
+        'phone': '+94 11 282 3456',
+        'slug': 'supermarket',
+        'color': '#10b981'
+    },
+    {
+        'id': 'spar-supermarket-kalubowila',
+        'name': 'SPAR Supermarket - Kalubowila',
+        'short_name': 'SPAR Kalubowila',
+        'supermarket_name': 'SPAR Supermarket',
+        'chain': 'SPAR Supermarket',
+        'branch': 'Kalubowila',
+        'city': 'Hospital Road, Kalubowila, Dehiwala',
+        'district': 'Colombo',
+        'province': 'Western',
+        'lat': 6.8640,
+        'lon': 79.8780,
+        'phone': '+94 11 757 7730',
+        'slug': 'supermarket',
+        'color': '#10b981'
+    },
+    {
+        'id': 'cargills-food-city-kandy',
+        'name': 'Cargills Food City - Kandy City Centre',
+        'short_name': 'Cargills KCC Kandy',
+        'supermarket_name': 'Cargills Food City',
+        'chain': 'Cargills Food City',
+        'branch': 'Kandy City Centre',
+        'city': 'Dalada Veediya, Kandy',
+        'district': 'Kandy',
+        'province': 'Central',
+        'lat': 7.2936,
+        'lon': 80.6358,
+        'phone': '+94 81 220 5400',
+        'slug': 'supermarket',
+        'color': '#10b981'
+    },
+    {
+        'id': 'keells-kandy-peradeniya',
+        'name': 'Keells Super - Peradeniya Road, Kandy',
+        'short_name': 'Keells Peradeniya Rd',
+        'supermarket_name': 'Keells Super',
+        'chain': 'Keells Super',
+        'branch': 'Peradeniya Road',
+        'city': 'William Gopallawa Mw, Kandy',
+        'district': 'Kandy',
+        'province': 'Central',
+        'lat': 7.2840,
+        'lon': 80.6270,
+        'phone': '+94 81 223 4567',
+        'slug': 'supermarket',
+        'color': '#10b981'
+    },
+    {
+        'id': 'arpico-supercentre-kandy',
+        'name': 'Arpico Supercentre - Kandy',
+        'short_name': 'Arpico Kandy',
+        'supermarket_name': 'Arpico Supercentre',
+        'chain': 'Arpico Supercentre',
+        'branch': 'Kandy',
+        'city': 'Katugastota Road, Kandy',
+        'district': 'Kandy',
+        'province': 'Central',
+        'lat': 7.3050,
+        'lon': 80.6290,
+        'phone': '+94 81 221 2345',
+        'slug': 'supermarket',
+        'color': '#10b981'
+    },
+    {
+        'id': 'keells-galle-kaluwella',
+        'name': 'Keells Super - Galle',
+        'short_name': 'Keells Galle',
+        'supermarket_name': 'Keells Super',
+        'chain': 'Keells Super',
+        'branch': 'Galle',
+        'city': 'Colombo Road, Kaluwella, Galle',
+        'district': 'Galle',
+        'province': 'Southern',
+        'lat': 6.0410,
+        'lon': 80.2150,
+        'phone': '+94 91 224 5678',
+        'slug': 'supermarket',
+        'color': '#10b981'
+    },
+    {
+        'id': 'cargills-food-city-galle-fort',
+        'name': 'Cargills Food City - Galle Fort',
+        'short_name': 'Cargills Galle',
+        'supermarket_name': 'Cargills Food City',
+        'chain': 'Cargills Food City',
+        'branch': 'Galle Fort',
+        'city': 'Church Street, Galle Fort',
+        'district': 'Galle',
+        'province': 'Southern',
+        'lat': 6.0315,
+        'lon': 80.2170,
+        'phone': '+94 91 223 4123',
+        'slug': 'supermarket',
+        'color': '#10b981'
+    },
+    {
+        'id': 'keells-negombo-chilaw-rd',
+        'name': 'Keells Super - Negombo',
+        'short_name': 'Keells Negombo',
+        'supermarket_name': 'Keells Super',
+        'chain': 'Keells Super',
+        'branch': 'Negombo',
+        'city': 'Chilaw Road, Periyamulla, Negombo',
+        'district': 'Gampaha',
+        'province': 'Western',
+        'lat': 7.2180,
+        'lon': 79.8450,
+        'phone': '+94 31 223 1234',
+        'slug': 'supermarket',
+        'color': '#10b981'
+    },
+    {
+        'id': 'cargills-food-city-negombo',
+        'name': 'Cargills Food City - Negombo',
+        'short_name': 'Cargills Negombo',
+        'supermarket_name': 'Cargills Food City',
+        'chain': 'Cargills Food City',
+        'branch': 'Negombo',
+        'city': 'Greens Road, Negombo',
+        'district': 'Gampaha',
+        'province': 'Western',
+        'lat': 7.2105,
+        'lon': 79.8390,
+        'phone': '+94 31 222 3456',
+        'slug': 'supermarket',
+        'color': '#10b981'
+    },
+    {
+        'id': 'arpico-supercentre-gampaha',
+        'name': 'Arpico Supercentre - Gampaha',
+        'short_name': 'Arpico Gampaha',
+        'supermarket_name': 'Arpico Supercentre',
+        'chain': 'Arpico Supercentre',
+        'branch': 'Gampaha',
+        'city': 'Ja-Ela Road, Gampaha',
+        'district': 'Gampaha',
+        'province': 'Western',
+        'lat': 7.0890,
+        'lon': 79.9920,
+        'phone': '+94 33 223 4567',
+        'slug': 'supermarket',
+        'color': '#10b981'
+    }
+]
+
+def get_sri_lanka_supermarkets(user_lat=None, user_lon=None):
+    """Returns list of Sri Lanka supermarkets with calculated distances if coordinates are given."""
+    supermarkets = [dict(s) for s in SRI_LANKA_SUPERMARKETS]
+    if user_lat is not None and user_lon is not None:
+        try:
+            u_lat = float(user_lat)
+            u_lon = float(user_lon)
+            for s in supermarkets:
+                d = calculate_distance_km(u_lat, u_lon, s['lat'], s['lon'])
+                s['distance_km'] = round(d, 2)
+                s['distance_m'] = round(d * 1000)
+            supermarkets.sort(key=lambda x: x['distance_km'])
+        except Exception:
+            pass
+    return supermarkets
+
 # Predefined reference coordinates (Primary in Sri Lanka, with aliases for tests)
 PREDEFINED_COORDINATES = {
     'hospital': {'lat': 6.9197, 'lon': 79.8693, 'name': 'National Hospital of Sri Lanka (NHSL), Colombo', 'slug': 'hospital'},
@@ -3909,6 +4329,289 @@ RESTAURANT_COMMUNICATION_CATEGORIES = [
     }
 ]
 
+# Supermarket Category 1: 1. මූලික සන්නිවේදනය / Basic communication (6 Messages)
+SUPERMARKET_BASIC_COMMUNICATION_MESSAGES = [
+    {
+        "id": 1,
+        "template": "I am deaf / non-verbal.",
+        "template_en": "I am deaf / non-verbal.",
+        "template_si": "මම බිහිරි / කතා කිරීමට අපහසු අයෙක්.",
+        "icon": "fa-ear-deaf",
+        "category": "Basic communication"
+    },
+    {
+        "id": 2,
+        "template": "Please write down or point on my phone.",
+        "template_en": "Please write down or point on my phone.",
+        "template_si": "කරුණාකර එය ලියන්න හෝ මගේ දුරකථනයේ පෙන්වන්න.",
+        "icon": "fa-pen-to-square",
+        "category": "Basic communication"
+    },
+    {
+        "id": 3,
+        "template": "Where is the customer service desk?",
+        "template_en": "Where is the customer service desk?",
+        "template_si": "පාරිභෝගික සේවා කවුන්ටරය කොහේද?",
+        "icon": "fa-circle-info",
+        "category": "Basic communication"
+    },
+    {
+        "id": 4,
+        "template": "Could you please help me find an item?",
+        "template_en": "Could you please help me find an item?",
+        "template_si": "මට භාණ්ඩයක් සොයා ගැනීමට උදව් කළ හැකිද?",
+        "icon": "fa-magnifying-glass",
+        "category": "Basic communication"
+    },
+    {
+        "id": 5,
+        "template": "Do you have shopping baskets or carts available?",
+        "template_en": "Do you have shopping baskets or carts available?",
+        "template_si": "සාප්පු බාස්කට් හෝ කරත්ත තිබේද?",
+        "icon": "fa-basket-shopping",
+        "category": "Basic communication"
+    },
+    {
+        "id": 6,
+        "template": "Thank you for your assistance.",
+        "template_en": "Thank you for your assistance.",
+        "template_si": "ඔබගේ උදව්වට ස්තූතියි.",
+        "icon": "fa-handshake",
+        "category": "Basic communication"
+    }
+]
+
+# Supermarket Category 2: 2. භාණ්ඩ සහ අන්තරාල සෙවීම / Finding items and aisles (9 Messages)
+SUPERMARKET_FINDING_ITEMS_MESSAGES = [
+    {
+        "id": 1,
+        "template": "Where can I find milk and dairy products?",
+        "template_en": "Where can I find milk and dairy products?",
+        "template_si": "කිරි සහ කිරි නිෂ්පාදන තිබෙන්නේ කොහේද?",
+        "icon": "fa-bottle-water",
+        "category": "Finding items and aisles"
+    },
+    {
+        "id": 2,
+        "template": "Where is the fresh produce (fruits and vegetables) section?",
+        "template_en": "Where is the fresh produce (fruits and vegetables) section?",
+        "template_si": "නැවුම් එළවළු සහ පලතුරු අංශය කොහේද?",
+        "icon": "fa-apple-whole",
+        "category": "Finding items and aisles"
+    },
+    {
+        "id": 3,
+        "template": "Where is the rice and grains aisle?",
+        "template_en": "Where is the rice and grains aisle?",
+        "template_si": "සහල් සහ ධාන්‍ය වර්ග ඇති අන්තරාලය කොහේද?",
+        "icon": "fa-seedling",
+        "category": "Finding items and aisles"
+    },
+    {
+        "id": 4,
+        "template": "Where are snacks, biscuits, and confectionery?",
+        "template_en": "Where are snacks, biscuits, and confectionery?",
+        "template_si": "ස්නැක්ස්, බිස්කට් සහ රසකැවිලි කොහේද?",
+        "icon": "fa-cookie-bite",
+        "category": "Finding items and aisles"
+    },
+    {
+        "id": 5,
+        "template": "Where are household cleaners and detergents?",
+        "template_en": "Where are household cleaners and detergents?",
+        "template_si": "ගෘහ පිරිසිදුකාරක සහ ඩිටර්ජන්ට් කොහේද?",
+        "icon": "fa-pump-soap",
+        "category": "Finding items and aisles"
+    },
+    {
+        "id": 6,
+        "template": "Where is the bakery and fresh bread?",
+        "template_en": "Where is the bakery and fresh bread?",
+        "template_si": "බේකරිය සහ නැවුම් පාන් කොහේද?",
+        "icon": "fa-bread-slice",
+        "category": "Finding items and aisles"
+    },
+    {
+        "id": 7,
+        "template": "Where are meat, chicken, and seafood?",
+        "template_en": "Where are meat, chicken, and seafood?",
+        "template_si": "මස්, කුකුළු මස් සහ මුහුදු ආහාර කොහේද?",
+        "icon": "fa-drumstick-bite",
+        "category": "Finding items and aisles"
+    },
+    {
+        "id": 8,
+        "template": "Is this item in stock or out of stock?",
+        "template_en": "Is this item in stock or out of stock?",
+        "template_si": "මෙම භාණ්ඩය තොගයේ තිබේද නැතිනම් අවසන් වී ඇත්ද?",
+        "icon": "fa-boxes-stacked",
+        "category": "Finding items and aisles"
+    },
+    {
+        "id": 9,
+        "template": "Can you check the back storeroom for more?",
+        "template_en": "Can you check the back storeroom for more?",
+        "template_si": "තව තිබේදැයි පසුපස ගබඩාව පරීක්ෂා කළ හැකිද?",
+        "icon": "fa-warehouse",
+        "category": "Finding items and aisles"
+    }
+]
+
+# Supermarket Category 3: 3. මිල ගණන් සහ බර කිරුම් / Pricing and weighing (6 Messages)
+SUPERMARKET_PRICING_WEIGHING_MESSAGES = [
+    {
+        "id": 1,
+        "template": "How much does this item cost?",
+        "template_en": "How much does this item cost?",
+        "template_si": "මේ භාණ්ඩයේ මිල කීයද?",
+        "icon": "fa-tag",
+        "category": "Pricing and weighing"
+    },
+    {
+        "id": 2,
+        "template": "Can you weigh this produce for me?",
+        "template_en": "Can you weigh this produce for me?",
+        "template_si": "කරුණාකර මේවායේ බර කිරා මිල ස්ටිකරය අලවා දිය හැකිද?",
+        "icon": "fa-scale-balanced",
+        "category": "Pricing and weighing"
+    },
+    {
+        "id": 3,
+        "template": "Is there a discount or special promotion on this?",
+        "template_en": "Is there a discount or special promotion on this?",
+        "template_si": "මේ සඳහා වට්ටමක් හෝ විශේෂ දීමනාවක් තිබේද?",
+        "icon": "fa-percent",
+        "category": "Pricing and weighing"
+    },
+    {
+        "id": 4,
+        "template": "Where is the price barcode scanner?",
+        "template_en": "Where is the price barcode scanner?",
+        "template_si": "මිල තීරු කේත ස්කෑනරය කොහේද?",
+        "icon": "fa-barcode",
+        "category": "Pricing and weighing"
+    },
+    {
+        "id": 5,
+        "template": "What is the expiration or expiry date?",
+        "template_en": "What is the expiration or expiry date?",
+        "template_si": "කල් ඉකුත්වීමේ දිනය කුමක්ද?",
+        "icon": "fa-calendar-xmark",
+        "category": "Pricing and weighing"
+    },
+    {
+        "id": 6,
+        "template": "Can I return or exchange this item?",
+        "template_en": "Can I return or exchange this item?",
+        "template_si": "මට මෙම භාණ්ඩය මාරු කිරීමට හෝ ආපසු දීමට හැකිද?",
+        "icon": "fa-arrow-rotate-left",
+        "category": "Pricing and weighing"
+    }
+]
+
+# Supermarket Category 4: 4. මුදල් ගෙවීම සහ චෙක්අවුට් / Checkout and payment (7 Messages)
+SUPERMARKET_CHECKOUT_PAYMENT_MESSAGES = [
+    {
+        "id": 1,
+        "template": "I would like to check out now.",
+        "template_en": "I would like to check out now.",
+        "template_si": "මට දැන් මුදල් ගෙවීමට අවශ්‍යයි.",
+        "icon": "fa-cash-register",
+        "category": "Checkout and payment"
+    },
+    {
+        "id": 2,
+        "template": "I will pay with credit or debit card.",
+        "template_en": "I will pay with credit or debit card.",
+        "template_si": "මම ක්‍රෙඩිට් හෝ ඩෙබිට් කාඩ්පතකින් ගෙවන්නම්.",
+        "icon": "fa-credit-card",
+        "category": "Checkout and payment"
+    },
+    {
+        "id": 3,
+        "template": "I will pay in cash.",
+        "template_en": "I will pay in cash.",
+        "template_si": "මම මුදලින් ගෙවන්නම්.",
+        "icon": "fa-money-bill-wave",
+        "category": "Checkout and payment"
+    },
+    {
+        "id": 4,
+        "template": "Do you accept loyalty points or club card?",
+        "template_en": "Do you accept loyalty points or club card?",
+        "template_si": "ලෝයල්ටි ලකුණු හෝ ක්ලබ් කාඩ්පත පිළිගන්නවාද?",
+        "icon": "fa-id-card-clip",
+        "category": "Checkout and payment"
+    },
+    {
+        "id": 5,
+        "template": "I have my own reusable shopping bag.",
+        "template_en": "I have my own reusable shopping bag.",
+        "template_si": "මා ළඟ නැවත භාවිත කළ හැකි සාප්පු බෑගයක් ඇත.",
+        "icon": "fa-bag-shopping",
+        "category": "Checkout and payment"
+    },
+    {
+        "id": 6,
+        "template": "Please give me a printed receipt.",
+        "template_en": "Please give me a printed receipt.",
+        "template_si": "කරුණාකර මට මුද්‍රිත රිසිට්පතක් ලබා දෙන්න.",
+        "icon": "fa-receipt",
+        "category": "Checkout and payment"
+    },
+    {
+        "id": 7,
+        "template": "Can you help me pack the groceries?",
+        "template_en": "Can you help me pack the groceries?",
+        "template_si": "බඩු බෑග්වලට අසුරා ගැනීමට උදව් කළ හැකිද?",
+        "icon": "fa-box-open",
+        "category": "Checkout and payment"
+    }
+]
+
+SUPERMARKET_COMMUNICATION_CATEGORIES = [
+    {
+        'id': 'sm-basic-comm',
+        'key': 'sm-basic-comm',
+        'name': '1. මූලික සන්නිවේදනය / Basic communication',
+        'name_si': 'මූලික සන්නිවේදනය',
+        'name_en': 'Basic communication',
+        'icon': 'fa-comments',
+        'count': len(SUPERMARKET_BASIC_COMMUNICATION_MESSAGES),
+        'messages': SUPERMARKET_BASIC_COMMUNICATION_MESSAGES
+    },
+    {
+        'id': 'sm-finding-items',
+        'key': 'sm-finding-items',
+        'name': '2. භාණ්ඩ සහ අන්තරාල සෙවීම / Finding items & aisles',
+        'name_si': 'භාණ්ඩ සහ අන්තරාල සෙවීම',
+        'name_en': 'Finding items and aisles',
+        'icon': 'fa-boxes-stacked',
+        'count': len(SUPERMARKET_FINDING_ITEMS_MESSAGES),
+        'messages': SUPERMARKET_FINDING_ITEMS_MESSAGES
+    },
+    {
+        'id': 'sm-pricing-weights',
+        'key': 'sm-pricing-weights',
+        'name': '3. මිල ගණන් සහ බර කිරුම් / Pricing & weighing',
+        'name_si': 'මිල ගණන් සහ බර කිරුම්',
+        'name_en': 'Pricing and weighing',
+        'icon': 'fa-scale-balanced',
+        'count': len(SUPERMARKET_PRICING_WEIGHING_MESSAGES),
+        'messages': SUPERMARKET_PRICING_WEIGHING_MESSAGES
+    },
+    {
+        'id': 'sm-checkout-payment',
+        'key': 'sm-checkout-payment',
+        'name': '4. මුදල් ගෙවීම සහ චෙක්අවුට් / Checkout & payment',
+        'name_si': 'මුදල් ගෙවීම සහ චෙක්අවුට්',
+        'name_en': 'Checkout and payment',
+        'icon': 'fa-cash-register',
+        'count': len(SUPERMARKET_CHECKOUT_PAYMENT_MESSAGES),
+        'messages': SUPERMARKET_CHECKOUT_PAYMENT_MESSAGES
+    }
+]
+
 # Predefined location messages and styling presets
 LOCATION_PRESETS = {
     'hospital': {
@@ -3944,6 +4647,16 @@ LOCATION_PRESETS = {
         'badge_icon': 'fa-cart-shopping',
         'theme_color': '#10b981',
         'bg_color': '#d1fae5',
+        'category_name': '1. මූලික සන්නිවේදනය / Basic communication',
+        'category_name_si': 'මූලික සන්නිවේදනය',
+        'category_name_en': 'Basic communication',
+        'categories': SUPERMARKET_COMMUNICATION_CATEGORIES,
+        'supermarket_categories': {
+            'sm-basic-comm': SUPERMARKET_BASIC_COMMUNICATION_MESSAGES,
+            'sm-finding-items': SUPERMARKET_FINDING_ITEMS_MESSAGES,
+            'sm-pricing-weights': SUPERMARKET_PRICING_WEIGHING_MESSAGES,
+            'sm-checkout-payment': SUPERMARKET_CHECKOUT_PAYMENT_MESSAGES,
+        },
         'messages': []
     },
     'restaurant': {
@@ -4033,9 +4746,11 @@ def _attach_preset(result, slug, lat=None, lon=None):
     result['hospital_categories'] = preset.get('hospital_categories', {})
     result['bank_categories'] = preset.get('bank_categories', {})
     result['restaurant_categories'] = preset.get('restaurant_categories', {})
+    result['supermarket_categories'] = preset.get('supermarket_categories', {})
     result['is_hospital'] = (slug == 'hospital')
     result['is_bank'] = (slug == 'bank')
     result['is_restaurant'] = (slug == 'restaurant')
+    result['is_supermarket'] = (slug == 'supermarket')
     result['is_predefined'] = (slug in ['hospital', 'supermarket', 'restaurant', 'bank', 'pharmacy'])
     if lat is not None:
         result['lat'] = float(lat)
@@ -4045,6 +4760,7 @@ def _attach_preset(result, slug, lat=None, lon=None):
     result['sri_lanka_hospitals'] = SRI_LANKA_HOSPITALS
     result['sri_lanka_banks'] = SRI_LANKA_BANKS
     result['sri_lanka_restaurants'] = SRI_LANKA_RESTAURANTS
+    result['sri_lanka_supermarkets'] = SRI_LANKA_SUPERMARKETS
     return result
 
 def select_hospital_by_id(hospital_id=None, name=None):
@@ -4164,6 +4880,45 @@ def select_restaurant_by_id(restaurant_id=None, name=None):
     }
     return _attach_preset(res, 'restaurant', lat, lon)
 
+def select_supermarket_by_id(supermarket_id=None, name=None):
+    """
+    Manually selects a Sri Lanka supermarket by ID or name and returns
+    preset payload.
+    """
+    matched = None
+    if supermarket_id:
+        for s in SRI_LANKA_SUPERMARKETS:
+            if s['id'] == supermarket_id:
+                matched = s
+                break
+    if not matched and name:
+        name_l = name.lower()
+        for s in SRI_LANKA_SUPERMARKETS:
+            if name_l in s['name'].lower() or name_l in s['short_name'].lower() or name_l in s.get('supermarket_name', '').lower() or name_l in s.get('chain', '').lower():
+                matched = s
+                break
+    if not matched:
+        matched = SRI_LANKA_SUPERMARKETS[0]
+
+    lat = matched['lat']
+    lon = matched['lon']
+    res = {
+        'success': True,
+        'detected_slug': 'supermarket',
+        'is_supermarket': True,
+        'is_predefined': True,
+        'manually_selected': True,
+        'poi_name': matched['name'],
+        'location_name': 'Supermarket & Groceries',
+        'address': f"{matched['name']}, {matched['city']}, {matched['district']} District",
+        'supermarket_phone': matched.get('phone', ''),
+        'supermarket_info': matched,
+        'area_name': f"{matched['city']}, Sri Lanka",
+        'lat': lat,
+        'lon': lon
+    }
+    return _attach_preset(res, 'supermarket', lat, lon)
+
 def detect_place_by_coordinates(lat, lon):
     """
     Attempts to reverse geocode lat/lon into a location category:
@@ -4173,7 +4928,7 @@ def detect_place_by_coordinates(lat, lon):
     lat_f = float(lat)
     lon_f = float(lon)
     try:
-        # Find closest venue among known Sri Lanka hospitals, banks, and restaurants within ~0.8km (800m)
+        # Find closest venue among known Sri Lanka hospitals, banks, restaurants, and supermarkets within ~0.8km (800m)
         closest_candidates = []
 
         for hosp in SRI_LANKA_HOSPITALS:
@@ -4190,6 +4945,11 @@ def detect_place_by_coordinates(lat, lon):
             dist = calculate_distance_km(lat_f, lon_f, rest['lat'], rest['lon'])
             if dist <= 0.8:
                 closest_candidates.append((dist, 'restaurant', rest))
+
+        for sm in SRI_LANKA_SUPERMARKETS:
+            dist = calculate_distance_km(lat_f, lon_f, sm['lat'], sm['lon'])
+            if dist <= 0.8:
+                closest_candidates.append((dist, 'supermarket', sm))
 
         if closest_candidates:
             closest_candidates.sort(key=lambda x: x[0])
@@ -4227,6 +4987,17 @@ def detect_place_by_coordinates(lat, lon):
                     'restaurant_info': best_item
                 }
                 return _attach_preset(res, 'restaurant', lat_f, lon_f)
+            elif best_type == 'supermarket':
+                res = {
+                    'success': True,
+                    'detected_slug': 'supermarket',
+                    'is_supermarket': True,
+                    'poi_name': best_item['name'],
+                    'address': f"{best_item['name']}, {best_item['city']} ({round(best_dist*1000)}m away)",
+                    'supermarket_phone': best_item.get('phone', ''),
+                    'supermarket_info': best_item
+                }
+                return _attach_preset(res, 'supermarket', lat_f, lon_f)
 
         # Check if coordinates match predefined simulation points within ~0.005 deg (~500m)
         for key, ref in PREDEFINED_COORDINATES.items():

@@ -148,7 +148,7 @@
                 
                 <!-- Floating Map Instruction Badge -->
                 <div class="map-tap-instruction-badge" id="map-tap-instruction-badge">
-                  <span style="color:#ef4444; font-weight:700;"><i class="fa-solid fa-square-h"></i> Hospitals (Red)</span> &bull; <span style="color:#2563eb; font-weight:700;"><i class="fa-solid fa-building-columns"></i> Banks (Blue)</span> &bull; <span style="color:#f59e0b; font-weight:700;"><i class="fa-solid fa-utensils"></i> Restaurants (Amber)</span> &bull; Tap pin to select
+                  <span style="color:#ef4444; font-weight:700;"><i class="fa-solid fa-square-h"></i> Hospitals (Red)</span> &bull; <span style="color:#2563eb; font-weight:700;"><i class="fa-solid fa-building-columns"></i> Banks (Blue)</span> &bull; <span style="color:#f59e0b; font-weight:700;"><i class="fa-solid fa-utensils"></i> Restaurants (Amber)</span> &bull; <span style="color:#10b981; font-weight:700;"><i class="fa-solid fa-cart-shopping"></i> Supermarkets (Green)</span> &bull; Tap pin to select
                 </div>
 
                 <!-- Map Overlay Floating Recenter, Hospital, Bank & Restaurant Controls -->
@@ -165,6 +165,9 @@
                   <button id="map-sl-restaurants-quick-btn" class="map-overlay-btn" type="button" title="Show All Sri Lanka Restaurants (Amber)" style="color:#f59e0b;">
                     <i class="fa-solid fa-utensils"></i>
                   </button>
+                  <button id="map-sl-supermarkets-quick-btn" class="map-overlay-btn" type="button" title="Show All Sri Lanka Supermarkets (Green)" style="color:#10b981;">
+                    <i class="fa-solid fa-cart-shopping"></i>
+                  </button>
                   <button id="map-hospitals-focus-btn" class="map-overlay-btn" type="button" title="Focus Colombo Venues" style="color:#6366f1;">
                     <i class="fa-solid fa-hospital"></i>
                   </button>
@@ -175,27 +178,27 @@
               </div>
 
               <!-- Integrated Map Hospital, Bank & Restaurant Quick Selector Strip (Select Directly From Map) -->
-              <div class="map-hospital-selector-strip" id="map-hospital-selector-strip" role="region" aria-label="Select Hospital, Bank or Restaurant from Map">
+              <div class="map-hospital-selector-strip" id="map-hospital-selector-strip" role="region" aria-label="Select Hospital, Bank, Restaurant or Supermarket from Map">
                 <div class="map-strip-header">
                   <span class="map-strip-title">
-                    <i class="fa-solid fa-map-location-dot" style="color:#2563eb;"></i> Select on Map (🔴 Hospitals | 🔵 Banks | 🟠 Restaurants):
+                    <i class="fa-solid fa-map-location-dot" style="color:#2563eb;"></i> Select on Map (🔴 Hospitals | 🔵 Banks | 🟠 Restaurants | 🟢 Supermarkets):
                   </span>
                   <span class="map-strip-badge" id="map-strip-badge">Tap Pin on Map</span>
                 </div>
-                <div class="map-hospital-pills-row" id="map-hospital-pills-row" role="tablist" aria-label="Sri Lanka Hospitals on Map">
-                  <!-- Dynamically populated hospital pills -->
+                <div class="map-hospital-pills-row" id="map-hospital-pills-row" role="tablist" aria-label="Sri Lanka Venues on Map">
+                  <!-- Dynamically populated venue pills -->
                 </div>
               </div>
 
               <!-- Dynamic Area Status Bar -->
               <footer class="area-map-status-bar" id="map-status-bar">
                 <i class="fa-solid fa-circle-info" id="map-status-icon"></i>
-                <span id="map-status-text">Acquiring area coordinates and nearby hospitals...</span>
+                <span id="map-status-text">Acquiring area coordinates and nearby venues...</span>
               </footer>
             </article>
 
-            <!-- Section: Message Criteria (Revealed when a Hospital, Bank, or Restaurant is detected or selected) -->
-            <div id="section-category-criteria" class="{% if location_slug in ['hospital', 'bank', 'restaurant'] and not auto_detect %}category-criteria-shown{% else %}category-criteria-hidden{% endif %}">
+            <!-- Section: Message Criteria (Revealed when a Hospital, Bank, Restaurant, or Supermarket is detected or selected) -->
+            <div id="section-category-criteria" class="{% if location_slug in ['hospital', 'bank', 'restaurant', 'supermarket'] and not auto_detect %}category-criteria-shown{% else %}category-criteria-hidden{% endif %}">
               <div class="section-heading-wrap" style="display: flex; flex-direction: column; gap: 4px; margin: 14px 0 10px 0;">
                 <div style="display: flex; align-items: center; justify-content: space-between;">
                   <h3 class="section-messages-title" id="section-messages-heading" style="margin: 0; font-size: 15px; font-weight: 800;">
@@ -203,15 +206,19 @@
                     <i class="fa-solid fa-building-columns" style="color: #2563eb; margin-right: 6px;"></i> Bank Message Criteria / බැංකු කාණ්ඩ
                     {% elif location_slug == 'restaurant' %}
                     <i class="fa-solid fa-utensils" style="color: #f59e0b; margin-right: 6px;"></i> Restaurant Message Criteria / ආපනශාලා කාණ්ඩ
+                    {% elif location_slug == 'supermarket' %}
+                    <i class="fa-solid fa-cart-shopping" style="color: #10b981; margin-right: 6px;"></i> Supermarket Message Criteria / සුපිරි වෙළඳසැල් කාණ්ඩ
                     {% else %}
                     <i class="fa-solid fa-list-check" style="color: #ef4444; margin-right: 6px;"></i> Hospital Message Criteria / රෝහල් කාණ්ඩ
                     {% endif %}
                   </h3>
-                  <span id="hospital-status-badge" class="hospital-status-badge {% if location_slug == 'bank' %}badge-bank-theme{% elif location_slug == 'restaurant' %}badge-restaurant-theme{% endif %}" style="display: inline-flex;">
+                  <span id="hospital-status-badge" class="hospital-status-badge {% if location_slug == 'bank' %}badge-bank-theme{% elif location_slug == 'restaurant' %}badge-restaurant-theme{% elif location_slug == 'supermarket' %}badge-supermarket-theme{% endif %}" style="display: inline-flex;">
                     {% if location_slug == 'bank' %}
                     <i class="fa-solid fa-building-columns"></i> 10 Categories
                     {% elif location_slug == 'restaurant' %}
                     <i class="fa-solid fa-utensils"></i> 9 Categories
+                    {% elif location_slug == 'supermarket' %}
+                    <i class="fa-solid fa-cart-shopping"></i> 4 Categories
                     {% else %}
                     <i class="fa-solid fa-square-h"></i> 9 Categories
                     {% endif %}
@@ -223,7 +230,7 @@
               </div>
 
               <!-- Hospital Message Criteria Buttons (9 buttons) -->
-              <div id="category-selector-bar" class="category-selector-bar {% if location_slug in ['bank', 'restaurant'] %}bar-hidden{% endif %}">
+              <div id="category-selector-bar" class="category-selector-bar {% if location_slug in ['bank', 'restaurant', 'supermarket'] %}bar-hidden{% endif %}">
                 <button type="button" class="category-active-btn" id="btn-cat-basic-comm" data-cat="basic-comm" aria-label="1. මූලික සන්නිවේදනය / Basic communication" title="Tap to view suggested messages">
                   <i class="fa-solid fa-comments"></i>
                   <span class="cat-btn-text">1. මූලික සන්නිවේදනය / Basic communication</span>
@@ -482,16 +489,55 @@
                   </div>
                 </button>
               </div>
+
+              <!-- Supermarket Message Criteria Buttons (4 buttons) -->
+              <div id="supermarket-category-selector-bar" class="category-selector-bar {% if location_slug != 'supermarket' %}bar-hidden{% endif %}">
+                <button type="button" class="category-active-btn category-supermarket-btn" id="btn-cat-sm-basic-comm" data-cat="sm-basic-comm" aria-label="1. මූලික සන්නිවේදනය / Basic communication" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-comments"></i>
+                  <span class="cat-btn-text">1. මූලික සන්නිවේදනය / Basic communication</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-sm-basic-comm">6</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-sm-chevron-icon-1"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-supermarket-btn" id="btn-cat-sm-finding-items" data-cat="sm-finding-items" aria-label="2. භාණ්ඩ සහ අන්තරාල සෙවීම / Finding items & aisles" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-boxes-stacked"></i>
+                  <span class="cat-btn-text">2. භාණ්ඩ සහ අන්තරාල සෙවීම / Finding items & aisles</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-sm-finding-items">9</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-sm-chevron-icon-2"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-supermarket-btn" id="btn-cat-sm-pricing-weights" data-cat="sm-pricing-weights" aria-label="3. මිල ගණන් සහ බර කිරුම් / Pricing & weighing" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-scale-balanced"></i>
+                  <span class="cat-btn-text">3. මිල ගණන් සහ බර කිරුම් / Pricing & weighing</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-sm-pricing-weights">6</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-sm-chevron-icon-3"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-supermarket-btn" id="btn-cat-sm-checkout-payment" data-cat="sm-checkout-payment" aria-label="4. මුදල් ගෙවීම සහ චෙක්අවුට් / Checkout & payment" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-cash-register"></i>
+                  <span class="cat-btn-text">4. මුදල් ගෙවීම සහ චෙක්අවුට් / Checkout & payment</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-sm-checkout-payment">7</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-sm-chevron-icon-4"></i>
+                  </div>
+                </button>
+              </div>
             </div>
 
-            <!-- Waiting for Hospital, Bank or Restaurant Detection State (Visible when scanning or outside) -->
-            <div id="waiting-hospital-state" class="waiting-hospital-card {% if location_slug in ['hospital', 'bank', 'restaurant'] and not auto_detect %}waiting-hidden{% endif %}">
+            <!-- Waiting for Hospital, Bank, Restaurant or Supermarket Detection State (Visible when scanning or outside) -->
+            <div id="waiting-hospital-state" class="waiting-hospital-card {% if location_slug in ['hospital', 'bank', 'restaurant', 'supermarket'] and not auto_detect %}waiting-hidden{% endif %}">
               <div class="waiting-icon-pulse">
                 <i class="fa-solid fa-location-crosshairs"></i>
               </div>
               <h4 class="waiting-title">GPS Detection Active</h4>
               <p class="waiting-desc">
-                Select a hospital (🔴), bank (🔵), or restaurant (🟠) on the map, or wait for GPS to detect your location to view message categories.
+                Select a hospital (🔴), bank (🔵), restaurant (🟠), or supermarket (🟢) on the map, or wait for GPS to detect your location to view message categories.
               </p>
               <button id="btn-quick-sim-nhsl" class="btn-quick-sim-nhsl" type="button" style="display:none;" onclick="triggerSimulateHospital('nhsl-colombo')">
                 <i class="fa-solid fa-hospital"></i> Select NHSL Hospital
@@ -1056,6 +1102,66 @@
               </button>
               <button type="button" class="gps-sim-chip gps-restaurant-sim-chip" data-id="the-gallery-cafe" data-lat="6.8988" data-lon="79.8550" data-name="The Gallery Café">
                 <i class="fa-solid fa-utensils" style="color:#f59e0b;"></i> Gallery Café
+              </button>
+            </div>
+          </div>
+
+          <div style="margin-top:14px;">
+            <span class="gps-dialog-section-label"><i class="fa-solid fa-cart-shopping" style="color:#10b981;"></i> Manually Select Supermarket</span>
+            <div class="manual-selector-input-row" style="margin-top:6px;">
+              <select id="modal-manual-supermarket-select" class="manual-hospital-dropdown">
+                <option value="" disabled selected>-- Choose Supermarket in Sri Lanka --</option>
+                <option value="keells-union-place">Keells Super - Union Place, Colombo 02</option>
+                <option value="cargills-food-city-staples">Cargills Food City - Staples Street, Colombo 02</option>
+                <option value="arpico-supercentre-hyde-park">Arpico Supercentre - Hyde Park Corner</option>
+                <option value="spar-thalawathugoda">SPAR Supermarket - Thalawathugoda</option>
+                <option value="glomark-kottawa">Softlogic GLOMARK - Kottawa</option>
+                <option value="cargills-food-city-majestic">Cargills Food City - Majestic City, Bambalapitiya</option>
+                <option value="keells-crescat">Keells Super - Crescat Boulevard, Kollupitiya</option>
+                <option value="arpico-supercentre-battaramulla">Arpico Supercentre - Battaramulla</option>
+                <option value="laugfs-rajagiriya">Laugfs Supermarket - Rajagiriya</option>
+                <option value="spar-kalubowila">SPAR Supermarket - Kalubowila</option>
+                <option value="cargills-food-city-nawala">Cargills Food City - Nawala Road</option>
+                <option value="glomark-nawala">Softlogic GLOMARK - Nawala</option>
+                <option value="keells-havelock-road">Keells Super - Havelock Road</option>
+                <option value="arpico-daily-dehiwala">Arpico Daily - Dehiwala</option>
+                <option value="laugfs-moratuwa">Laugfs Supermarket - Moratuwa</option>
+                <option value="keells-kandy-kcc">Keells Super - Kandy City Centre (KCC)</option>
+                <option value="cargills-food-city-kandy">Cargills Food City - Dalada Veediya, Kandy</option>
+                <option value="arpico-supercentre-kandy">Arpico Supercentre - Peradeniya Road, Kandy</option>
+                <option value="keells-galle-road">Keells Super - Galle City</option>
+                <option value="cargills-food-city-galle">Cargills Food City - Galle Fort Road</option>
+                <option value="arpico-supercentre-galle">Arpico Supercentre - Karapitiya Road, Galle</option>
+                <option value="keells-negombo">Keells Super - Negombo Main Street</option>
+                <option value="cargills-food-city-negombo">Cargills Food City - Negombo</option>
+                <option value="arpico-supercentre-gampaha">Arpico Supercentre - Gampaha</option>
+              </select>
+              <button type="button" id="btn-modal-apply-supermarket" class="btn-apply-manual-hospital" style="background:#10b981;">
+                Select
+              </button>
+            </div>
+          </div>
+
+          <div style="margin-top:14px;">
+            <span class="gps-dialog-section-label">Quick Supermarket Selection</span>
+            <div class="gps-sim-grid">
+              <button type="button" class="gps-sim-chip gps-supermarket-sim-chip" data-id="keells-union-place" data-lat="6.9180" data-lon="79.8580" data-name="Keells Super - Union Place">
+                <i class="fa-solid fa-cart-shopping" style="color:#10b981;"></i> Keells Union Pl
+              </button>
+              <button type="button" class="gps-sim-chip gps-supermarket-sim-chip" data-id="cargills-food-city-staples" data-lat="6.9192" data-lon="79.8596" data-name="Cargills Food City - Staples Street">
+                <i class="fa-solid fa-cart-shopping" style="color:#10b981;"></i> Cargills Staples
+              </button>
+              <button type="button" class="gps-sim-chip gps-supermarket-sim-chip" data-id="arpico-supercentre-hyde-park" data-lat="6.9188" data-lon="79.8590" data-name="Arpico Supercentre - Hyde Park">
+                <i class="fa-solid fa-cart-shopping" style="color:#10b981;"></i> Arpico Hyde Park
+              </button>
+              <button type="button" class="gps-sim-chip gps-supermarket-sim-chip" data-id="spar-thalawathugoda" data-lat="6.8770" data-lon="79.9320" data-name="SPAR Supermarket">
+                <i class="fa-solid fa-cart-shopping" style="color:#10b981;"></i> SPAR Thalawathugoda
+              </button>
+              <button type="button" class="gps-sim-chip gps-supermarket-sim-chip" data-id="glomark-kottawa" data-lat="6.8450" data-lon="79.9650" data-name="Softlogic GLOMARK">
+                <i class="fa-solid fa-cart-shopping" style="color:#10b981;"></i> GLOMARK Kottawa
+              </button>
+              <button type="button" class="gps-sim-chip gps-supermarket-sim-chip" data-id="keells-kandy-kcc" data-lat="7.2930" data-lon="80.6355" data-name="Keells Super - KCC Kandy">
+                <i class="fa-solid fa-cart-shopping" style="color:#10b981;"></i> Keells Kandy
               </button>
             </div>
           </div>

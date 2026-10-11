@@ -584,6 +584,129 @@ class TestMobileInterface(unittest.TestCase):
         self.assertIn(b'id="modal-manual-restaurant-select"', resp.data)
         self.assertIn(b'gps-restaurant-sim-chip', resp.data)
 
+    def test_sri_lanka_supermarkets_api(self):
+        # Verify /api/sri-lanka-supermarkets returns all 25 outlets and calculates distances
+        res = self.client.get('/api/sri-lanka-supermarkets?lat=6.9180&lon=79.8620')
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['count'], 25)
+        supermarkets = data['supermarkets']
+        sm_names = [s['short_name'] for s in supermarkets]
+        self.assertIn('Cargills Staples St', sm_names)
+        self.assertIn('Keells Crescat', sm_names)
+        self.assertIn('Arpico Hyde Park', sm_names)
+        self.assertIn('SPAR Thalawathugoda', sm_names)
+        self.assertIn('GLOMARK Kynsey Rd', sm_names)
+        self.assertIn('Laugfs Havelock', sm_names)
+        # Check distance was computed
+        self.assertIn('distance_km', supermarkets[0])
+
+    def test_sri_lanka_supermarket_proximity_detection(self):
+        # When user GPS is near Arpico Supercentre Hyde Park / Cargills Staples (6.9180, 79.8620)
+        res = self.client.post('/api/detect-location', json={'lat': 6.9180, 'lon': 79.8620})
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['detected_slug'], 'supermarket')
+        self.assertTrue(data['is_supermarket'])
+        self.assertTrue(data['is_predefined'])
+        self.assertIn('Supercentre', data['poi_name'])
+        self.assertEqual(len(data['messages']), 0)
+        self.assertIn('supermarket_categories', data)
+        self.assertEqual(len(data['supermarket_categories']), 4)
+
+    def test_manual_supermarket_selection_api(self):
+        # 1. Manually select Cargills Food City Staples by supermarket_id
+        res = self.client.post('/api/select-supermarket', json={'supermarket_id': 'cargills-food-city-staples'})
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data['success'])
+        self.assertTrue(data['is_supermarket'])
+        self.assertTrue(data['manually_selected'])
+        self.assertIn('Cargills Food City', data['poi_name'])
+        self.assertEqual(data['category_name'], '1. මූලික සන්නිවේදනය / Basic communication')
+        self.assertIn('supermarket_categories', data)
+        cats = data['supermarket_categories']
+        self.assertEqual(len(cats['sm-basic-comm']), 6)
+        self.assertEqual(cats['sm-basic-comm'][0]['template_en'], 'I am deaf / non-verbal.')
+        self.assertEqual(cats['sm-basic-comm'][0]['template_si'], 'මම බිහිරි / කතා කිරීමට අපහසු අයෙක්.')
+
+        # 2. Manually select Keells Crescat Colombo
+        res_keells = self.client.post('/api/select-supermarket', json={'supermarket_id': 'keells-crescat-colombo'})
+        self.assertEqual(res_keells.status_code, 200)
+        data_keells = res_keells.get_json()
+        self.assertTrue(data_keells['success'])
+        self.assertTrue(data_keells['is_supermarket'])
+        self.assertIn('Keells', data_keells['poi_name'])
+        self.assertIn('supermarket_categories', data_keells)
+        self.assertEqual(len(data_keells['supermarket_categories']['sm-basic-comm']), 6)
+
+    def test_supermarket_all_4_categories_messages(self):
+        res = self.client.post('/api/select-supermarket', json={'supermarket_id': 'arpico-supercentre-hyde-park'})
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data['success'])
+        self.assertIn('supermarket_categories', data)
+        cats = data['supermarket_categories']
+
+        # Verify all 4 categories exist
+        expected_cats = [
+            'sm-basic-comm',
+            'sm-finding-items',
+            'sm-pricing-weights',
+            'sm-checkout-payment'
+        ]
+        for c in expected_cats:
+            self.assertIn(c, cats)
+
+        # Category 1: Basic communication (6)
+        basic_msgs = cats['sm-basic-comm']
+        self.assertEqual(len(basic_msgs), 6)
+        self.assertEqual(basic_msgs[0]['template_en'], 'I am deaf / non-verbal.')
+        self.assertEqual(basic_msgs[0]['template_si'], 'මම බිහිරි / කතා කිරීමට අපහසු අයෙක්.')
+        self.assertEqual(basic_msgs[5]['template_en'], 'Thank you for your assistance.')
+        self.assertEqual(basic_msgs[5]['template_si'], 'ඔබගේ උදව්වට ස්තූතියි.')
+
+        # Category 2: Finding items & aisles (9)
+        finding_msgs = cats['sm-finding-items']
+        self.assertEqual(len(finding_msgs), 9)
+        self.assertEqual(finding_msgs[0]['template_en'], 'Where can I find milk and dairy products?')
+        self.assertEqual(finding_msgs[0]['template_si'], 'කිරි සහ කිරි නිෂ්පාදන තිබෙන්නේ කොහේද?')
+        self.assertEqual(finding_msgs[8]['template_en'], 'Can you check the back storeroom for more?')
+        self.assertEqual(finding_msgs[8]['template_si'], 'තව තිබේදැයි පසුපස ගබඩාව පරීක්ෂා කළ හැකිද?')
+
+        # Category 3: Pricing & weighing (6)
+        pricing_msgs = cats['sm-pricing-weights']
+        self.assertEqual(len(pricing_msgs), 6)
+        self.assertEqual(pricing_msgs[0]['template_en'], 'How much does this item cost?')
+        self.assertEqual(pricing_msgs[0]['template_si'], 'මේ භාණ්ඩයේ මිල කීයද?')
+        self.assertEqual(pricing_msgs[5]['template_en'], 'Can I return or exchange this item?')
+        self.assertEqual(pricing_msgs[5]['template_si'], 'මට මෙම භාණ්ඩය මාරු කිරීමට හෝ ආපසු දීමට හැකිද?')
+
+        # Category 4: Checkout & payment (7)
+        checkout_msgs = cats['sm-checkout-payment']
+        self.assertEqual(len(checkout_msgs), 7)
+        self.assertEqual(checkout_msgs[0]['template_en'], 'I would like to check out now.')
+        self.assertEqual(checkout_msgs[0]['template_si'], 'මට දැන් මුදල් ගෙවීමට අවශ්‍යයි.')
+        self.assertEqual(checkout_msgs[6]['template_en'], 'Can you help me pack the groceries?')
+        self.assertEqual(checkout_msgs[6]['template_si'], 'බඩු බෑග්වලට අසුරා ගැනීමට උදව් කළ හැකිද?')
+
+    def test_mobile_supermarket_ui_elements(self):
+        # Verify /mobile/supermarket renders all 4 supermarket category buttons and badge
+        resp = self.client.get('/mobile/supermarket')
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b'id="supermarket-category-selector-bar"', resp.data)
+        self.assertIn(b'id="btn-cat-sm-basic-comm"', resp.data)
+        self.assertIn(b'id="btn-cat-sm-finding-items"', resp.data)
+        self.assertIn(b'id="btn-cat-sm-pricing-weights"', resp.data)
+        self.assertIn(b'id="btn-cat-sm-checkout-payment"', resp.data)
+        self.assertIn(b'Supermarket Message Criteria', resp.data)
+        self.assertIn(b'4 Categories', resp.data)
+        self.assertIn(b'id="modal-manual-supermarket-select"', resp.data)
+        self.assertIn(b'gps-supermarket-sim-chip', resp.data)
+        self.assertIn(b'map-sl-supermarkets-quick-btn', resp.data)
+
 
 if __name__ == '__main__':
     unittest.main()

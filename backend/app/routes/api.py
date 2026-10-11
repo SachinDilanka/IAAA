@@ -8,7 +8,9 @@ from app.services.geo_service import (
     get_sri_lanka_banks,
     select_bank_by_id,
     get_sri_lanka_restaurants,
-    select_restaurant_by_id
+    select_restaurant_by_id,
+    get_sri_lanka_supermarkets,
+    select_supermarket_by_id
 )
 
 api_bp = Blueprint('api', __name__)
@@ -144,6 +146,35 @@ def select_restaurant():
             return jsonify(res)
 
     result = select_restaurant_by_id(restaurant_id, restaurant_name)
+    return jsonify(result)
+
+@api_bp.route('/sri-lanka-supermarkets', methods=['GET'])
+def get_sri_lanka_supermarkets_route():
+    lat = request.args.get('lat', type=float)
+    lon = request.args.get('lon', type=float)
+    supermarkets = get_sri_lanka_supermarkets(lat, lon)
+    return jsonify({
+        'success': True,
+        'country': 'Sri Lanka',
+        'count': len(supermarkets),
+        'supermarkets': supermarkets
+    })
+
+@api_bp.route('/select-supermarket', methods=['POST'])
+def select_supermarket():
+    data = request.get_json() or {}
+    supermarket_id = data.get('supermarket_id') or data.get('id')
+    supermarket_name = data.get('supermarket_name') or data.get('name')
+    lat = data.get('lat')
+    lon = data.get('lon')
+
+    if not supermarket_id and lat is not None and lon is not None:
+        res = detect_place_by_coordinates(lat, lon)
+        if res.get('is_supermarket'):
+            res['manually_selected'] = True
+            return jsonify(res)
+
+    result = select_supermarket_by_id(supermarket_id, supermarket_name)
     return jsonify(result)
 
 
