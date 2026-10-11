@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'dart:math' as math;
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
@@ -18,6 +19,7 @@ class AudioClassifierService {
   factory AudioClassifierService() => _instance;
   AudioClassifierService._internal();
 
+  static const MethodChannel _bgChannel = MethodChannel('com.deafalert.app/background_service');
   final NativeNeuralAudioClassifier _neuralClassifier = NativeNeuralAudioClassifier();
   final stt.SpeechToText _speech = stt.SpeechToText();
   AudioStreamer? _audioStreamer;
@@ -283,6 +285,12 @@ class AudioClassifierService {
         Permission.notification,
       ].request();
     } catch (_) {}
+
+    try {
+      await _bgChannel.invokeMethod('startService');
+    } catch (e) {
+      print('Background audio service start error: $e');
+    }
 
     _isListening = true;
     _isRestartingStt = false;
@@ -782,6 +790,10 @@ class AudioClassifierService {
     _latestSoundVolume = 0.02;
     _waveformController.add([]);
 
+    try {
+      _bgChannel.invokeMethod('stopService');
+    } catch (_) {}
+
     if (_speech.isListening) {
       _speech.stop();
     }
@@ -831,7 +843,12 @@ class AudioClassifierService {
     // 3. Trigger Flashlight Flashing pattern instantly (synced with vibration)
     FlashlightService().triggerFlashlightPattern(event.priority);
 
-    // 4. Save log to history & sync to Yesido IO 39 smartwatch asynchronously in background
+    // 4. Wake up screen if locked or off in pocket
+    try {
+      _bgChannel.invokeMethod('wakeScreen');
+    } catch (_) {}
+
+    // 5. Save log to history & sync to Yesido IO 39 smartwatch asynchronously in background
     unawaited(HistoryService().addEvent(event));
     unawaited(SmartwatchService().sendAlertToWatch(event));
   }
