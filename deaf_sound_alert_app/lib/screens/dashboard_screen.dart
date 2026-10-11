@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_provider.dart';
 import '../models/detected_sound.dart';
@@ -79,50 +78,6 @@ class DashboardScreen extends StatelessWidget {
                 ),
               ),
 
-              if (provider.isListening) ...[
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E293B),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: provider.currentTranscript.isNotEmpty
-                          ? const Color(0xFF00E5FF)
-                          : Colors.cyanAccent.withValues(alpha: 0.4),
-                      width: provider.currentTranscript.isNotEmpty ? 2 : 1,
-                    ),
-                    boxShadow: provider.currentTranscript.isNotEmpty
-                        ? [
-                            BoxShadow(
-                              color: const Color(0xFF00E5FF).withValues(alpha: 0.25),
-                              blurRadius: 16,
-                              spreadRadius: 2,
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.record_voice_over_rounded, color: Colors.cyanAccent, size: 26),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          provider.currentTranscript.isNotEmpty
-                              ? 'Live Speech: "${provider.currentTranscript}"'
-                              : 'Speak Sinhala keywords (Udaw, Ginnak...) or play sounds into mic',
-                          style: TextStyle(
-                            color: provider.currentTranscript.isNotEmpty ? Colors.white : Colors.white60,
-                            fontWeight: FontWeight.bold,
-                            fontSize: provider.currentTranscript.isNotEmpty ? 15 : 13,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-
               if (provider.lastDetectedSound != null)
                 AlertBanner(
                   sound: provider.lastDetectedSound!,
@@ -151,19 +106,13 @@ class DashboardScreen extends StatelessWidget {
                       ),
                       SizedBox(height: 6),
                       Text(
-                        'Works offline: say Sinhala keywords (උදව්, ගින්නක්...) or play alert sounds',
+                        'Listening for 8 Sinhala Keywords & 6 Environmental Sounds offline',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: Colors.white60, fontSize: 13),
                       ),
                     ],
                   ),
                 ),
-
-              // Detection status line. Kept visible on purpose: it is the
-              // only way to tell whether the mic is reaching the detector,
-              // whether a rate is locked, and what the model is actually
-              // hearing. It is compact and user-readable.
-              _DetectionStatus(state: provider.detectorDiagnostics),
 
               // Mic Waveform & Main Listening Button
               Padding(
@@ -218,7 +167,35 @@ class DashboardScreen extends StatelessWidget {
                         ),
                       ),
                     ),
-
+                    if (provider.isListening) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E293B),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.4)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.record_voice_over_rounded, color: Colors.cyanAccent, size: 22),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                provider.currentTranscript.isNotEmpty
+                                    ? 'Live Speech: "${provider.currentTranscript}"'
+                                    : 'Speak Sinhala keywords (Udaw, Ginnak...) or play sounds into mic',
+                                style: TextStyle(
+                                  color: provider.currentTranscript.isNotEmpty ? Colors.white : Colors.white60,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -276,40 +253,6 @@ class DashboardScreen extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-}
-
-/// One-line status of the detection chain: build id, mode, mic source,
-/// whether real sound is present, and what the model currently hears. Each
-/// field isolates a single failure point, so a problem on a real device can
-/// be identified from a screenshot.
-class _DetectionStatus extends StatelessWidget {
-  final String state;
-  const _DetectionStatus({required this.state});
-
-  @override
-  Widget build(BuildContext context) {
-    if (state.isEmpty) return const SizedBox.shrink();
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: Colors.black54,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: Text(
-        state,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
-          color: Colors.lightGreenAccent,
-          fontFamily: 'monospace',
-          fontSize: 8,
-          height: 1.25,
-        ),
-      ),
     );
   }
 }

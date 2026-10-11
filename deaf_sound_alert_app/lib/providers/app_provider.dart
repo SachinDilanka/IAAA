@@ -18,31 +18,24 @@ class AppProvider with ChangeNotifier {
   StreamSubscription? _soundSub;
   StreamSubscription? _waveSub;
   StreamSubscription? _transcriptSub;
-  StreamSubscription? _diagSub;
 
   bool get isLoading => _isLoading;
   bool get isListening => _isListening;
   DetectedSound? get lastDetectedSound => _lastDetectedSound;
   List<double> get currentWaveform => _currentWaveform;
   String get currentTranscript => _currentTranscript;
-  String _detectorDiagnostics = '';
-  String get detectorDiagnostics => _detectorDiagnostics;
   List<SoundConfig> get soundConfigs => SoundConfigService().configs;
   List<DetectedSound> get history => HistoryService().history;
   bool get isSmartwatchConnected => SmartwatchService().isConnected;
   String get connectedWatchName => SmartwatchService().connectedDeviceName;
-  bool get isFlashlightEnabled => FlashlightService().isFlashEnabled;
-
-  void setFlashlightEnabled(bool enabled) {
-    FlashlightService().setFlashEnabled(enabled);
-    notifyListeners();
-  }
+  bool get isFlashlightEnabled => FlashlightService().isFlashlightEnabled;
 
   Future<void> init() async {
     _isLoading = true;
     notifyListeners();
 
     await VibrationService().init();
+    await FlashlightService().init();
     await SmartwatchService().init();
     await SoundConfigService().init();
     await HistoryService().init();
@@ -62,12 +55,12 @@ class AppProvider with ChangeNotifier {
       notifyListeners();
     });
 
-    _diagSub = AudioClassifierService().onDiagnosticsUpdated.listen((diag) {
-      _detectorDiagnostics = diag;
-      notifyListeners();
-    });
-
     _isLoading = false;
+    notifyListeners();
+  }
+
+  Future<void> setFlashlightEnabled(bool enabled) async {
+    await FlashlightService().setEnabled(enabled);
     notifyListeners();
   }
 
@@ -78,8 +71,8 @@ class AppProvider with ChangeNotifier {
       AudioClassifierService().stopListening();
       _isListening = false;
     } else {
-      final started = await AudioClassifierService().startListening();
-      _isListening = started;
+      await AudioClassifierService().startListening();
+      _isListening = true;
     }
     notifyListeners();
   }

@@ -43,11 +43,11 @@ class NativeNeuralAudioClassifier {
   List<List<double>> _W4 = [];
   List<double> _b4 = [];
 
-  Future<bool> loadModel({String? dspString, String? modelString}) async {
-    if (_isLoaded && dspString == null) return true;
+  Future<bool> loadModel() async {
+    if (_isLoaded) return true;
 
     try {
-      dspString ??= await rootBundle.loadString('assets/models/dsp_constants.json');
+      final dspString = await rootBundle.loadString('assets/models/dsp_constants.json');
       final dspJson = jsonDecode(dspString) as Map<String, dynamic>;
 
       _hannWindow = (dspJson['hann_window'] as List).map((e) => (e as num).toDouble()).toList();
@@ -58,7 +58,7 @@ class NativeNeuralAudioClassifier {
           .map((row) => (row as List).map((e) => (e as num).toDouble()).toList())
           .toList();
 
-      modelString ??= await rootBundle.loadString('assets/models/sound_model_data.json');
+      final modelString = await rootBundle.loadString('assets/models/sound_model_data.json');
       final modelJson = jsonDecode(modelString) as Map<String, dynamic>;
 
       _classes = (modelJson['classes'] as List).map((e) => e.toString()).toList();
@@ -143,14 +143,11 @@ class NativeNeuralAudioClassifier {
   Map<String, double> _evaluateDenseNN(List<double> feat) {
     double relu(double x) => x > 0.0 ? x : 0.0;
 
-    // Layer 0: inputDim -> 512. The width is taken from the weight matrix
-    // so the feature vector can grow (mean+std+delta = 120) without code
-    // changes.
-    final int inputDim = _W0.length;
+    // Layer 0: 40 -> 512
     final List<double> h0 = List<double>.filled(512, 0.0);
     for (int j = 0; j < 512; j++) {
       double s = _b0[j];
-      for (int i = 0; i < inputDim; i++) {
+      for (int i = 0; i < 40; i++) {
         s += feat[i] * _W0[i][j];
       }
       h0[j] = relu(s);
@@ -186,7 +183,7 @@ class NativeNeuralAudioClassifier {
       h3[j] = relu(s);
     }
 
-    // Layer 4: 64 -> N Logits
+    // Layer 4: 64 -> Output Logits (_classes.length = 14)
     final int numClasses = _classes.length;
     final List<double> logits = List<double>.filled(numClasses, 0.0);
     double maxL = -1e9;
@@ -199,7 +196,7 @@ class NativeNeuralAudioClassifier {
       if (s > maxL) maxL = s;
     }
 
-    // Softmax
+    // Softmax across all classes
     double expSum = 0.0;
     final List<double> probs = List<double>.filled(numClasses, 0.0);
     for (int j = 0; j < numClasses; j++) {
@@ -239,7 +236,8 @@ class NativeNeuralAudioClassifier {
     const int hop = 512;
     final int nFrames = ((pad.length - 2048) / hop).floor() + 1;
 
-    final List<List<double>> frameMfccs = [];
+    final List<List<double>> allMels = [];
+    double globalMaxDb = -1e9;
 
     for (int f = 0; f < nFrames; f++) {
       final slice = pad.sublist(f * hop, f * hop + 2048);
@@ -253,14 +251,29 @@ class NativeNeuralAudioClassifier {
           s += row[k] * spec[k];
         }
         mels[m] = s;
+        final double db = 10.0 * (math.log(math.max(1e-10, s)) / math.ln10);
+        if (db > globalMaxDb) globalMaxDb = db;
       }
+      allMels.add(mels);
+    }
 
-      // Exact Librosa power_to_db formula matching model training:
-      // 10.0 * log10(max(1e-10, mel))
+    final double minDbThreshold = globalMaxDb - 80.0;
+
+    final List<List<double>> frameMfccs = [];
+    final List<double> frameEnergies = List<double>.filled(nFrames, 0.0);
+
+    for (int f = 0; f < nFrames; f++) {
+      final mels = allMels[f];
       final List<double> logM = List<double>.filled(128, 0.0);
+      double energySum = 0.0;
+
       for (int m = 0; m < 128; m++) {
-        logM[m] = 10.0 * (math.log(math.max(1e-10, mels[m])) / math.ln10);
+        final double db = 10.0 * (math.log(math.max(1e-10, mels[m])) / math.ln10);
+        final double val = db < minDbThreshold ? minDbThreshold : db;
+        logM[m] = val;
+        energySum += mels[m];
       }
+      frameEnergies[f] = energySum;
 
       final List<double> mfcc = List<double>.filled(40, 0.0);
       for (int i = 0; i < 40; i++) {
@@ -274,60 +287,76 @@ class NativeNeuralAudioClassifier {
       frameMfccs.add(mfcc);
     }
 
-    // Mean MFCC feature vector across all frames
-    //
-    // A mean-only vector is a static spectral snapshot: it averages away
-    // syllable timing, consonant bursts and formant movement, so the model
-    // can only key on tone/pitch-like information. That is why keywords were
-    // confused with each other and with environmental sounds.
-    //
-    // Standard keyword-spotting features add the temporal dynamics that
-    // actually carry the WORD:
-    //   mean  (40) - average spectral envelope (vowel colour)
-    //   std   (40) - how much the spectrum moves (speech is highly dynamic;
-    //                a steady siren/hum is not)
-    //   delta (40) - first-order change between frames (the transitions
-    //                that separate "udaw" from "anathurak")
-    final List<double> feat = List<double>.filled(120, 0.0);
-
+    // Feature set 1: Average MFCCs across full window (Continuous sounds like Ambulance Siren)
+    final List<double> featAvg = List<double>.filled(40, 0.0);
     for (int i = 0; i < 40; i++) {
       double sum = 0.0;
       for (int f = 0; f < nFrames; f++) {
         sum += frameMfccs[f][i];
       }
-      final double mean = sum / nFrames;
-
-      double varSum = 0.0;
-      for (int f = 0; f < nFrames; f++) {
-        final double d = frameMfccs[f][i] - mean;
-        varSum += d * d;
-      }
-      final double std = math.sqrt(varSum / nFrames);
-
-      // Delta: mean absolute first-order difference between adjacent frames.
-      double deltaSum = 0.0;
-      for (int f = 1; f < nFrames; f++) {
-        deltaSum += (frameMfccs[f][i] - frameMfccs[f - 1][i]).abs();
-      }
-      final double delta = nFrames > 1 ? deltaSum / (nFrames - 1) : 0.0;
-
-      feat[i] = (mean - _mean[i]) / (_std[i] > 0 ? _std[i] : 1.0);
-      feat[40 + i] = (std - _mean[40 + i]) / (_std[40 + i] > 0 ? _std[40 + i] : 1.0);
-      feat[80 + i] = (delta - _mean[80 + i]) / (_std[80 + i] > 0 ? _std[80 + i] : 1.0);
+      featAvg[i] = (sum / nFrames - _mean[i]) / (_std[i] > 0 ? _std[i] : 1.0);
     }
 
-    final Map<String, double> probs = _evaluateDenseNN(feat);
-    final List<MapEntry<String, double>> entries = probs.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+    // Feature set 2: Top-K Active Energy frames (Transient sounds like Dog Barking, Baby Crying, Vehicle Horns, Traffic, Sinhala Speech)
+    final List<int> sortedIndices = List<int>.generate(nFrames, (i) => i);
+    sortedIndices.sort((a, b) => frameEnergies[b].compareTo(frameEnergies[a]));
+    final int topK = math.max(1, (nFrames * 0.45).round());
 
-    final String topLabel = entries.first.key;
-    final double topProb = entries.first.value;
+    final List<double> featPeak = List<double>.filled(40, 0.0);
+    for (int i = 0; i < 40; i++) {
+      double sum = 0.0;
+      for (int k = 0; k < topK; k++) {
+        final int f = sortedIndices[k];
+        sum += frameMfccs[f][i];
+      }
+      featPeak[i] = (sum / topK - _mean[i]) / (_std[i] > 0 ? _std[i] : 1.0);
+    }
+
+    final Map<String, double> probsAvg = _evaluateDenseNN(featAvg);
+    final Map<String, double> probsPeak = _evaluateDenseNN(featPeak);
+
+    final Map<String, double> finalProbs = {};
+    int bestIdx = 0;
+    double bestP = 0.0;
+    final List<MapEntry<String, double>> entries = [];
+
+    const speechClasses = {
+      'udaw', 'beeraganna', 'ginnak', 'anathurak',
+      'karadarayak', 'balagena', 'parissamin', 'ehata_wenna'
+    };
+
+    for (int j = 0; j < _classes.length; j++) {
+      final String cls = _classes[j];
+      final double pAvg = probsAvg[cls] ?? 0.0;
+      final double pPeak = probsPeak[cls] ?? 0.0;
+
+      double combinedP;
+      if (speechClasses.contains(cls)) {
+        // Speech keywords are active transient utterances: evaluate peak active energy frames!
+        combinedP = pPeak;
+      } else if (cls == 'ambulance_siren') {
+        // Ambulance siren: evaluate max of average and peak energy
+        combinedP = math.max(pAvg, pPeak);
+      } else {
+        // Other environmental sounds (vehicle_horn, dog_barking, baby_crying, background_traffic)
+        combinedP = math.max(pPeak, pAvg * 0.50 + pPeak * 0.50);
+      }
+
+      finalProbs[cls] = combinedP;
+      entries.add(MapEntry(cls, combinedP));
+      if (combinedP > bestP) {
+        bestP = combinedP;
+        bestIdx = j;
+      }
+    }
+
+    entries.sort((a, b) => b.value.compareTo(a.value));
     final Map<String, double> top5 = Map.fromEntries(entries.take(5));
 
     return ModelPrediction(
-      label: topLabel,
-      probability: topProb,
-      allProbabilities: probs,
+      label: _classes[bestIdx],
+      probability: bestP,
+      allProbabilities: finalProbs,
       top5Probabilities: top5,
     );
   }

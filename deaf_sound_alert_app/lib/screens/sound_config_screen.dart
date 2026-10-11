@@ -27,10 +27,10 @@ class SoundConfigScreen extends StatelessWidget {
                 children: [
                   const Icon(Icons.flash_on_rounded, color: Colors.amber, size: 28),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+                      children: const [
                         Text(
                           'Flashlight Alert Strobe',
                           style: TextStyle(
@@ -41,7 +41,7 @@ class SoundConfigScreen extends StatelessWidget {
                         ),
                         SizedBox(height: 2),
                         Text(
-                          'Flashes camera flashlight based on sound priority level',
+                          'Flashes phone camera light synced with strong vibration pattern when sound detected',
                           style: TextStyle(color: Colors.white70, fontSize: 12),
                         ),
                       ],
@@ -55,17 +55,18 @@ class SoundConfigScreen extends StatelessWidget {
                 ],
               ),
             ),
+
             ...provider.soundConfigs.map((config) {
               return Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: config.priority.color.withOpacity(0.3),
-                  ),
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: config.priority.color.withOpacity(0.3),
                 ),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -140,8 +141,8 @@ class SoundConfigScreen extends StatelessWidget {
           }),
         ],
       );
-    },
-  );
-}
+      },
+    );
+  }
 }
 
