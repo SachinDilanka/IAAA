@@ -15,12 +15,11 @@ class SoundConfigService {
   final List<SoundConfig> _defaultConfigs = [
     SoundConfig(key: 'sinhala_udaw_', name: 'උදව් (Udaw - Help)', category: 'Sinhala Keyword', priority: PriorityLevel.high),
     SoundConfig(key: 'sinhala_anathurak_', name: 'අනතුරක් (Anathurak - Danger)', category: 'Sinhala Keyword', priority: PriorityLevel.high),
-    SoundConfig(key: 'sinhala_beraganna_', name: 'බේරගන්න (Beraganna - Save Me)', category: 'Sinhala Keyword', priority: PriorityLevel.high),
+    SoundConfig(key: 'sinhala_beraganna_', name: 'බේරාගන්න (Beraganna - Save Me)', category: 'Sinhala Keyword', priority: PriorityLevel.high),
     SoundConfig(key: 'sinhala_ginnak_', name: 'ගින්නක් (Ginnak - Fire)', category: 'Sinhala Keyword', priority: PriorityLevel.high),
-    SoundConfig(key: 'siren', name: 'Siren Sound (සයිරන් ශබ්දය)', category: 'Environmental Sound', priority: PriorityLevel.high),
     SoundConfig(key: 'ambulance', name: 'Ambulance Siren (ගිලන් රථ ශබ්දය)', category: 'Environmental Sound', priority: PriorityLevel.high),
-    SoundConfig(key: 'fire_truck', name: 'Fire Alarm / Siren (ගිනි අනතුරු ඇඟවීම / ගිනි නිවන රථ ශබ්දය)', category: 'Environmental Sound', priority: PriorityLevel.high),
     SoundConfig(key: 'vehicle horns', name: 'Vehicle Horns (වාහන නාලාව)', category: 'Environmental Sound', priority: PriorityLevel.high),
+    SoundConfig(key: 'fire_alarm', name: 'Fire Alarm (ගිනි අනතුරු සංඥාව)', category: 'Environmental Sound', priority: PriorityLevel.high),
     
     SoundConfig(key: 'sinhala_karadarayak_', name: 'කරදරයක් (Karadarayak - Trouble)', category: 'Sinhala Keyword', priority: PriorityLevel.medium),
     SoundConfig(key: 'sinhala_balagena_', name: 'බලාගෙන (Balaagena - Watch Out)', category: 'Sinhala Keyword', priority: PriorityLevel.medium),
@@ -48,9 +47,11 @@ class SoundConfigService {
       _configs = List.from(_defaultConfigs);
     }
 
-    // Ensure all default configs exist in _configs (migrate older saved configs)
+    // Ensure all default configs exist and refresh display metadata from the
+    // current defaults without changing the user's priority or enabled state.
     for (var def in _defaultConfigs) {
-      if (!_configs.any((c) => c.key == def.key)) {
+      final existingIndex = _configs.indexWhere((c) => c.key == def.key);
+      if (existingIndex == -1) {
         _configs.add(SoundConfig(
           key: def.key,
           name: def.name,
@@ -58,8 +59,21 @@ class SoundConfigService {
           priority: def.priority,
           isEnabled: def.isEnabled,
         ));
+      } else {
+        final existing = _configs[existingIndex];
+        if (existing.name != def.name || existing.category != def.category) {
+          _configs[existingIndex] = SoundConfig(
+            key: def.key,
+            name: def.name,
+            category: def.category,
+            priority: existing.priority,
+            isEnabled: existing.isEnabled,
+          );
+        }
       }
     }
+
+    await _save();
   }
 
   Future<void> updatePriority(String key, PriorityLevel newPriority) async {

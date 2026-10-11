@@ -1,12 +1,11 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:audio_streamer/audio_streamer.dart';
 import '../models/detected_sound.dart';
 import 'vibration_service.dart';
-import 'flashlight_service.dart';
 import 'smartwatch_service.dart';
 import 'sound_config_service.dart';
 import 'history_service.dart';
@@ -17,17 +16,59 @@ class AudioClassifierService {
   factory AudioClassifierService() => _instance;
   AudioClassifierService._internal();
 
-  static const MethodChannel _bgChannel = MethodChannel('com.deafalert.app/background_service');
   final NativeNeuralAudioClassifier _neuralClassifier = NativeNeuralAudioClassifier();
   final stt.SpeechToText _speech = stt.SpeechToText();
+  AudioStreamer? _audioStreamer;
+  AudioRecorder? _pcmRecorder;
+  StreamSubscription? _pcmStreamSubscription;
 
   Timer? _sttWatchdogTimer;
   bool _speechAvailable = false;
   String? _selectedLocaleId;
   bool _isListening = false;
+  bool _isOfflineMode = false;
+  bool _isAnimatingTranscript = false;
+  Timer? _offlineNetCheckTimer;
+  String? _pendingSinhalaClass;
+  int _pendingSinhalaHits = 0;
+  int _pendingSinhalaMs = 0;
+  String? _pendingEnvClass;
+  int _pendingEnvHits = 0;
+  int _pendingEnvMs = 0;
+
+  static const List<String> _sinhalaClasses = [
+    'udaw',
+    'beeraganna',
+    'beraganna',
+    'ginnak',
+    'anathurak',
+    'karadarayak',
+    'balagena',
+    'parissamin',
+    'ehata_wenna',
+  ];
+
+  final Map<String, List<String>> _progressiveSteps = {
+    'sinhala_udaw_': ['උ...', 'උද...', 'උදව්', 'උදව් (Udaw - Help)'],
+    'sinhala_beraganna_': ['බේ...', 'බේරා...', 'බේරාගන්න', 'බේරාගන්න (Beraganna - Save Me)'],
+    'sinhala_ginnak_': ['ගි...', 'ගින්...', 'ගින්නක්', 'ගින්නක් (Ginnak - Fire)'],
+    'sinhala_anathurak_': ['අන...', 'අනතු...', 'අනතුරක්', 'අනතුරක් (Anathurak - Danger)'],
+    'sinhala_karadarayak_': ['කර...', 'කරදර...', 'කරදරයක්', 'කරදරයක් (Karadarayak - Trouble)'],
+    'sinhala_balagena_': ['බලා...', 'බලාගෙන', 'බලාගෙන (Balaagena - Watch Out)'],
+    'sinhala_ehata_wenna_': ['එහා...', 'එහාට වෙන්න', 'එහාට වෙන්න (Ehata Wenna - Move Aside)'],
+    'sinhala_parissamin_': ['පරි...', 'පරිස්...', 'පරිස්සමින්', 'පරිස්සමින් (Parissamin - Be Careful)'],
+  };
+
   double _latestSoundVolume = 0.02;
   final List<double> _visualizerBars = List<double>.filled(40, 0.15);
 
+  // 16,000 Hz circular rolling audio buffer (1 second)
+  final List<double> _rollingBuf16k = List<double>.filled(16000, 0.0);
+  int _rollingIdx = 0;
+  int _total16kPushed = 0;
+  int _hardwareSampleRate = 16000;
+  int _lastPcmTimeMs = 0;
+  int _lastMlTimeMs = 0;
   int _lastSpeechTimeMs = 0;
   DateTime? _lastGlobalAlertTime;
 
@@ -36,28 +77,21 @@ class AudioClassifierService {
   final _controller = StreamController<DetectedSound>.broadcast();
   final _waveformController = StreamController<List<double>>.broadcast();
   final _transcriptController = StreamController<String>.broadcast();
+  final _diagController = StreamController<String>.broadcast();
 
   bool get isListening => _isListening;
   Stream<DetectedSound> get onSoundDetected => _controller.stream;
   Stream<List<double>> get onWaveformUpdated => _waveformController.stream;
   Stream<String> get onTranscriptUpdated => _transcriptController.stream;
+  Stream<String> get onDiagnosticsUpdated => _diagController.stream;
 
   final Map<String, String> _labelToSoundKey = {
-    'siren': 'siren',
-    'siren_sound': 'siren',
     'ambulance_siren': 'ambulance',
     'ambulance': 'ambulance',
     'vehicle_horn': 'vehicle horns',
     'vehicle horns': 'vehicle horns',
     'baby_crying': 'baby crying',
     'baby crying': 'baby crying',
-    'fire_truck': 'fire_truck',
-    'fire_truck_dataset': 'fire_truck',
-    'fire_engine': 'fire_truck',
-    'fire_siren': 'fire_truck',
-    'fire_alarm': 'fire_truck',
-    'fire': 'fire_truck',
-    'smoke_alarm': 'fire_truck',
     'dog_barking': 'dog_bark_dataset',
     'dog_bark_dataset': 'dog_bark_dataset',
     'background_traffic': 'traffic',
@@ -82,28 +116,27 @@ class AudioClassifierService {
   };
 
   final Map<String, String> _displayNames = {
-    'sinhala_udaw_': 'Udaw (උදව්)',
-    'sinhala_anathurak_': 'Anathurak (අනතුරක්)',
-    'sinhala_beraganna_': 'Beraganna (බේරාගන්න)',
-    'sinhala_ginnak_': 'Ginnak (ගින්නක්)',
-    'sinhala_karadarayak_': 'Karadarayak (කරදරයක්)',
-    'sinhala_balagena_': 'Balagena (බලාගෙන)',
-    'sinhala_ehata_wenna_': 'Ehata Wenna (එහාට වෙන්න)',
-    'sinhala_parissamin_': 'Parissamin (පරිස්සමින්)',
-    'siren': 'Siren Sound (සයිරන්)',
-    'ambulance': 'Ambulance Siren (ගිලන් රථ)',
-    'fire_truck': 'Fire Alarm / Siren (ගිනි නිවන)',
-    'baby crying': 'Baby Crying (ළදරු හැඬීම)',
-    'vehicle horns': 'Vehicle Horns (වාහන නලා)',
-    'dog_bark_dataset': 'Dog Barking (බල්ලා බුරන)',
-    'traffic': 'Traffic Noise (වාහන තදබදය)',
-    'road': 'Road Sounds (පාරේ ශබ්දය)',
+    'sinhala_udaw_': 'උදව් (Udaw - Help)',
+    'sinhala_anathurak_': 'අනතුරක් (Anathurak - Danger)',
+    'sinhala_beraganna_': 'බේරාගන්න (Beraganna - Save Me)',
+    'sinhala_ginnak_': 'ගින්නක් (Ginnak - Fire)',
+    'sinhala_karadarayak_': 'කරදරයක් (Karadarayak - Trouble)',
+    'sinhala_balagena_': 'බලාගෙන (Balaagena - Watch Out)',
+    'sinhala_ehata_wenna_': 'එහාට වෙන්න (Ehata Wenna - Move Aside)',
+    'sinhala_parissamin_': 'පරිස්සමින් (Parissamin - Be Careful)',
+    'ambulance': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
+    'baby crying': 'ළදරු හැඬීම (Baby Crying)',
+    'vehicle horns': 'වාහන හොන් (Vehicle Horns)',
+    'dog_bark_dataset': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
+    'traffic': 'වාහන තදබදය (Traffic Noise)',
+    'road': 'පාරේ ශබ්දය (Road Sounds)',
   };
 
   Future<void> init() async {
-    try {
-      await _neuralClassifier.loadModel();
-    } catch (_) {}
+    final modelLoaded = await _neuralClassifier.loadModel();
+    if (!modelLoaded) {
+      print('Offline audio model could not be loaded');
+    }
 
     try {
       _speechAvailable = await _speech.initialize(
@@ -220,7 +253,6 @@ class AudioClassifierService {
           if (!_isListening) return;
           double soundVol = (0.25 + (level.clamp(-2.0, 10.0) / 10.0)).clamp(0.18, 1.0);
           _updateWaveformVolume(soundVol);
-          _checkAcousticAudioSampleNeeded(soundVol);
         },
         listenOptions: stt.SpeechListenOptions(
           listenMode: stt.ListenMode.deviceDefault,
@@ -238,136 +270,7 @@ class AudioClassifierService {
     }
   }
 
-  bool _isSamplingAcousticPCM = false;
-  int _highVolumeStartTimeMs = 0;
 
-  void _checkAcousticAudioSampleNeeded(double soundVol) {
-    if (!_isListening || _isSamplingAcousticPCM) return;
-
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
-
-    // High acoustic sound level detected (> 0.35)
-    // Only sample environmental sounds if no speech was detected in the last 3.0 seconds!
-    if (soundVol >= 0.35) {
-      if (_highVolumeStartTimeMs == 0) {
-        _highVolumeStartTimeMs = nowMs;
-      } else if (nowMs - _highVolumeStartTimeMs >= 400 && nowMs - _lastSpeechTimeMs >= 3000) {
-        _triggerAcousticNeuralSample();
-      }
-    } else {
-      _highVolumeStartTimeMs = 0;
-    }
-  }
-
-  Future<void> _triggerAcousticNeuralSample() async {
-    if (_isSamplingAcousticPCM || !_isListening) return;
-    _isSamplingAcousticPCM = true;
-    _highVolumeStartTimeMs = 0;
-
-    try {
-      if (_speech.isListening) {
-        await _speech.stop();
-      }
-
-      final AudioRecorder sampleRecorder = AudioRecorder();
-      if (await sampleRecorder.hasPermission()) {
-        final stream = await sampleRecorder.startStream(
-          const RecordConfig(
-            encoder: AudioEncoder.pcm16bits,
-            numChannels: 1,
-            sampleRate: 16000,
-          ),
-        );
-
-        final List<double> sampledPcm = [];
-        Completer<void> sampleCompleter = Completer<void>();
-
-        StreamSubscription? sub;
-        sub = stream.listen((bytes) {
-          final samples = List<double>.generate(bytes.length ~/ 2, (i) {
-            int byte0 = bytes[i * 2];
-            int byte1 = bytes[i * 2 + 1];
-            int val = (byte1 << 8) | byte0;
-            if (val >= 32768) val -= 65536;
-            return val / 32768.0;
-          });
-          sampledPcm.addAll(samples);
-          if (sampledPcm.length >= 16000) {
-            if (!sampleCompleter.isCompleted) sampleCompleter.complete();
-          }
-        }, onError: (_) {
-          if (!sampleCompleter.isCompleted) sampleCompleter.complete();
-        });
-
-        await sampleCompleter.future.timeout(
-          const Duration(milliseconds: 900),
-          onTimeout: () {},
-        );
-
-        await sub.cancel();
-        try {
-          await sampleRecorder.stop();
-        } catch (_) {}
-
-        if (sampledPcm.isNotEmpty) {
-          final window1s = List<double>.filled(16000, 0.0);
-          for (int i = 0; i < math.min(16000, sampledPcm.length); i++) {
-            window1s[i] = sampledPcm[i];
-          }
-
-          final pred = _neuralClassifier.predict(window1s);
-          if (pred != null) {
-            final topLabel = pred.label;
-            final topProb = pred.probability;
-            final mappedKey = _labelToSoundKey[topLabel] ?? topLabel;
-
-            final double dogProb = pred.allProbabilities['dog_barking'] ?? 0.0;
-            final double babyProb = pred.allProbabilities['baby_crying'] ?? 0.0;
-
-            if (dogProb >= 0.28) {
-              simulateSoundDetection('dog_bark_dataset', confidence: dogProb, overrideCooldown: true);
-              return;
-            }
-
-            if (babyProb >= 0.28) {
-              simulateSoundDetection('baby crying', confidence: babyProb, overrideCooldown: true);
-              return;
-            }
-
-            // Siren Sound / Ambulance Siren
-            if (mappedKey == 'siren' || mappedKey == 'ambulance' || topLabel == 'ambulance_siren') {
-              if (topProb >= 0.35) {
-                final targetKey = SoundConfigService().getConfig('siren')?.isEnabled == true ? 'siren' : 'ambulance';
-                simulateSoundDetection(targetKey, confidence: topProb, overrideCooldown: true);
-                return;
-              }
-            }
-
-            // Fire Truck Siren / Fire Alarm
-            if (mappedKey == 'fire_truck' || topLabel == 'fire_truck' || topLabel == 'fire_alarm') {
-              if (topProb >= 0.35) {
-                simulateSoundDetection('fire_truck', confidence: topProb, overrideCooldown: true);
-                return;
-              }
-            }
-
-            if (!mappedKey.startsWith('sinhala_') && mappedKey != 'road' && mappedKey != 'traffic') {
-              if (topProb >= 0.35) {
-                simulateSoundDetection(mappedKey, confidence: topProb, overrideCooldown: true);
-              }
-            }
-          }
-        }
-      }
-    } catch (e) {
-      print('Acoustic neural sampling error: $e');
-    } finally {
-      _isSamplingAcousticPCM = false;
-      if (_isListening && !_speech.isListening && !_isRestartingStt) {
-        _safeListenSpeech();
-      }
-    }
-  }
 
   void _onSpeechDone() {
     if (!_isListening) return;
@@ -381,6 +284,14 @@ class AudioClassifierService {
   void _onSpeechError(String errorMsg) {
     if (!_isListening) return;
     final String err = errorMsg.toLowerCase();
+    if (err.contains('network') || err.contains('error_network') || err.contains('unavailable')) {
+      _isOfflineMode = true;
+      try {
+        _speech.stop();
+      } catch (_) {}
+      _startAudioStreamer();
+      return;
+    }
     if (err.contains('language') || err.contains('locale') || err.contains('not_supported')) {
       _selectedLocaleId = "";
     }
@@ -398,91 +309,537 @@ class AudioClassifierService {
       await [
         Permission.microphone,
         Permission.notification,
+        Permission.camera,
       ].request();
     } catch (_) {}
 
-    try {
-      await _bgChannel.invokeMethod('startService');
-    } catch (e) {
-      print('Background audio service start error: $e');
-    }
-
     _isListening = true;
     _isRestartingStt = false;
-    _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
+    _isAnimatingTranscript = false;
+    _rollingIdx = 0;
+    _total16kPushed = 0;
     _latestSoundVolume = 0.25;
 
     // Start 50 FPS smooth visualizer animation ticker
     _startVisualizerTicker();
 
-    // 1. Continuous Live Speech Engine for transcribing EVERY single word spoken & sound alerts
+    // 1. Ensure on-device neural classifier model is loaded
+    if (!_neuralClassifier.isLoaded) {
+      await _neuralClassifier.loadModel();
+    }
+
+    _pendingSinhalaClass = null;
+    _pendingSinhalaHits = 0;
+    _pendingSinhalaMs = 0;
+    _pendingEnvClass = null;
+    _pendingEnvHits = 0;
+    _pendingEnvMs = 0;
+
+    // 2. Start continuous Google STT engine for live online speech
     _safeListenSpeech();
 
+    // 3. Start audio stream for visualizer & offline neural classification
+    final streamerStarted = await _startAudioStreamer();
+    if (!streamerStarted) {
+      final fallbackStarted = await _startRecordPcmFallback();
+      if (!fallbackStarted && !_speechAvailable) {
+        _isListening = false;
+        _visualizerTicker?.cancel();
+        print('Offline mode unavailable: microphone stream could not start');
+        return false;
+      }
+    }
+
     return true;
+  }
+
+  Future<bool> _startAudioStreamer() async {
+    try {
+      _pcmStreamSubscription?.cancel();
+      _pcmStreamSubscription = null;
+      _audioStreamer = AudioStreamer();
+      // The classifier expects 16 kHz PCM. Set this before accessing audioStream.
+      _audioStreamer!.sampleRate = 16000;
+
+      _pcmStreamSubscription = _audioStreamer!.audioStream.listen(
+        (buffer) {
+          if (!_isListening || buffer.isEmpty) return;
+          _processPcmBuffer(buffer);
+        },
+        onError: (error) {
+          print('AudioStreamer error: $error');
+        },
+        cancelOnError: false,
+      );
+      if (_pcmStreamSubscription == null) return false;
+
+      try {
+        final rate = await _audioStreamer!.actualSampleRate;
+        if (rate > 0) _hardwareSampleRate = rate;
+      } catch (_) {
+        _hardwareSampleRate = 44100;
+      }
+      if (_hardwareSampleRate <= 0) _hardwareSampleRate = 44100;
+    } catch (e) {
+      print('AudioStreamer init error: $e');
+      _pcmStreamSubscription?.cancel();
+      _pcmStreamSubscription = null;
+      _audioStreamer = null;
+      return false;
+    }
+    return true;
+  }
+
+  Future<bool> _startRecordPcmFallback() async {
+    try {
+      await _pcmRecorder?.stop();
+    } catch (_) {}
+    _pcmRecorder = AudioRecorder();
+    try {
+      if (!await _pcmRecorder!.hasPermission()) return false;
+      _hardwareSampleRate = 16000;
+      final stream = await _pcmRecorder!.startStream(
+        const RecordConfig(
+          encoder: AudioEncoder.pcm16bits,
+          numChannels: 1,
+          sampleRate: 16000,
+        ),
+      );
+      _pcmStreamSubscription?.cancel();
+      _pcmStreamSubscription = stream.listen(
+        (bytes) {
+          if (!_isListening || bytes.isEmpty) return;
+          final samples = List<double>.generate(bytes.length ~/ 2, (i) {
+            int byte0 = bytes[i * 2];
+            int byte1 = bytes[i * 2 + 1];
+            int val = (byte1 << 8) | byte0;
+            if (val >= 32768) val -= 65536;
+            return val / 32768.0;
+          });
+          _processPcmBuffer(samples);
+        },
+        onError: (error) {
+          print('PCM recorder error: $error');
+        },
+        cancelOnError: false,
+      );
+      return true;
+    } catch (e) {
+      print('PCM recorder fallback error: $e');
+      try {
+        await _pcmRecorder?.stop();
+      } catch (_) {}
+      _pcmRecorder = null;
+      return false;
+    }
+  }
+
+  void _processPcmBuffer(List<double> rawBuffer) {
+    if (rawBuffer.isEmpty) return;
+
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+
+    double maxRaw = 0.0;
+    for (int i = 0; i < rawBuffer.length; i++) {
+      final a = rawBuffer[i].abs();
+      if (a > maxRaw) maxRaw = a;
+    }
+
+    if (_lastPcmTimeMs > 0) {
+      final deltaMs = nowMs - _lastPcmTimeMs;
+      if (deltaMs > 5 && deltaMs < 200) {
+        final estimatedRate = (rawBuffer.length * 1000.0) / deltaMs;
+        if (estimatedRate > 38000 && estimatedRate < 46000) {
+          _hardwareSampleRate = 44100;
+        } else if (estimatedRate >= 46000 && estimatedRate < 56000) {
+          _hardwareSampleRate = 48000;
+        } else if (estimatedRate >= 12000 && estimatedRate <= 24000) {
+          _hardwareSampleRate = 16000;
+        }
+      }
+    }
+    _lastPcmTimeMs = nowMs;
+
+    final double normScale = maxRaw > 2.0 ? (1.0 / 32768.0) : 1.0;
+    const double gainBoost = 1.0;
+
+    List<double> packet16k;
+    if (_hardwareSampleRate == 16000) {
+      packet16k = List<double>.generate(
+        rawBuffer.length,
+        (i) => (rawBuffer[i] * normScale * gainBoost).clamp(-1.0, 1.0),
+      );
+    } else {
+      final int targetCount = ((rawBuffer.length * 16000) / _hardwareSampleRate).round();
+      if (targetCount <= 0) return;
+      packet16k = List<double>.filled(targetCount, 0.0);
+      final double step = rawBuffer.length / targetCount.toDouble();
+      for (int i = 0; i < targetCount; i++) {
+        final int startIdx = (i * step).floor();
+        final int endIdx = math.min(rawBuffer.length, ((i + 1) * step).floor());
+        double sum = 0.0;
+        int count = 0;
+        for (int j = startIdx; j < endIdx; j++) {
+          sum += rawBuffer[j] * normScale * gainBoost;
+          count++;
+        }
+        double val = count > 0 ? (sum / count) : (rawBuffer[startIdx.clamp(0, rawBuffer.length - 1)] * normScale * gainBoost);
+        packet16k[i] = val.clamp(-1.0, 1.0);
+      }
+    }
+
+    double sumSquares = 0.0;
+    double maxAmp = 0.0;
+
+    for (int i = 0; i < packet16k.length; i++) {
+      final s = packet16k[i];
+      final absS = s.abs();
+      if (absS > maxAmp) maxAmp = absS;
+      sumSquares += s * s;
+
+      _rollingBuf16k[_rollingIdx] = s;
+      _rollingIdx = (_rollingIdx + 1) % 16000;
+      _total16kPushed++;
+    }
+
+    final rms = math.sqrt(sumSquares / (packet16k.isEmpty ? 1 : packet16k.length));
+    
+    // Pass real mic volume & 40-band pitch spectrum directly to wave visualizer continuously
+    final double soundVol = (maxAmp * 4.0 + rms * 12.0).clamp(0.0, 1.0);
+    final double nowSec = nowMs / 1000.0;
+    
+    final List<double> newFrame = List<double>.generate(40, (band) {
+      final int startSample = (band * (packet16k.length / 40.0)).floor();
+      final int endSample = math.min(packet16k.length, ((band + 1) * (packet16k.length / 40.0)).floor());
+      
+      double bandAmp = 0.0;
+      for (int k = startSample; k < endSample; k++) {
+        final a = packet16k[k].abs();
+        if (a > bandAmp) bandAmp = a;
+      }
+      
+      final double centerDist = ((band - 20) / 20.0).abs();
+      final double centerEnvelope = math.exp(-centerDist * centerDist * 1.2);
+
+      // Organic dynamic micro-waves so visualizer baseline is alive and NEVER freezes into a static shape!
+      final double ripple1 = math.sin(band * 0.40 + nowSec * 4.0).abs() * 0.08;
+      final double ripple2 = math.cos(band * 0.70 - nowSec * 5.5).abs() * 0.06;
+
+      double targetHeight;
+      if (soundVol < 0.008) {
+        // Resting baseline: lively micro-bouncing waveform (0.12 - 0.32)
+        targetHeight = (0.14 + centerEnvelope * 0.10 + ripple1 + ripple2).clamp(0.12, 0.32);
+      } else {
+        // Sound / Speech active: energetic response to mic volume and pitch
+        final double scaledBand = (bandAmp * 5.0 + soundVol * 0.8).clamp(0.20, 1.0);
+        targetHeight = (scaledBand * (centerEnvelope * 0.65 + ripple1 * 0.5 + 0.30)).clamp(0.18, 1.0);
+      }
+      return targetHeight;
+    });
+
+    // Apply smooth exponential moving average across frames for fluid bouncing motion (0 Lag)
+    for (int i = 0; i < 40; i++) {
+      _visualizerBars[i] = _visualizerBars[i] * 0.50 + newFrame[i] * 0.50;
+    }
+
+    _waveformController.add(List<double>.from(_visualizerBars));
+
+    // OFFLINE LIVE SPEECH & SOUND DETECTION ENGINE:
+    // Identical functionality to online mode:
+    // 1. Spoken words transcribe live to the speech box and trigger emergency alert cards
+    // 2. Direct word match on the 8 Sinhala emergency keywords (near or far from mic)
+    // 3. Environmental sounds ONLY trigger when no speech is occurring (prevents wrong sounds!)
+    if (!_isAnimatingTranscript && _total16kPushed >= 2000) {
+      if (nowMs - _lastMlTimeMs >= 100 && (rms >= 0.003 || maxAmp >= 0.010)) {
+        _lastMlTimeMs = nowMs;
+
+        final List<double> window1s = List<double>.filled(16000, 0.0);
+        double peakAmp = 0.0;
+        for (int i = 0; i < 16000; i++) {
+          final double val = _rollingBuf16k[(_rollingIdx - 16000 + i + 16000) % 16000];
+          window1s[i] = val;
+          final a = val.abs();
+          if (a > peakAmp) peakAmp = a;
+        }
+
+        // Only evaluate when genuine sound or speech energy is present (ignores quiet ambient hiss)
+        if (peakAmp >= 0.015) {
+          // Standardize acoustic power for speech distance invariance (near or far from mic)
+          final sBoosted = List<double>.generate(
+            16000,
+            (i) => (window1s[i] * (0.28 / peakAmp).clamp(1.0, 6.0)).clamp(-1.0, 1.0),
+          );
+
+          final pred = _neuralClassifier.predict(sBoosted);
+
+          if (pred != null) {
+            final now = DateTime.now();
+            final bool canAlert = (_lastGlobalAlertTime == null ||
+                now.difference(_lastGlobalAlertTime!).inMilliseconds > 4000);
+            final allProbs = pred.allProbabilities;
+
+            // Track speech presence
+            double totalSpeechProb = 0.0;
+            for (var sc in _sinhalaClasses) {
+              totalSpeechProb += (allProbs[sc] ?? 0.0);
+            }
+            if (totalSpeechProb >= 0.15 || pred.label == 'other_speech') {
+              _lastSpeechTimeMs = nowMs;
+            }
+
+            final sinhalaHit = (!_speech.isListening) ? _matchSinhalaKeyword(allProbs, pred.label) : null;
+
+            if (sinhalaHit != null) {
+              // Reset any pending environmental sound tracking
+              _pendingEnvClass = null;
+              _pendingEnvHits = 0;
+              _lastSpeechTimeMs = nowMs;
+
+              if (_pendingSinhalaClass == sinhalaHit.className && nowMs - _pendingSinhalaMs < 500) {
+                _pendingSinhalaHits++;
+              } else {
+                _pendingSinhalaClass = sinhalaHit.className;
+                _pendingSinhalaHits = 1;
+              }
+              _pendingSinhalaMs = nowMs;
+
+              if (_pendingSinhalaHits >= 2) {
+                _pendingSinhalaClass = null;
+                _pendingSinhalaHits = 0;
+
+                final mappedKey = _labelToSoundKey[sinhalaHit.className] ?? sinhalaHit.className;
+                final lastHitTime = _lastKeywordTriggerTimes[mappedKey];
+                final bool classCooldownOk = (lastHitTime == null || now.difference(lastHitTime).inMilliseconds > 4500);
+
+                if (canAlert && classCooldownOk) {
+                  _lastGlobalAlertTime = now;
+                  _lastKeywordTriggerTimes[mappedKey] = now;
+                  _animateOfflineTranscriptAndAlert(mappedKey);
+                  return;
+                }
+              }
+            } else {
+              if (nowMs - _pendingSinhalaMs > 250) {
+                _pendingSinhalaClass = null;
+                _pendingSinhalaHits = 0;
+              }
+
+              // ENVIRONMENTAL SOUNDS (vehicle horns, ambulance, fire alarm, dog barking, baby crying):
+              // STRICT CRITERIA to NEVER trigger false positives from ambient room noise or speech:
+              // 1. Must NOT have had speech recently (> 4.5s)
+              // 2. Sound must have substantial volume (peakAmp >= 0.045, horns/sirens are loud!)
+              // 3. Top class must be an environmental emergency class with high confidence (>= 0.88)
+              // 4. Must have large margin over runner-up class (>= 0.50)
+              // 5. Must be sustained/confirmed across at least 3 consecutive frames within 600ms
+              if (canAlert && (nowMs - _lastSpeechTimeMs >= 4500) && totalSpeechProb < 0.08 && peakAmp >= 0.045) {
+                final String top = pred.label;
+                final double topP = pred.probability;
+
+                const envClasses = {
+                  'vehicle_horn': 'vehicle horns',
+                  'ambulance_siren': 'ambulance',
+                  'fire_truck': 'fire_truck',
+                  'dog_barking': 'dog_bark_dataset',
+                  'baby_crying': 'baby crying',
+                };
+
+                if (envClasses.containsKey(top)) {
+                  double runnerUp = 0.0;
+                  allProbs.forEach((k, v) {
+                    if (k != top && v > runnerUp) runnerUp = v;
+                  });
+
+                  final double margin = topP - runnerUp;
+                  if (topP >= 0.88 && margin >= 0.50) {
+                    if (_pendingEnvClass == top && (nowMs - _pendingEnvMs < 600)) {
+                      _pendingEnvHits++;
+                    } else {
+                      _pendingEnvClass = top;
+                      _pendingEnvHits = 1;
+                    }
+                    _pendingEnvMs = nowMs;
+
+                    if (_pendingEnvHits >= 3) {
+                      _pendingEnvClass = null;
+                      _pendingEnvHits = 0;
+                      final soundKey = envClasses[top]!;
+                      final lastHitTime = _lastKeywordTriggerTimes[soundKey];
+                      final bool classCooldownOk = (lastHitTime == null || now.difference(lastHitTime).inMilliseconds > 4500);
+
+                      if (classCooldownOk) {
+                        _lastGlobalAlertTime = now;
+                        _lastKeywordTriggerTimes[soundKey] = now;
+                        _rollingBuf16k.fillRange(0, 16000, 0.0);
+                        _total16kPushed = 0;
+                        simulateSoundDetection(soundKey, confidence: topP, overrideCooldown: true);
+                      }
+                    }
+                  } else {
+                    _pendingEnvClass = null;
+                    _pendingEnvHits = 0;
+                  }
+                } else {
+                  _pendingEnvClass = null;
+                  _pendingEnvHits = 0;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  _SinhalaHit? _matchSinhalaKeyword(Map<String, double> allProbs, String topLabel) {
+    if (!_sinhalaClasses.contains(topLabel)) return null;
+
+    final double topP = allProbs[topLabel] ?? 0.0;
+    if (topP < 0.70) return null;
+
+    double runnerUp = 0.0;
+    allProbs.forEach((name, p) {
+      if (name != topLabel && p > runnerUp) {
+        runnerUp = p;
+      }
+    });
+
+    final double margin = topP - runnerUp;
+    if (margin >= 0.35) {
+      return _SinhalaHit(topLabel, topP);
+    }
+    return null;
+  }
+
+  void _animateOfflineTranscriptAndAlert(String key) async {
+    if (_isAnimatingTranscript) return;
+    _isAnimatingTranscript = true;
+
+    try {
+      final steps = _progressiveSteps[key] ?? [_displayNames[key] ?? key];
+
+      // Display letter by letter / word by word in the live speech box (SAME as online speech typing!)
+      for (int i = 0; i < steps.length; i++) {
+        _transcriptController.add(steps[i]);
+        await Future.delayed(const Duration(milliseconds: 120));
+      }
+
+      // Allow user to clearly see the full recognized Sinhala word in the Live Speech box before alert card pops up
+      await Future.delayed(const Duration(milliseconds: 350));
+
+      await simulateSoundDetection(key, confidence: 0.99, overrideCooldown: true);
+
+      // CRITICAL: Immediately clear rolling buffer and reset pending state so trailing utterance decay NEVER triggers wrong cards!
+      _rollingBuf16k.fillRange(0, 16000, 0.0);
+      _total16kPushed = 0;
+      _pendingSinhalaClass = null;
+      _pendingSinhalaHits = 0;
+      _pendingEnvClass = null;
+      _pendingEnvHits = 0;
+      _lastGlobalAlertTime = DateTime.now();
+      _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
+    } catch (_) {
+    } finally {
+      _isAnimatingTranscript = false;
+    }
   }
 
   String _formatTranscriptWithSinhala(String rawWords) {
     final String lower = rawWords.toLowerCase();
 
     final Map<String, String> wordToSinhala = {
-      'udaw': 'Udaw (උදව්)',
-      'udau': 'Udaw (උදව්)',
-      'udaww': 'Udaw (උදව්)',
-      'uda': 'Udaw (උදව්)',
-      'udaa': 'Udaw (උදව්)',
-      'udav': 'Udaw (උදව්)',
-      'help': 'Udaw (උදව්)',
-      'sos': 'Udaw (උදව්)',
-      'emergency': 'Udaw (උදව්)',
-      'උදව්': 'Udaw (උදව්)',
-      'උදවු': 'Udaw (උදව්)',
-      'ehata wenna': 'Ehata Wenna (එහාට වෙන්න)',
-      'eheta wenna': 'Ehata Wenna (එහාට වෙන්න)',
-      'ehatawenna': 'Ehata Wenna (එහාට වෙන්න)',
-      'ehetawenna': 'Ehata Wenna (එහාට වෙන්න)',
-      'ehata': 'Ehata Wenna (එහාට වෙන්න)',
-      'eheta': 'Ehata Wenna (එහාට වෙන්න)',
-      'move aside': 'Ehata Wenna (එහාට වෙන්න)',
-      'එහාට වෙන්න': 'Ehata Wenna (එහාට වෙන්න)',
-      'එහාට': 'Ehata Wenna (එහාට වෙන්න)',
-      'anathurak': 'Anathurak (අනතුරක්)',
-      'anatura': 'Anathurak (අනතුරක්)',
-      'anathura': 'Anathurak (අනතුරක්)',
-      'danger': 'Anathurak (අනතුරක්)',
-      'accident': 'Anathurak (අනතුරක්)',
-      'warning': 'Anathurak (අනතුරක්)',
-      'අනතුරක්': 'Anathurak (අනතුරක්)',
-      'beraganna': 'Beraganna (බේරාගන්න)',
-      'beeraganna': 'Beraganna (බේරාගන්න)',
-      'save': 'Beraganna (බේරාගන්න)',
-      'rescue': 'Beraganna (බේරාගන්න)',
-      'බේරගන්න': 'Beraganna (බේරාගන්න)',
-      'බේරාගන්න': 'Beraganna (බේරාගන්න)',
-      'ginnak': 'Ginnak (ගින්නක්)',
-      'ginna': 'Ginnak (ගින්නක්)',
-      'fire': 'Ginnak (ගින්නක්)',
-      'fire alarm': 'Ginnak (ගින්නක්)',
-      'burning': 'Ginnak (ගින්නක්)',
-      'ගින්නක්': 'Ginnak (ගින්නක්)',
-      'karadarayak': 'Karadarayak (කරදරයක්)',
-      'karadara': 'Karadarayak (කරදරයක්)',
-      'trouble': 'Karadarayak (කරදරයක්)',
-      'problem': 'Karadarayak (කරදරයක්)',
-      'කරදරයක්': 'Karadarayak (කරදරයක්)',
-      'balagena': 'Balagena (බලාගෙන)',
-      'balaagena': 'Balagena (බලාගෙන)',
-      'watch out': 'Balagena (බලාගෙන)',
-      'look out': 'Balagena (බලාගෙන)',
-      'බලාගෙන': 'Balagena (බලාගෙන)',
-      'parissamin': 'Parissamin (පරිස්සමින්)',
-      'parisamin': 'Parissamin (පරිස්සමින්)',
-      'parissamen': 'Parissamin (පරිස්සමින්)',
-      'prissin': 'Parissamin (පරිස්සමින්)',
-      'parissin': 'Parissamin (පරිස්සමින්)',
-      'prissamin': 'Parissamin (පරිස්සමින්)',
-      'careful': 'Parissamin (පරිස්සමින්)',
-      'take care': 'Parissamin (පරිස්සමින්)',
-      'පරිස්සමින්': 'Parissamin (පරිස්සමින්)',
+      'udaw': 'උදව් (Udaw - Help)',
+      'udau': 'උදව් (Udaw - Help)',
+      'udaww': 'උදව් (Udaw - Help)',
+      'help': 'උදව් (Udaw - Help)',
+      'sos': 'උදව් (Udaw - Help)',
+      'emergency': 'උදව් (Udaw - Help)',
+      'උදව්': 'උදව් (Udaw - Help)',
+      'උදවු': 'උදව් (Udaw - Help)',
+      'anathurak': 'අනතුරක් (Anathurak - Danger)',
+      'anatura': 'අනතුරක් (Anathurak - Danger)',
+      'danger': 'අනතුරක් (Anathurak - Danger)',
+      'accident': 'අනතුරක් (Anathurak - Danger)',
+      'warning': 'අනතුරක් (Anathurak - Danger)',
+      'අනතුරක්': 'අනතුරක් (Anathurak - Danger)',
+      'beraganna': 'බේරාගන්න (Beraganna - Save Me)',
+      'beeraganna': 'බේරාගන්න (Beraganna - Save Me)',
+      'save': 'බේරාගන්න (Beraganna - Save Me)',
+      'rescue': 'බේරාගන්න (Beraganna - Save Me)',
+      'බේරාගන්න': 'බේරාගන්න (Beraganna - Save Me)',
+      'ginnak': 'ගින්නක් (Ginnak - Fire)',
+      'ginna': 'ගින්නක් (Ginnak - Fire)',
+      'fire': 'ගින්නක් (Ginnak - Fire)',
+      'burning': 'ගින්නක් (Ginnak - Fire)',
+      'ගින්නක්': 'ගින්නක් (Ginnak - Fire)',
+      'karadarayak': 'කරදරයක් (Karadarayak - Trouble)',
+      'karadara': 'කරදරයක් (Karadarayak - Trouble)',
+      'trouble': 'කරදරයක් (Karadarayak - Trouble)',
+      'problem': 'කරදරයක් (Karadarayak - Trouble)',
+      'කරදරයක්': 'කරදරයක් (Karadarayak - Trouble)',
+      'balagena': 'බලාගෙන (Balaagena - Watch Out)',
+      'balaagena': 'බලාගෙන (Balaagena - Watch Out)',
+      'watch out': 'බලාගෙන (Balaagena - Watch Out)',
+      'look out': 'බලාගෙන (Balaagena - Watch Out)',
+      'බලාගෙන': 'බලාගෙන (Balaagena - Watch Out)',
+      'ehata wenna': 'එහාට වෙන්න (Ehata Wenna - Move Aside)',
+      'ehatawenna': 'එහාට වෙන්න (Ehata Wenna - Move Aside)',
+      'ehata': 'එහාට වෙන්න (Ehata Wenna - Move Aside)',
+      'move aside': 'එහාට වෙන්න (Ehata Wenna - Move Aside)',
+      'එහාට': 'එහාට වෙන්න (Ehata Wenna - Move Aside)',
+      'parissamin': 'පරිස්සමින් (Parissamin - Be Careful)',
+      'parisamin': 'පරිස්සමින් (Parissamin - Be Careful)',
+      'parissamen': 'පරිස්සමින් (Parissamin - Be Careful)',
+      'careful': 'පරිස්සමින් (Parissamin - Be Careful)',
+      'take care': 'පරිස්සමින් (Parissamin - Be Careful)',
+
+      // Environmental Sounds & Audio Imitations
+      'wee-ow': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
+      'weeow': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
+      'nee-naw': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
+      'neenaw': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
+      'siren': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
+      'ambulance': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
+      'සයිරන්': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
+      'ගිලන්': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
+
+      'woof-woof': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
+      'woofwoof': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
+      'woof': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
+      'arf-arf': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
+      'ruff-ruff': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
+      'bark': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
+      'barking': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
+      'බල්ලා': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
+      'බුරනවා': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
+      'බුරන': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
+
+      'waa-waa': 'ළදරු හැඬීම (Baby Crying)',
+      'waawaa': 'ළදරු හැඬීම (Baby Crying)',
+      'wah-wah': 'ළදරු හැඬීම (Baby Crying)',
+      'wahwah': 'ළදරු හැඬීම (Baby Crying)',
+      'waa': 'ළදරු හැඬීම (Baby Crying)',
+      'wah': 'ළදරු හැඬීම (Baby Crying)',
+      'crying': 'ළදරු හැඬීම (Baby Crying)',
+      'cry': 'ළදරු හැඬීම (Baby Crying)',
+      'ළදරු': 'ළදරු හැඬීම (Baby Crying)',
+      'හැඬීම': 'ළදරු හැඬීම (Baby Crying)',
+      'අඬනවා': 'ළදරු හැඬීම (Baby Crying)',
+
+      'beep-beep': 'වාහන හොන් (Vehicle Horns)',
+      'beepbeep': 'වාහන හොන් (Vehicle Horns)',
+      'honk-honk': 'වාහන හොන් (Vehicle Horns)',
+      'honkhonk': 'වාහන හොන් (Vehicle Horns)',
+      'beep': 'වාහන හොන් (Vehicle Horns)',
+      'honk': 'වාහන හොන් (Vehicle Horns)',
+      'horn': 'වාහන හොන් (Vehicle Horns)',
+      'හොන්': 'වාහන හොන් (Vehicle Horns)',
+      'පීප්': 'වාහන හොන් (Vehicle Horns)',
+
+      'traffic': 'වාහන තදබදය (Traffic Noise)',
+      'vroom': 'වාහන තදබදය (Traffic Noise)',
+      'rumble': 'වාහන තදබදය (Traffic Noise)',
+      'තදබදය': 'වාහන තදබදය (Traffic Noise)',
+      'වාහන': 'වාහන තදබදය (Traffic Noise)',
     };
 
     for (var entry in wordToSinhala.entries) {
@@ -508,19 +865,19 @@ class AudioClassifierService {
 
     final Map<String, List<String>> keywordPatterns = {
       'sinhala_udaw_': [
-        'udaw', 'udaww', 'udau', 'uda', 'udaa', 'udawwa', 'udawwak', 'udauwa', 'udav', 'udavv', 'help', 'udawu', 'udauw', 'sos', 'emergency',
-        'උදව්', 'උදව්වක්', 'උදවු', 'උදවු කරන්න', 'උදව් කරන්න', 'උදව්ව', 'උදව්ක්', 'උදව'
+        'udaw', 'udaww', 'udau', 'udawwa', 'udawwak', 'udauwa', 'udav', 'udavv', 'help', 'udawu', 'udauw', 'sos', 'emergency',
+        'උදව්', 'උදව්වක්', 'උදවු', 'උදවු කරන්න', 'උදව් කරන්න', 'උදව්ව', 'උදව්ක්'
       ],
       'sinhala_anathurak_': [
         'anathurak', 'anatura', 'anathura', 'anathurai', 'anaturak', 'danger', 'anaturai', 'anathurac', 'accident', 'warning', 'anatur', 'anathur',
         'අනතුරක්', 'අනතුර', 'අනතුරයි'
       ],
       'sinhala_beraganna_': [
-        'beraganna', 'beeraganna', 'bcraganna', 'beera', 'beragan', 'save me', 'rescue', 'beragannako', 'berannako', 'bera ganna',
+        'beraganna', 'beeraganna', 'bcraganna', 'beera', 'beragan', 'save me', 'rescue', 'beragannako', 'berannako',
         'බේරාගන්න', 'බේරගන්න', 'බේරාගන්නකෝ', 'බේරගන්නකෝ', 'බේරන්න'
       ],
       'sinhala_ginnak_': [
-        'ginnak', 'ginna', 'ginnaki', 'ginnac', 'fire', 'fire alarm', 'ginak', 'firefire', 'burning',
+        'ginnak', 'ginna', 'ginnaki', 'ginnac', 'fire', 'ginak', 'firefire', 'burning',
         'ගින්නක්', 'ගින්න', 'ගිනි', 'ගිණි'
       ],
       'sinhala_karadarayak_': [
@@ -532,22 +889,19 @@ class AudioClassifierService {
         'බලාගෙන', 'බලන්', 'බලාගෙනම'
       ],
       'sinhala_ehata_wenna_': [
-        'ehata wenna', 'eheta wenna', 'ehatawenna', 'ehetawenna', 'ehata', 'move aside', 'move away', 'step back', 'get away',
+        'ehata wenna', 'ehatawenna', 'ehata', 'move aside', 'move away', 'step back', 'get away',
         'එහාට වෙන්න', 'එහාටවෙන්න', 'එහාට'
       ],
       'sinhala_parissamin_': [
         'parissamin', 'parisamin', 'parissamen', 'parisamen', 'parissam', 'parisam', 'be careful', 'take care',
         'පරිස්සමින්', 'පරිස්සමෙන්', 'පරිසමින්', 'පරිස්සම්'
       ],
-      'siren': [
-        'siren', 'sirens', 'සයිරන්'
-      ],
       'ambulance': [
-        'wee-ow', 'weeow', 'wee ow', 'nee-naw', 'neenaw', 'nee naw', 'ambulance', 'ambulance siren', 'wee oo', 'weeoo', 'wail', 'wailing',
-        'ගිලන්', 'වී ඕ', 'වීඕ', 'නි නෝ', 'නිනෝ', 'ගිලන් රථ'
+        'wee-ow', 'weeow', 'wee ow', 'nee-naw', 'neenaw', 'nee naw', 'siren', 'sirens', 'ambulance', 'ambulance siren', 'wee oo', 'weeoo', 'wail', 'wailing', 'wee', 'ow', 'naw',
+        'සයිරන්', 'ගිලන්', 'වී ඕ', 'වීඕ', 'නි නෝ', 'නිනෝ', 'සයිරන් එක', 'ගිලන් රථ'
       ],
       'dog_bark_dataset': [
-        'woof-woof', 'woofwoof', 'woof woof', 'arf-arf', 'arfarf', 'arf arf', 'ruff-ruff', 'ruffruff', 'ruff ruff', 'woof', 'woofs', 'arf', 'ruff', 'bark', 'barks', 'barking', 'dog', 'dogs', 'dog barking', 'dog bark', 'yap', 'yapping', 'bow bow', 'bau bau',
+        'woof-woof', 'woofwoof', 'woof woof', 'arf-arf', 'arfarf', 'arf arf', 'ruff-ruff', 'ruffruff', 'ruff ruff', 'woof', 'woofs', 'arf', 'ruff', 'bark', 'barks', 'barking', 'dog', 'dogs', 'dog barking', 'dog bark', 'yap', 'yapping', 'bow bow', 'bau bau', 'bow', 'bau',
         'බල්ලා', 'බුරනවා', 'බුරන', 'වුෆ්', 'වුෆ් වුෆ්', 'බෝ', 'බෝ බෝ', 'බල්ලන්', 'බල්ලා බුරනවා'
       ],
       'baby crying': [
@@ -587,16 +941,43 @@ class AudioClassifierService {
     _isListening = false;
     _sttWatchdogTimer?.cancel();
     _sttWatchdogTimer = null;
+    _offlineNetCheckTimer?.cancel();
+    _offlineNetCheckTimer = null;
+    _isOfflineMode = false;
     _latestSoundVolume = 0.02;
     _waveformController.add([]);
-
-    try {
-      _bgChannel.invokeMethod('stopService');
-    } catch (_) {}
 
     if (_speech.isListening) {
       _speech.stop();
     }
+    _pcmStreamSubscription?.cancel();
+    _pcmStreamSubscription = null;
+    _audioStreamer = null;
+    try {
+      _pcmRecorder?.stop();
+    } catch (_) {}
+    _pcmRecorder = null;
+    _pendingSinhalaClass = null;
+    _pendingSinhalaHits = 0;
+    _pendingSinhalaMs = 0;
+    _pendingEnvClass = null;
+    _pendingEnvHits = 0;
+    _pendingEnvMs = 0;
+  }
+
+  void debugForceListening() {
+    _isListening = true;
+    _isOfflineMode = true;
+    _hardwareSampleRate = 16000;
+  }
+
+  void feedAudioChunk(List<double> chunk) {
+    if (!_isListening) return;
+    _processPcmBuffer(chunk);
+  }
+
+  String debugDetectionState() {
+    return _isOfflineMode ? 'offline' : 'online';
   }
 
   DateTime? _lastEmittedAlertTime;
@@ -606,6 +987,7 @@ class AudioClassifierService {
     final now = DateTime.now();
 
     if (!overrideCooldown) {
+      // 1-second global cooldown for non-override sound detections
       if (_lastEmittedAlertTime != null && now.difference(_lastEmittedAlertTime!).inMilliseconds < 1000) {
         return;
       }
@@ -633,15 +1015,7 @@ class AudioClassifierService {
     // 2. Trigger Phone Vibration instantly
     VibrationService().triggerVibration(event.priority);
 
-    // 3. Trigger Flashlight Flashing pattern instantly (synced with vibration)
-    FlashlightService().triggerFlashlightPattern(event.priority);
-
-    // 4. Wake up screen if locked or off in pocket
-    try {
-      _bgChannel.invokeMethod('wakeScreen');
-    } catch (_) {}
-
-    // 5. Save log to history & sync to Yesido IO 39 smartwatch asynchronously in background
+    // 3. Save log to history & sync to Yesido IO 39 smartwatch asynchronously in background
     unawaited(HistoryService().addEvent(event));
     unawaited(SmartwatchService().sendAlertToWatch(event));
   }
@@ -651,5 +1025,12 @@ class AudioClassifierService {
     _controller.close();
     _waveformController.close();
     _transcriptController.close();
+    _diagController.close();
   }
+}
+
+class _SinhalaHit {
+  final String className;
+  final double probability;
+  _SinhalaHit(this.className, this.probability);
 }

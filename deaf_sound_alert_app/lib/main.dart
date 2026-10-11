@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'providers/app_provider.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/history_screen.dart';
@@ -32,7 +31,7 @@ class DeafSoundAlertApp extends StatelessWidget {
           secondary: Color(0xFF059669),
           surface: Color(0xFF1E293B),
         ),
-        textTheme: GoogleFonts.outfitTextTheme(ThemeData.dark().textTheme),
+        textTheme: ThemeData.dark().textTheme,
       ),
       home: const MainNavigationScreen(),
     );

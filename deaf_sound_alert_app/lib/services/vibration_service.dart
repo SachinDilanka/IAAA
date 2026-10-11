@@ -8,73 +8,65 @@ class VibrationService {
   VibrationService._internal();
 
   bool _hasVibrator = false;
-  bool _hasAmplitude = false;
 
   Future<void> init() async {
     try {
-      _hasVibrator = await Vibration.hasVibrator() == true;
-      _hasAmplitude = await Vibration.hasAmplitudeControl() == true;
+      final res = await Vibration.hasVibrator();
+      _hasVibrator = res == true;
     } catch (e) {
       _hasVibrator = true;
-      _hasAmplitude = true;
     }
   }
 
-  /// Triggers priority-based ultra-strong, distinct tactile vibration patterns specially designed for deaf users
   Future<void> triggerVibration(PriorityLevel priority) async {
-    if (!_hasVibrator) return;
-
+    // 1. Instant tactile HapticFeedback based on priority level
     try {
       switch (priority) {
         case PriorityLevel.high:
-          // Maximum Intensity 5-Burst SOS Emergency Vibration for Deaf Users (Udaw, Fire, Siren, Save Me, Danger)
-          if (_hasAmplitude) {
-            await Vibration.vibrate(
-              pattern: [0, 800, 100, 800, 100, 800, 100, 800, 100, 1000],
-              intensities: [0, 255, 0, 255, 0, 255, 0, 255, 0, 255],
-            );
-          } else {
-            await Vibration.vibrate(pattern: [0, 800, 100, 800, 100, 800, 100, 800, 100, 1000]);
-          }
           await HapticFeedback.heavyImpact();
-          await Future.delayed(const Duration(milliseconds: 200));
-          await HapticFeedback.heavyImpact();
-          await Future.delayed(const Duration(milliseconds: 200));
-          await HapticFeedback.heavyImpact();
+          Future.delayed(const Duration(milliseconds: 150), () => HapticFeedback.heavyImpact());
+          Future.delayed(const Duration(milliseconds: 300), () => HapticFeedback.heavyImpact());
           break;
-
         case PriorityLevel.medium:
-          // Heavy 3-Pulse Caution Pattern for Deaf Users (Balaagena, Karadarayak, Ehata Wenna, Horn, Barking, Baby Crying)
-          if (_hasAmplitude) {
-            await Vibration.vibrate(
-              pattern: [0, 600, 150, 600, 150, 600],
-              intensities: [0, 255, 0, 255, 0, 255],
-            );
-          } else {
-            await Vibration.vibrate(pattern: [0, 600, 150, 600, 150, 600]);
-          }
-          await HapticFeedback.heavyImpact();
-          await Future.delayed(const Duration(milliseconds: 250));
-          await HapticFeedback.heavyImpact();
+          await HapticFeedback.mediumImpact();
+          Future.delayed(const Duration(milliseconds: 200), () => HapticFeedback.mediumImpact());
           break;
-
         case PriorityLevel.low:
-          // Strong Double Pulse Notice Pattern for Deaf Users (Parissamin, Traffic, Road)
-          if (_hasAmplitude) {
-            await Vibration.vibrate(
-              pattern: [0, 450, 150, 450],
-              intensities: [0, 255, 0, 255],
-            );
-          } else {
-            await Vibration.vibrate(pattern: [0, 450, 150, 450]);
-          }
-          await HapticFeedback.heavyImpact();
+          await HapticFeedback.lightImpact();
+          break;
+      }
+    } catch (_) {}
+
+    if (!_hasVibrator) return;
+
+    // 2. Strong device vibration motor pattern based on priority level
+    try {
+      switch (priority) {
+        case PriorityLevel.high:
+          // Heavy SOS Triple Burst Pattern for Deaf Users (Emergency: Udaw, Fire, Siren, Save Me)
+          await Vibration.vibrate(
+            pattern: [0, 500, 100, 500, 100, 700],
+            intensities: [0, 255, 0, 255, 0, 255],
+          );
+          break;
+        case PriorityLevel.medium:
+          // Heavy Double Pulse Pattern for Deaf Users (Warning: Balaagena, Ehata Wenna, Horn, Barking)
+          await Vibration.vibrate(
+            pattern: [0, 400, 150, 400],
+            intensities: [0, 240, 0, 240],
+          );
+          break;
+        case PriorityLevel.low:
+          // Single Distinct Pulse Pattern for Deaf Users (Traffic, Road)
+          await Vibration.vibrate(
+            pattern: [0, 300],
+            intensities: [0, 200],
+          );
           break;
       }
     } catch (e) {
       try {
-        await Vibration.vibrate(duration: 1000);
-        await HapticFeedback.heavyImpact();
+        await Vibration.vibrate(duration: 800);
       } catch (_) {}
     }
   }
@@ -85,4 +77,3 @@ class VibrationService {
     } catch (_) {}
   }
 }
-
