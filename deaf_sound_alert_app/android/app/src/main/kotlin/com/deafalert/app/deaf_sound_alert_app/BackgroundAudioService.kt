@@ -159,10 +159,16 @@ class BackgroundAudioService : Service() {
             PendingIntent.getActivity(this, 0, launchIntent, flags)
         } else null
 
+        val iconRes = try {
+            if (applicationInfo.icon != 0) applicationInfo.icon else android.R.drawable.ic_btn_speak_now
+        } catch (_: Exception) {
+            android.R.drawable.ic_btn_speak_now
+        }
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Deaf Sound Alert Active")
             .setContentText("Monitoring sounds & Sinhala speech in real-time")
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(iconRes)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
