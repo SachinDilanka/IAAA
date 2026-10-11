@@ -1,9 +1,8 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'dart:math' as math;
+import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:record/record.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:audio_streamer/audio_streamer.dart';
 import '../models/detected_sound.dart';
@@ -14,7 +13,7 @@ import 'sound_config_service.dart';
 import 'history_service.dart';
 import 'native_neural_audio_classifier.dart';
 
-class AudioClassifierService {
+class AudioClassifierService with WidgetsBindingObserver {
   static final AudioClassifierService _instance = AudioClassifierService._internal();
   factory AudioClassifierService() => _instance;
   AudioClassifierService._internal();
@@ -24,6 +23,18 @@ class AudioClassifierService {
   final stt.SpeechToText _speech = stt.SpeechToText();
   AudioStreamer? _audioStreamer;
   StreamSubscription? _pcmStreamSubscription;
+
+  bool _isScreenOff = false;
+  bool get isScreenOff => _isScreenOff;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _isScreenOff = true;
+    } else if (state == AppLifecycleState.resumed) {
+      _isScreenOff = false;
+    }
+  }
 
   Timer? _sttWatchdogTimer;
   bool _speechAvailable = false;
@@ -114,6 +125,10 @@ class AudioClassifierService {
   };
 
   Future<void> init() async {
+    try {
+      WidgetsBinding.instance.addObserver(this);
+    } catch (_) {}
+
     try {
       await _neuralClassifier.loadModel();
     } catch (_) {}
@@ -478,12 +493,13 @@ class AudioClassifierService {
           if (mappedKey.startsWith('sinhala_')) {
             _lastSpeechTimeMs = nowMs;
 
-            // When Speech-To-Text (STT) is active, STT handles full live sentence speech transcription & exact emergency keyword card popups!
-            if (_speech.isListening) {
+            // When screen is ON and Speech-To-Text (STT) is active, STT handles full live sentence speech transcription & exact emergency keyword card popups!
+            // When screen is OFF/locked in pocket or STT is idle/offline, let the offline neural classifier evaluate emergency keywords!
+            if (_speech.isListening && !_isScreenOff) {
               return;
             }
 
-            // Offline Fallback Mode (when STT is idle/offline): require high confidence topProb >= 0.85 to avoid false popups
+            // Offline / Lock-Screen Fallback Mode: require high confidence topProb >= 0.85 to avoid false popups
             if (topProb >= 0.85) {
               final lastTime = _lastKeywordTriggerTimes[mappedKey];
               if (lastTime != null && (nowMs - lastTime.millisecondsSinceEpoch < 1500)) {
@@ -502,10 +518,13 @@ class AudioClassifierService {
           }
 
           // 2. ENVIRONMENTAL SOUNDS (Fire Truck, Dog Barking, Baby Crying, Ambulance Siren, Vehicle Horns, Traffic Noise)
-          // Environmental sounds evaluate ONLY when speech has been idle for >= 3000ms AND totalSpeechProb < 0.05
-          final bool isSpeechIdle = (nowMs - _lastSpeechTimeMs >= 3000);
+          // Environmental sounds evaluate when speech has been idle for >= 1200ms AND totalSpeechProb < 0.08
+          final bool isSpeechIdle = (nowMs - _lastSpeechTimeMs >= 1200);
+          final bool isDogOrBaby = (mappedKey == 'dog_bark_dataset' || dogProb >= 0.68 || mappedKey == 'baby crying' || babyProb >= 0.68);
+          final bool allowEnvironmental = (isSpeechIdle && totalSpeechProb < 0.08) ||
+              (isDogOrBaby && (nowMs - _lastSpeechTimeMs >= 800) && math.max(dogProb, babyProb) > totalSpeechProb);
 
-          if (isSpeechIdle && totalSpeechProb < 0.05) {
+          if (allowEnvironmental) {
             // Vehicle Horns
             if (mappedKey == 'vehicle horns' || topLabel == 'vehicle_horn') {
               if (topProb >= 0.75 && (rms >= 0.025 || maxAmp >= 0.060)) {
@@ -536,22 +555,24 @@ class AudioClassifierService {
               }
             }
 
-            // Dog Barking
-            if (mappedKey == 'dog_bark_dataset' || dogProb >= 0.75) {
-              if (math.max(dogProb, topProb) >= 0.75 && (rms >= 0.025 || maxAmp >= 0.060)) {
+            // Dog Barking (Instant 0-delay response on first bark)
+            if (mappedKey == 'dog_bark_dataset' || dogProb >= 0.68) {
+              final double effectiveDogConf = math.max(dogProb, topProb);
+              if (effectiveDogConf >= 0.68 && (rms >= 0.018 || maxAmp >= 0.045)) {
                 final String displayName = _displayNames['dog_bark_dataset'] ?? 'Dog Barking';
                 _transcriptController.add(displayName);
-                simulateSoundDetection('dog_bark_dataset', confidence: math.max(dogProb, topProb));
+                simulateSoundDetection('dog_bark_dataset', confidence: effectiveDogConf);
                 return;
               }
             }
 
-            // Baby Crying
-            if (mappedKey == 'baby crying' || babyProb >= 0.75) {
-              if (math.max(babyProb, topProb) >= 0.75 && (rms >= 0.025 || maxAmp >= 0.060)) {
+            // Baby Crying (Instant 0-delay response on baby crying)
+            if (mappedKey == 'baby crying' || babyProb >= 0.68) {
+              final double effectiveBabyConf = math.max(babyProb, topProb);
+              if (effectiveBabyConf >= 0.68 && (rms >= 0.018 || maxAmp >= 0.045)) {
                 final String displayName = _displayNames['baby crying'] ?? 'Baby Crying';
                 _transcriptController.add(displayName);
-                simulateSoundDetection('baby crying', confidence: math.max(babyProb, topProb));
+                simulateSoundDetection('baby crying', confidence: effectiveBabyConf);
                 return;
               }
             }
@@ -842,6 +863,9 @@ class AudioClassifierService {
   }
 
   void dispose() {
+    try {
+      WidgetsBinding.instance.removeObserver(this);
+    } catch (_) {}
     stopListening();
     _controller.close();
     _waveformController.close();

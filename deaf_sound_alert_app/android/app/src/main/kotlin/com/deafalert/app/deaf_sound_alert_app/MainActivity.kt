@@ -124,20 +124,30 @@ class MainActivity : FlutterActivity() {
 
     private fun flashPattern(pattern: List<Int>) {
         cancelFlashing()
+        if (pattern.isEmpty()) return
+
         var totalDelay = 0L
-        var isOn = true
+        var isTurnOn = false
 
         for (duration in pattern) {
-            val delay = totalDelay
-            val state = isOn
-            val r = Runnable {
-                setTorchMode(state)
+            val d = duration.toLong()
+            if (isTurnOn) {
+                val delay = totalDelay
+                val r = Runnable {
+                    setTorchMode(true)
+                }
+                activeRunnables.add(r)
+                handler.postDelayed(r, delay)
+            } else if (totalDelay > 0L) {
+                val delay = totalDelay
+                val r = Runnable {
+                    setTorchMode(false)
+                }
+                activeRunnables.add(r)
+                handler.postDelayed(r, delay)
             }
-            activeRunnables.add(r)
-            handler.postDelayed(r, delay)
-
-            totalDelay += duration.toLong()
-            isOn = !isOn
+            totalDelay += d
+            isTurnOn = !isTurnOn
         }
 
         // Final safety turn off after pattern finishes
@@ -145,7 +155,7 @@ class MainActivity : FlutterActivity() {
             setTorchMode(false)
         }
         activeRunnables.add(finalOff)
-        handler.postDelayed(finalOff, totalDelay)
+        handler.postDelayed(finalOff, totalDelay + 50L)
     }
 }
 
