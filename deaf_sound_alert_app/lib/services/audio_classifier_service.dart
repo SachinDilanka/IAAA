@@ -253,12 +253,12 @@ class AudioClassifierService {
 
     final nowMs = DateTime.now().millisecondsSinceEpoch;
 
-    // High acoustic sound level detected (> 0.40)
-    // Only sample if non-speech acoustic sound has played for >400ms and NO speech in last 2.2s
-    if (soundVol >= 0.40) {
+    // Fast acoustic sound level detected (> 0.32)
+    // Sample quickly when non-speech acoustic sound has played for >= 200ms and NO speech in last 1.5s
+    if (soundVol >= 0.32) {
       if (_highVolumeStartTimeMs == 0) {
         _highVolumeStartTimeMs = nowMs;
-      } else if (nowMs - _highVolumeStartTimeMs >= 400 && nowMs - _lastSpeechTimeMs >= 2200) {
+      } else if (nowMs - _highVolumeStartTimeMs >= 200 && nowMs - _lastSpeechTimeMs >= 1500) {
         _triggerAcousticNeuralSample();
       }
     } else {
@@ -295,7 +295,7 @@ class AudioClassifierService {
             return val / 32768.0;
           });
           sampledPcm.addAll(samples);
-          if (sampledPcm.length >= 12000) {
+          if (sampledPcm.length >= 8000) {
             if (!sampleCompleter.isCompleted) sampleCompleter.complete();
           }
         }, onError: (_) {
@@ -303,7 +303,7 @@ class AudioClassifierService {
         });
 
         await sampleCompleter.future.timeout(
-          const Duration(milliseconds: 800),
+          const Duration(milliseconds: 500),
           onTimeout: () {},
         );
 
@@ -401,7 +401,7 @@ class AudioClassifierService {
 
   void _startSttWatchdog() {
     _sttWatchdogTimer?.cancel();
-    _sttWatchdogTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+    _sttWatchdogTimer = Timer.periodic(const Duration(milliseconds: 1000), (timer) {
       if (!_isListening) {
         timer.cancel();
         return;
