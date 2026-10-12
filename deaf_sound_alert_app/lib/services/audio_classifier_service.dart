@@ -88,6 +88,8 @@ class AudioClassifierService {
   final Map<String, String> _labelToSoundKey = {
     'ambulance_siren': 'ambulance',
     'ambulance': 'ambulance',
+    'firetruck': 'firetruck',
+    'fire_truck': 'firetruck',
     'vehicle_horn': 'vehicle horns',
     'vehicle horns': 'vehicle horns',
     'baby_crying': 'baby crying',
@@ -125,6 +127,8 @@ class AudioClassifierService {
     'sinhala_ehata_wenna_': 'එහාට වෙන්න (Ehata Wenna - Move Aside)',
     'sinhala_parissamin_': 'පරිස්සමින් (Parissamin - Be Careful)',
     'ambulance': 'ගිලන් රථ සයිරන් (Ambulance Siren)',
+    'firetruck': 'ගිනි නිවන රථ ශබ්දය (Fire Truck Siren)',
+    'fire_truck': 'ගිනි නිවන රථ ශබ්දය (Fire Truck Siren)',
     'baby crying': 'ළදරු හැඬීම (Baby Crying)',
     'vehicle horns': 'වාහන හොන් (Vehicle Horns)',
     'dog_bark_dataset': 'බල්ලා බුරන ශබ්දය (Dog Barking)',
@@ -613,7 +617,7 @@ class AudioClassifierService {
 
                 final mappedKey = _labelToSoundKey[sinhalaHit.className] ?? sinhalaHit.className;
                 final lastHitTime = _lastKeywordTriggerTimes[mappedKey];
-                final bool classCooldownOk = (lastHitTime == null || now.difference(lastHitTime).inMilliseconds > 4500);
+                final bool classCooldownOk = (lastHitTime == null || now.difference(lastHitTime).inMilliseconds > 5500);
 
                 if (canAlert && classCooldownOk) {
                   _lastGlobalAlertTime = now;
@@ -643,23 +647,24 @@ class AudioClassifierService {
                 _pendingSinhalaHits = 0;
               }
 
-              // ENVIRONMENTAL SOUNDS (vehicle horns, ambulance, fire alarm, dog barking, baby crying):
-              // STRICT CRITERIA to NEVER trigger false positives from ambient room noise or speech:
-              // 1. Must NOT have had speech recently (> 4.5s)
-              // 2. Sound must have substantial volume (peakAmp >= 0.045, horns/sirens are loud!)
-              // 3. Top class must be an environmental emergency class with high confidence (>= 0.88)
-              // 4. Must have large margin over runner-up class (>= 0.50)
-              // 5. Must be sustained/confirmed across at least 3 consecutive frames within 600ms
-              if (canAlert && (nowMs - _lastSpeechTimeMs >= 4500) && totalSpeechProb < 0.08 && peakAmp >= 0.045) {
+              // ENVIRONMENTAL SOUNDS (vehicle horns, ambulance, fire truck, dog barking, baby crying, traffic noise):
+              // Responsive and reliable detection:
+              // 1. Must NOT have active speech (idle >= 1200ms and totalSpeechProb < 0.15)
+              // 2. Sound volume active (peakAmp >= 0.035, rms >= 0.008)
+              // 3. Top class is environmental emergency/alert class (confidence >= 0.70, margin >= 0.35)
+              // 4. Confirmed across 2 frames within 700ms for swift 0-delay response!
+              if (canAlert && (nowMs - _lastSpeechTimeMs >= 1200) && totalSpeechProb < 0.15 && peakAmp >= 0.035) {
                 final String top = pred.label;
                 final double topP = pred.probability;
 
                 const envClasses = {
                   'vehicle_horn': 'vehicle horns',
                   'ambulance_siren': 'ambulance',
-                  'fire_truck': 'fire_truck',
+                  'firetruck': 'firetruck',
+                  'fire_truck': 'firetruck',
                   'dog_barking': 'dog_bark_dataset',
                   'baby_crying': 'baby crying',
+                  'background_traffic': 'traffic',
                 };
 
                 if (envClasses.containsKey(top)) {
@@ -669,8 +674,8 @@ class AudioClassifierService {
                   });
 
                   final double margin = topP - runnerUp;
-                  if (topP >= 0.88 && margin >= 0.50) {
-                    if (_pendingEnvClass == top && (nowMs - _pendingEnvMs < 600)) {
+                  if (topP >= 0.70 && margin >= 0.35) {
+                    if (_pendingEnvClass == top && (nowMs - _pendingEnvMs < 700)) {
                       _pendingEnvHits++;
                     } else {
                       _pendingEnvClass = top;
@@ -678,12 +683,12 @@ class AudioClassifierService {
                     }
                     _pendingEnvMs = nowMs;
 
-                    if (_pendingEnvHits >= 3) {
+                    if (_pendingEnvHits >= 2) {
                       _pendingEnvClass = null;
                       _pendingEnvHits = 0;
                       final soundKey = envClasses[top]!;
                       final lastHitTime = _lastKeywordTriggerTimes[soundKey];
-                      final bool classCooldownOk = (lastHitTime == null || now.difference(lastHitTime).inMilliseconds > 4500);
+                      final bool classCooldownOk = (lastHitTime == null || now.difference(lastHitTime).inMilliseconds > 3500);
 
                       if (classCooldownOk) {
                         _lastGlobalAlertTime = now;
@@ -748,14 +753,16 @@ class AudioClassifierService {
       await simulateSoundDetection(key, confidence: 0.99, overrideCooldown: true);
 
       // CRITICAL: Immediately clear rolling buffer and reset pending state so trailing utterance decay NEVER triggers wrong cards!
+      final completedNow = DateTime.now();
+      _lastGlobalAlertTime = completedNow;
+      _lastKeywordTriggerTimes[key] = completedNow;
+      _lastSpeechTimeMs = completedNow.millisecondsSinceEpoch;
       _rollingBuf16k.fillRange(0, 16000, 0.0);
       _total16kPushed = 0;
       _pendingSinhalaClass = null;
       _pendingSinhalaHits = 0;
       _pendingEnvClass = null;
       _pendingEnvHits = 0;
-      _lastGlobalAlertTime = DateTime.now();
-      _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
     } catch (_) {
     } finally {
       _isAnimatingTranscript = false;
@@ -1004,6 +1011,11 @@ class AudioClassifierService {
 
   Future<void> simulateSoundDetection(String soundKey, {double confidence = 0.92, bool overrideCooldown = false}) async {
     final now = DateTime.now();
+
+    final lastSoundTime = _lastSoundAlertTimes[soundKey];
+    if (lastSoundTime != null && now.difference(lastSoundTime).inMilliseconds < 4000) {
+      return;
+    }
 
     if (!overrideCooldown) {
       // 1-second global cooldown for non-override sound detections
