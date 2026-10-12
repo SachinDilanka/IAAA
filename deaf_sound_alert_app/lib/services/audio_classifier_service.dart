@@ -471,7 +471,7 @@ class AudioClassifierService {
     _waveformController.add(List<double>.from(_visualizerBars));
 
     // Neural Inference for Instant Speech & Environmental Sound Alert Detections when sound energy peak occurs
-    if (_total16kPushed >= 2000 && (nowMs - _listeningStartTimeMs >= 3000) && (rms >= 0.005 || maxAmp >= 0.015)) {
+    if (_total16kPushed >= 2000 && (nowMs - _listeningStartTimeMs >= 500) && (rms >= 0.005 || maxAmp >= 0.015)) {
       if (nowMs - _lastMlTimeMs >= 150) {
         _lastMlTimeMs = nowMs;
 
@@ -510,8 +510,8 @@ class AudioClassifierService {
               return;
             }
 
-            // Offline Fallback Mode (when STT is idle/offline): require high confidence topProb >= 0.80 to avoid false popups
-            if (topProb >= 0.80) {
+            // Offline Fallback Mode (when STT is idle/offline): require high confidence topProb >= 0.75 to avoid false popups
+            if (topProb >= 0.75) {
               final lastTime = _lastKeywordTriggerTimes[mappedKey];
               if (lastTime != null && (nowMs - lastTime.millisecondsSinceEpoch < 1500)) {
                 return;
@@ -527,13 +527,13 @@ class AudioClassifierService {
           }
 
           // 2. ENVIRONMENTAL SOUNDS (Fire Truck, Dog Barking, Baby Crying, Ambulance Siren, Vehicle Horns, Traffic Noise)
-          // Environmental sounds evaluate ONLY when speech has been idle for >= 3500ms AND totalSpeechProb < 0.04 AND STT is not actively listening
-          final bool isSpeechIdle = (nowMs - _lastSpeechTimeMs >= 3500);
+          // Environmental sounds evaluate when speech has been idle for >= 800ms AND totalSpeechProb < 0.05
+          final bool isSpeechIdle = (nowMs - _lastSpeechTimeMs >= 800);
 
-          if (isSpeechIdle && totalSpeechProb < 0.04 && !_speech.isListening) {
+          if (isSpeechIdle && totalSpeechProb < 0.05 && !mappedKey.startsWith('sinhala_')) {
             // Vehicle Horns
             if (mappedKey == 'vehicle horns' || topLabel == 'vehicle_horn') {
-              if (topProb >= 0.75 && (rms >= 0.025 || maxAmp >= 0.060)) {
+              if (topProb >= 0.68 && (rms >= 0.018 || maxAmp >= 0.045)) {
                 final String displayName = _displayNames['vehicle horns'] ?? 'Vehicle Horns';
                 _transcriptController.add(displayName);
                 simulateSoundDetection('vehicle horns', confidence: topProb);
@@ -541,9 +541,9 @@ class AudioClassifierService {
               }
             }
 
-            // Ambulance Siren
-            if (mappedKey == 'ambulance' || topLabel == 'ambulance_siren') {
-              if (topProb >= 0.75 && (rms >= 0.025 || maxAmp >= 0.060)) {
+            // Ambulance Siren / Siren
+            if (mappedKey == 'ambulance' || mappedKey == 'siren' || topLabel == 'ambulance_siren') {
+              if (topProb >= 0.68 && (rms >= 0.018 || maxAmp >= 0.045)) {
                 final String displayName = _displayNames['ambulance'] ?? 'Ambulance Siren';
                 _transcriptController.add(displayName);
                 simulateSoundDetection('ambulance', confidence: topProb);
@@ -552,8 +552,8 @@ class AudioClassifierService {
             }
 
             // Fire Truck Siren / Fire Alarm
-            if (mappedKey == 'fire_truck' || topLabel == 'fire_truck' || topLabel == 'fire_alarm') {
-              if (topProb >= 0.70 && (rms >= 0.020 || maxAmp >= 0.050)) {
+            if (mappedKey == 'fire_truck' || topLabel == 'fire_truck' || topLabel == 'fire_alarm' || topLabel == 'fire_engine' || topLabel == 'fire_siren') {
+              if (topProb >= 0.65 && (rms >= 0.015 || maxAmp >= 0.038)) {
                 final String displayName = _displayNames['fire_truck'] ?? 'Fire Alarm / Siren';
                 _transcriptController.add(displayName);
                 simulateSoundDetection('fire_truck', confidence: topProb);
@@ -562,8 +562,8 @@ class AudioClassifierService {
             }
 
             // Dog Barking
-            if (mappedKey == 'dog_bark_dataset' || dogProb >= 0.75) {
-              if (math.max(dogProb, topProb) >= 0.75 && (rms >= 0.025 || maxAmp >= 0.060)) {
+            if (mappedKey == 'dog_bark_dataset' || dogProb >= 0.68 || topLabel == 'dog_barking') {
+              if (math.max(dogProb, topProb) >= 0.68 && (rms >= 0.018 || maxAmp >= 0.045)) {
                 final String displayName = _displayNames['dog_bark_dataset'] ?? 'Dog Barking';
                 _transcriptController.add(displayName);
                 simulateSoundDetection('dog_bark_dataset', confidence: math.max(dogProb, topProb));
@@ -571,9 +571,9 @@ class AudioClassifierService {
               }
             }
 
-            // Baby Crying (Strict 0.75 threshold + totalSpeechProb < 0.03 so adult speech vowels e.g. 'karanna' never trigger it)
-            if (mappedKey == 'baby crying' || babyProb >= 0.75 || topLabel == 'baby_crying') {
-              if (math.max(babyProb, topProb) >= 0.75 && totalSpeechProb < 0.03 && (rms >= 0.025 || maxAmp >= 0.060)) {
+            // Baby Crying (Strict 0.72 threshold + totalSpeechProb < 0.03 so adult speech vowels e.g. 'karanna' never trigger it)
+            if (mappedKey == 'baby crying' || babyProb >= 0.72 || topLabel == 'baby_crying') {
+              if (math.max(babyProb, topProb) >= 0.72 && totalSpeechProb < 0.03 && (rms >= 0.018 || maxAmp >= 0.045)) {
                 final String displayName = _displayNames['baby crying'] ?? 'Baby Crying';
                 _transcriptController.add(displayName);
                 simulateSoundDetection('baby crying', confidence: math.max(babyProb, topProb));
@@ -583,7 +583,7 @@ class AudioClassifierService {
 
             // Traffic Noise
             if (mappedKey == 'traffic' || topLabel == 'background_traffic') {
-              if (topProb >= 0.65 && (rms >= 0.020 || maxAmp >= 0.045)) {
+              if (topProb >= 0.65 && (rms >= 0.015 || maxAmp >= 0.038)) {
                 final String displayName = _displayNames['traffic'] ?? 'Traffic Noise';
                 _transcriptController.add(displayName);
                 simulateSoundDetection('traffic', confidence: topProb);
