@@ -488,6 +488,10 @@ class AudioClassifierService {
 
           final double dogProb = pred.allProbabilities['dog_barking'] ?? 0.0;
           final double babyProb = pred.allProbabilities['baby_crying'] ?? 0.0;
+          final double hornProb = pred.allProbabilities['vehicle_horn'] ?? 0.0;
+          final double fireProb = pred.allProbabilities['fire_truck'] ?? 0.0;
+          final double sirenProb = pred.allProbabilities['ambulance_siren'] ?? 0.0;
+          final double trafficProb = pred.allProbabilities['background_traffic'] ?? 0.0;
 
           // Compute total speech probability across all speech classes in neural model output
           double totalSpeechProb = 0.0;
@@ -526,54 +530,14 @@ class AudioClassifierService {
             return;
           }
 
-          // 2. ENVIRONMENTAL SOUNDS (Fire Truck, Dog Barking, Baby Crying, Ambulance Siren, Vehicle Horns, Traffic Noise)
+          // 2. ENVIRONMENTAL SOUNDS (Baby Crying, Dog Barking, Vehicle Horns, Ambulance Siren, Fire Truck, Traffic Noise)
           // Environmental sounds evaluate when speech has been idle for >= 800ms AND totalSpeechProb < 0.05
           final bool isSpeechIdle = (nowMs - _lastSpeechTimeMs >= 800);
 
           if (isSpeechIdle && totalSpeechProb < 0.05 && !mappedKey.startsWith('sinhala_')) {
-            // Vehicle Horns
-            if (mappedKey == 'vehicle horns' || topLabel == 'vehicle_horn') {
-              if (topProb >= 0.68 && (rms >= 0.018 || maxAmp >= 0.045)) {
-                final String displayName = _displayNames['vehicle horns'] ?? 'Vehicle Horns';
-                _transcriptController.add(displayName);
-                simulateSoundDetection('vehicle horns', confidence: topProb);
-                return;
-              }
-            }
-
-            // Ambulance Siren / Siren
-            if (mappedKey == 'ambulance' || mappedKey == 'siren' || topLabel == 'ambulance_siren') {
-              if (topProb >= 0.68 && (rms >= 0.018 || maxAmp >= 0.045)) {
-                final String displayName = _displayNames['ambulance'] ?? 'Ambulance Siren';
-                _transcriptController.add(displayName);
-                simulateSoundDetection('ambulance', confidence: topProb);
-                return;
-              }
-            }
-
-            // Fire Truck Siren / Fire Alarm
-            if (mappedKey == 'fire_truck' || topLabel == 'fire_truck' || topLabel == 'fire_alarm' || topLabel == 'fire_engine' || topLabel == 'fire_siren') {
-              if (topProb >= 0.65 && (rms >= 0.015 || maxAmp >= 0.038)) {
-                final String displayName = _displayNames['fire_truck'] ?? 'Fire Alarm / Siren';
-                _transcriptController.add(displayName);
-                simulateSoundDetection('fire_truck', confidence: topProb);
-                return;
-              }
-            }
-
-            // Dog Barking
-            if (mappedKey == 'dog_bark_dataset' || dogProb >= 0.68 || topLabel == 'dog_barking') {
-              if (math.max(dogProb, topProb) >= 0.68 && (rms >= 0.018 || maxAmp >= 0.045)) {
-                final String displayName = _displayNames['dog_bark_dataset'] ?? 'Dog Barking';
-                _transcriptController.add(displayName);
-                simulateSoundDetection('dog_bark_dataset', confidence: math.max(dogProb, topProb));
-                return;
-              }
-            }
-
-            // Baby Crying (Strict 0.72 threshold + totalSpeechProb < 0.03 so adult speech vowels e.g. 'karanna' never trigger it)
-            if (mappedKey == 'baby crying' || babyProb >= 0.72 || topLabel == 'baby_crying') {
-              if (math.max(babyProb, topProb) >= 0.72 && totalSpeechProb < 0.03 && (rms >= 0.018 || maxAmp >= 0.045)) {
+            // 1. Baby Crying (Evaluate BEFORE Vehicle Horn so baby crying never falsely triggers horn!)
+            if (mappedKey == 'baby crying' || topLabel == 'baby_crying' || (babyProb >= 0.45 && babyProb > hornProb)) {
+              if (math.max(babyProb, topProb) >= 0.45 && (rms >= 0.010 || maxAmp >= 0.025)) {
                 final String displayName = _displayNames['baby crying'] ?? 'Baby Crying';
                 _transcriptController.add(displayName);
                 simulateSoundDetection('baby crying', confidence: math.max(babyProb, topProb));
@@ -581,12 +545,52 @@ class AudioClassifierService {
               }
             }
 
-            // Traffic Noise
-            if (mappedKey == 'traffic' || topLabel == 'background_traffic') {
-              if (topProb >= 0.65 && (rms >= 0.015 || maxAmp >= 0.038)) {
+            // 2. Dog Barking (Fast instant detection on short impulsive barks, zero delay!)
+            if (mappedKey == 'dog_bark_dataset' || topLabel == 'dog_barking' || dogProb >= 0.45) {
+              if (math.max(dogProb, topProb) >= 0.45 && (rms >= 0.008 || maxAmp >= 0.020)) {
+                final String displayName = _displayNames['dog_bark_dataset'] ?? 'Dog Barking';
+                _transcriptController.add(displayName);
+                simulateSoundDetection('dog_bark_dataset', confidence: math.max(dogProb, topProb));
+                return;
+              }
+            }
+
+            // 3. Vehicle Horns (Guarded: must NOT trigger on Baby Crying!)
+            if ((mappedKey == 'vehicle horns' || topLabel == 'vehicle_horn' || hornProb >= 0.68) && babyProb < 0.25 && hornProb > babyProb) {
+              if (math.max(hornProb, topProb) >= 0.68 && (rms >= 0.015 || maxAmp >= 0.040)) {
+                final String displayName = _displayNames['vehicle horns'] ?? 'Vehicle Horns';
+                _transcriptController.add(displayName);
+                simulateSoundDetection('vehicle horns', confidence: math.max(hornProb, topProb));
+                return;
+              }
+            }
+
+            // 4. Ambulance Siren / Siren
+            if (mappedKey == 'ambulance' || mappedKey == 'siren' || topLabel == 'ambulance_siren' || sirenProb >= 0.55) {
+              if (math.max(sirenProb, topProb) >= 0.55 && (rms >= 0.012 || maxAmp >= 0.030)) {
+                final String displayName = _displayNames['ambulance'] ?? 'Ambulance Siren';
+                _transcriptController.add(displayName);
+                simulateSoundDetection('ambulance', confidence: math.max(sirenProb, topProb));
+                return;
+              }
+            }
+
+            // 5. Fire Truck Siren / Fire Alarm
+            if (mappedKey == 'fire_truck' || topLabel == 'fire_truck' || topLabel == 'fire_alarm' || topLabel == 'fire_engine' || topLabel == 'fire_siren' || fireProb >= 0.55) {
+              if (math.max(fireProb, topProb) >= 0.55 && (rms >= 0.012 || maxAmp >= 0.030)) {
+                final String displayName = _displayNames['fire_truck'] ?? 'Fire Alarm / Siren';
+                _transcriptController.add(displayName);
+                simulateSoundDetection('fire_truck', confidence: math.max(fireProb, topProb));
+                return;
+              }
+            }
+
+            // 6. Traffic Noise
+            if (mappedKey == 'traffic' || topLabel == 'background_traffic' || trafficProb >= 0.58) {
+              if (math.max(trafficProb, topProb) >= 0.58 && (rms >= 0.012 || maxAmp >= 0.030)) {
                 final String displayName = _displayNames['traffic'] ?? 'Traffic Noise';
                 _transcriptController.add(displayName);
-                simulateSoundDetection('traffic', confidence: topProb);
+                simulateSoundDetection('traffic', confidence: math.max(trafficProb, topProb));
                 return;
               }
             }
