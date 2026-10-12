@@ -218,7 +218,7 @@
                     {% elif location_slug == 'restaurant' %}
                     <i class="fa-solid fa-utensils"></i> 9 Categories
                     {% elif location_slug == 'supermarket' %}
-                    <i class="fa-solid fa-cart-shopping"></i> 4 Categories
+                    <i class="fa-solid fa-cart-shopping"></i> 9 Categories
                     {% else %}
                     <i class="fa-solid fa-square-h"></i> 9 Categories
                     {% endif %}
@@ -490,41 +490,86 @@
                 </button>
               </div>
 
-              <!-- Supermarket Message Criteria Buttons (4 buttons) -->
+              <!-- Supermarket Message Criteria Buttons (9 buttons) -->
               <div id="supermarket-category-selector-bar" class="category-selector-bar {% if location_slug != 'supermarket' %}bar-hidden{% endif %}">
                 <button type="button" class="category-active-btn category-supermarket-btn" id="btn-cat-sm-basic-comm" data-cat="sm-basic-comm" aria-label="1. මූලික සන්නිවේදනය / Basic communication" title="Tap to view suggested messages">
                   <i class="fa-solid fa-comments"></i>
                   <span class="cat-btn-text">1. මූලික සන්නිවේදනය / Basic communication</span>
                   <div class="cat-btn-right-meta">
-                    <span class="cat-msg-count-pill" id="cat-badge-sm-basic-comm">6</span>
+                    <span class="cat-msg-count-pill" id="cat-badge-sm-basic-comm">10</span>
                     <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-sm-chevron-icon-1"></i>
                   </div>
                 </button>
 
-                <button type="button" class="category-active-btn category-supermarket-btn" id="btn-cat-sm-finding-items" data-cat="sm-finding-items" aria-label="2. භාණ්ඩ සහ අන්තරාල සෙවීම / Finding items & aisles" title="Tap to view suggested messages">
-                  <i class="fa-solid fa-boxes-stacked"></i>
-                  <span class="cat-btn-text">2. භාණ්ඩ සහ අන්තරාල සෙවීම / Finding items & aisles</span>
+                <button type="button" class="category-active-btn category-supermarket-btn" id="btn-cat-sm-help-facilities" data-cat="sm-help-facilities" aria-label="2. ආධාර සහ පහසුකම් ලබා ගැනීම / Getting help and facilities" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-hand-holding-hand"></i>
+                  <span class="cat-btn-text">2. ආධාර සහ පහසුකම් ලබා ගැනීම / Getting help and facilities</span>
                   <div class="cat-btn-right-meta">
-                    <span class="cat-msg-count-pill" id="cat-badge-sm-finding-items">9</span>
+                    <span class="cat-msg-count-pill" id="cat-badge-sm-help-facilities">10</span>
                     <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-sm-chevron-icon-2"></i>
                   </div>
                 </button>
 
-                <button type="button" class="category-active-btn category-supermarket-btn" id="btn-cat-sm-pricing-weights" data-cat="sm-pricing-weights" aria-label="3. මිල ගණන් සහ බර කිරුම් / Pricing & weighing" title="Tap to view suggested messages">
-                  <i class="fa-solid fa-scale-balanced"></i>
-                  <span class="cat-btn-text">3. මිල ගණන් සහ බර කිරුම් / Pricing & weighing</span>
+                <button type="button" class="category-active-btn category-supermarket-btn" id="btn-cat-sm-finding-products" data-cat="sm-finding-products" aria-label="3. නිෂ්පාදන සොයා ගැනීම / Finding products" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-boxes-stacked"></i>
+                  <span class="cat-btn-text">3. නිෂ්පාදන සොයා ගැනීම / Finding products</span>
                   <div class="cat-btn-right-meta">
-                    <span class="cat-msg-count-pill" id="cat-badge-sm-pricing-weights">6</span>
+                    <span class="cat-msg-count-pill" id="cat-badge-sm-finding-products">26</span>
                     <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-sm-chevron-icon-3"></i>
                   </div>
                 </button>
 
-                <button type="button" class="category-active-btn category-supermarket-btn" id="btn-cat-sm-checkout-payment" data-cat="sm-checkout-payment" aria-label="4. මුදල් ගෙවීම සහ චෙක්අවුට් / Checkout & payment" title="Tap to view suggested messages">
-                  <i class="fa-solid fa-cash-register"></i>
-                  <span class="cat-btn-text">4. මුදල් ගෙවීම සහ චෙක්අවුට් / Checkout & payment</span>
+                <button type="button" class="category-active-btn category-supermarket-btn" id="btn-cat-sm-prices-offers" data-cat="sm-prices-offers" aria-label="4. මිල ගණන් සහ දීමනා / Prices and offers" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-tags"></i>
+                  <span class="cat-btn-text">4. මිල ගණන් සහ දීමනා / Prices and offers</span>
                   <div class="cat-btn-right-meta">
-                    <span class="cat-msg-count-pill" id="cat-badge-sm-checkout-payment">7</span>
+                    <span class="cat-msg-count-pill" id="cat-badge-sm-prices-offers">10</span>
                     <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-sm-chevron-icon-4"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-supermarket-btn" id="btn-cat-sm-product-info-dietary" data-cat="sm-product-info-dietary" aria-label="5. නිෂ්පාදන තොරතුරු සහ ආහාරමය අවශ්යතා / Product information and dietary needs" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-circle-info"></i>
+                  <span class="cat-btn-text">5. නිෂ්පාදන තොරතුරු සහ ආහාරමය අවශ්යතා / Product information and dietary needs</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-sm-product-info-dietary">12</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-sm-chevron-icon-5"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-supermarket-btn" id="btn-cat-sm-weighing-packing" data-cat="sm-weighing-packing" aria-label="6. බර කිරා බැලීම, කැපීම සහ ඇසුරුම් කිරීම / Weighing, cutting and packing" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-scale-balanced"></i>
+                  <span class="cat-btn-text">6. බර කිරා බැලීම, කැපීම සහ ඇසුරුම් කිරීම / Weighing, cutting and packing</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-sm-weighing-packing">8</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-sm-chevron-icon-6"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-supermarket-btn" id="btn-cat-sm-checkout-payment" data-cat="sm-checkout-payment" aria-label="7. පිරික්සුම සහ ගෙවීම / Checkout and payment" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-cash-register"></i>
+                  <span class="cat-btn-text">7. පිරික්සුම සහ ගෙවීම / Checkout and payment</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-sm-checkout-payment">14</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-sm-chevron-icon-7"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-supermarket-btn" id="btn-cat-sm-problems-returns" data-cat="sm-problems-returns" aria-label="8. නිෂ්පාදන ආපසු යැවීම / Problems and returns" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-arrow-rotate-left"></i>
+                  <span class="cat-btn-text">8. නිෂ්පාදන ආපසු යැවීම / Problems and returns</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-sm-problems-returns">6</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-sm-chevron-icon-8"></i>
+                  </div>
+                </button>
+
+                <button type="button" class="category-active-btn category-supermarket-btn" id="btn-cat-sm-closing-courtesy" data-cat="sm-closing-courtesy" aria-label="9. සමාප්තිය සහ ආචාරශීලීත්වය / Closing and courtesy" title="Tap to view suggested messages">
+                  <i class="fa-solid fa-handshake"></i>
+                  <span class="cat-btn-text">9. සමාප්තිය සහ ආචාරශීලීත්වය / Closing and courtesy</span>
+                  <div class="cat-btn-right-meta">
+                    <span class="cat-msg-count-pill" id="cat-badge-sm-closing-courtesy">4</span>
+                    <i class="fa-solid fa-chevron-right cat-chevron-icon" id="cat-sm-chevron-icon-9"></i>
                   </div>
                 </button>
               </div>

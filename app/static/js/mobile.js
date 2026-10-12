@@ -2363,40 +2363,122 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const SUPERMARKET_DEFAULT_CATEGORIES = {
     'sm-basic-comm': [
-      { id: 1, template: "I am deaf / non-verbal.", template_en: "I am deaf / non-verbal.", template_si: "මම බිහිරි / කතා කිරීමට අපහසු අයෙක්.", icon: "fa-ear-deaf", category: "Basic communication" },
-      { id: 2, template: "Please write down or point on my phone.", template_en: "Please write down or point on my phone.", template_si: "කරුණාකර එය ලියන්න හෝ මගේ දුරකථනයේ පෙන්වන්න.", icon: "fa-pen-to-square", category: "Basic communication" },
-      { id: 3, template: "Where is the customer service desk?", template_en: "Where is the customer service desk?", template_si: "පාරිභෝගික සේවා කවුන්ටරය කොහේද?", icon: "fa-circle-info", category: "Basic communication" },
-      { id: 4, template: "Could you please help me find an item?", template_en: "Could you please help me find an item?", template_si: "මට භාණ්ඩයක් සොයා ගැනීමට උදව් කළ හැකිද?", icon: "fa-magnifying-glass", category: "Basic communication" },
-      { id: 5, template: "Do you have shopping baskets or carts available?", template_en: "Do you have shopping baskets or carts available?", template_si: "සාප්පු බාස්කට් හෝ කරත්ත තිබේද?", icon: "fa-basket-shopping", category: "Basic communication" },
-      { id: 6, template: "Thank you for your assistance.", template_en: "Thank you for your assistance.", template_si: "ඔබගේ උදව්වට ස්තූතියි.", icon: "fa-handshake", category: "Basic communication" }
+      { id: 1, template: "I am deaf.", template_en: "I am deaf.", template_si: "මම බිහිරි කෙනෙක්.", icon: "fa-ear-deaf", category: "Basic communication" },
+      { id: 2, template: "I cannot speak.", template_en: "I cannot speak.", template_si: "මට කතා කරන්න බැහැ.", icon: "fa-volume-xmark", category: "Basic communication" },
+      { id: 3, template: "Please write down your message.", template_en: "Please write down your message.", template_si: "කරුණාකර ඔබේ පණිවිඩය ලියන්න.", icon: "fa-pen-to-square", category: "Basic communication" },
+      { id: 4, template: "Please speak slowly and face me.", template_en: "Please speak slowly and face me.", template_si: "කරුණාකර සෙමින් කතා කර මා දෙස බලන්න.", icon: "fa-face-smile", category: "Basic communication" },
+      { id: 5, template: "Please wait a moment.", template_en: "Please wait a moment.", template_si: "කරුණාකර මොහොතක් රැඳී සිටින්න.", icon: "fa-clock", category: "Basic communication" },
+      { id: 6, template: "Please repeat that.", template_en: "Please repeat that.", template_si: "කරුණාකර නැවත කියන්න.", icon: "fa-rotate-right", category: "Basic communication" },
+      { id: 7, template: "I do not understand.", template_en: "I do not understand.", template_si: "මට තේරෙන්නේ නැහැ.", icon: "fa-circle-question", category: "Basic communication" },
+      { id: 8, template: "Yes.", template_en: "Yes.", template_si: "ඔව්.", icon: "fa-circle-check", category: "Basic communication" },
+      { id: 9, template: "No.", template_en: "No.", template_si: "නැහැ.", icon: "fa-circle-xmark", category: "Basic communication" },
+      { id: 10, template: "Thank you.", template_en: "Thank you.", template_si: "ස්තූතියි.", icon: "fa-hands-clapping", category: "Basic communication" }
     ],
-    'sm-finding-items': [
-      { id: 1, template: "Where can I find milk and dairy products?", template_en: "Where can I find milk and dairy products?", template_si: "කිරි සහ කිරි නිෂ්පාදන තිබෙන්නේ කොහේද?", icon: "fa-bottle-water", category: "Finding items and aisles" },
-      { id: 2, template: "Where is the fresh produce (fruits and vegetables) section?", template_en: "Where is the fresh produce (fruits and vegetables) section?", template_si: "නැවුම් එළවළු සහ පලතුරු අංශය කොහේද?", icon: "fa-apple-whole", category: "Finding items and aisles" },
-      { id: 3, template: "Where is the rice and grains aisle?", template_en: "Where is the rice and grains aisle?", template_si: "සහල් සහ ධාන්‍ය වර්ග ඇති අන්තරාලය කොහේද?", icon: "fa-seedling", category: "Finding items and aisles" },
-      { id: 4, template: "Where are snacks, biscuits, and confectionery?", template_en: "Where are snacks, biscuits, and confectionery?", template_si: "ස්නැක්ස්, බිස්කට් සහ රසකැවිලි කොහේද?", icon: "fa-cookie-bite", category: "Finding items and aisles" },
-      { id: 5, template: "Where are household cleaners and detergents?", template_en: "Where are household cleaners and detergents?", template_si: "ගෘහ පිරිසිදුකාරක සහ ඩිටර්ජන්ට් කොහේද?", icon: "fa-pump-soap", category: "Finding items and aisles" },
-      { id: 6, template: "Where is the bakery and fresh bread?", template_en: "Where is the bakery and fresh bread?", template_si: "බේකරිය සහ නැවුම් පාන් කොහේද?", icon: "fa-bread-slice", category: "Finding items and aisles" },
-      { id: 7, template: "Where are meat, chicken, and seafood?", template_en: "Where are meat, chicken, and seafood?", template_si: "මස්, කුකුළු මස් සහ මුහුදු ආහාර කොහේද?", icon: "fa-drumstick-bite", category: "Finding items and aisles" },
-      { id: 8, template: "Is this item in stock or out of stock?", template_en: "Is this item in stock or out of stock?", template_si: "මෙම භාණ්ඩය තොගයේ තිබේද නැතිනම් අවසන් වී ඇත්ද?", icon: "fa-boxes-stacked", category: "Finding items and aisles" },
-      { id: 9, template: "Can you check the back storeroom for more?", template_en: "Can you check the back storeroom for more?", template_si: "තව තිබේදැයි පසුපස ගබඩාව පරීක්ෂා කළ හැකිද?", icon: "fa-warehouse", category: "Finding items and aisles" }
+    'sm-help-facilities': [
+      { id: 11, template: "I need help.", template_en: "I need help.", template_si: "මට උදව්වක් අවශ්යයි.", icon: "fa-hand-holding-hand", category: "Getting help and facilities" },
+      { id: 12, template: "Can you help me find something?", template_en: "Can you help me find something?", template_si: "මට යමක් සොයාගැනීමට උදව් කරන්න පුළුවන් ද?", icon: "fa-magnifying-glass", category: "Getting help and facilities" },
+      { id: 13, template: "Where is the customer service desk?", template_en: "Where is the customer service desk?", template_si: "ගනුදෙනුකරු සේවා මේසය කොහෙද?", icon: "fa-circle-info", category: "Getting help and facilities" },
+      { id: 14, template: "May I speak to the manager?", template_en: "May I speak to the manager?", template_si: "මට කළමනාකරු හමුවීමට පුළුවන් ද?", icon: "fa-user-tie", category: "Getting help and facilities" },
+      { id: 15, template: "Where is the toilet?", template_en: "Where is the toilet?", template_si: "වැසිකිළිය කොහෙද?", icon: "fa-restroom", category: "Getting help and facilities" },
+      { id: 16, template: "Where is the entrance?", template_en: "Where is the entrance?", template_si: "ඇතුල්වීමේ දොර කොහෙද?", icon: "fa-door-open", category: "Getting help and facilities" },
+      { id: 17, template: "Where is the exit?", template_en: "Where is the exit?", template_si: "පිටවීමේ දොර කොහෙද?", icon: "fa-door-closed", category: "Getting help and facilities" },
+      { id: 18, template: "Where can I get a trolley?", template_en: "Where can I get a trolley?", template_si: "ට්රොලිය ලබාගන්නේ කොහෙන්ද?", icon: "fa-cart-shopping", category: "Getting help and facilities" },
+      { id: 19, template: "Where can I get a shopping basket?", template_en: "Where can I get a shopping basket?", template_si: "සාප්පු කූඩයක් ලබාගන්නේ කොහෙන්ද?", icon: "fa-basket-shopping", category: "Getting help and facilities" },
+      { id: 20, template: "Can you show me the way?", template_en: "Can you show me the way?", template_si: "මට පාර පෙන්වන්න පුළුවන් ද?", icon: "fa-map-location-dot", category: "Getting help and facilities" }
     ],
-    'sm-pricing-weights': [
-      { id: 1, template: "How much does this item cost?", template_en: "How much does this item cost?", template_si: "මේ භාණ්ඩයේ මිල කීයද?", icon: "fa-tag", category: "Pricing and weighing" },
-      { id: 2, template: "Can you weigh this produce for me?", template_en: "Can you weigh this produce for me?", template_si: "කරුණාකර මේවායේ බර කිරා මිල ස්ටිකරය අලවා දිය හැකිද?", icon: "fa-scale-balanced", category: "Pricing and weighing" },
-      { id: 3, template: "Is there a discount or special promotion on this?", template_en: "Is there a discount or special promotion on this?", template_si: "මේ සඳහා වට්ටමක් හෝ විශේෂ දීමනාවක් තිබේද?", icon: "fa-percent", category: "Pricing and weighing" },
-      { id: 4, template: "Where is the price barcode scanner?", template_en: "Where is the price barcode scanner?", template_si: "මිල තීරු කේත ස්කෑනරය කොහේද?", icon: "fa-barcode", category: "Pricing and weighing" },
-      { id: 5, template: "What is the expiration or expiry date?", template_en: "What is the expiration or expiry date?", template_si: "කල් ඉකුත්වීමේ දිනය කුමක්ද?", icon: "fa-calendar-xmark", category: "Pricing and weighing" },
-      { id: 6, template: "Can I return or exchange this item?", template_en: "Can I return or exchange this item?", template_si: "මට මෙම භාණ්ඩය මාරු කිරීමට හෝ ආපසු දීමට හැකිද?", icon: "fa-arrow-rotate-left", category: "Pricing and weighing" }
+    'sm-finding-products': [
+      { id: 21, template: "Where is the rice?", template_en: "Where is the rice?", template_si: "සහල් කොහෙද?", icon: "fa-bowl-rice", category: "Finding products" },
+      { id: 22, template: "Where is the milk?", template_en: "Where is the milk?", template_si: "කිරි කොහෙද?", icon: "fa-bottle-water", category: "Finding products" },
+      { id: 23, template: "Where is the bread?", template_en: "Where is the bread?", template_si: "පාන් කොහෙද?", icon: "fa-bread-slice", category: "Finding products" },
+      { id: 24, template: "Where is the vegetable section?", template_en: "Where is the vegetable section?", template_si: "එළවළු අංශය කොහෙද?", icon: "fa-carrot", category: "Finding products" },
+      { id: 25, template: "Where is the fruit section?", template_en: "Where is the fruit section?", template_si: "පළතුරු අංශය කොහෙද?", icon: "fa-apple-whole", category: "Finding products" },
+      { id: 26, template: "Where is the meat section?", template_en: "Where is the meat section?", template_si: "මස් අංශය කොහෙද?", icon: "fa-drumstick-bite", category: "Finding products" },
+      { id: 27, template: "Where is the fish section?", template_en: "Where is the fish section?", template_si: "මාළු අංශය කොහෙද?", icon: "fa-fish", category: "Finding products" },
+      { id: 28, template: "Where is the dairy section?", template_en: "Where is the dairy section?", template_si: "කිරි නිෂ්පාදන අංශය කොහෙද?", icon: "fa-cheese", category: "Finding products" },
+      { id: 29, template: "Where is the bakery section?", template_en: "Where is the bakery section?", template_si: "බේකරි අංශය කොහෙද?", icon: "fa-cake-candles", category: "Finding products" },
+      { id: 30, template: "Where are the spices?", template_en: "Where are the spices?", template_si: "කුළුබඩු කොහෙද?", icon: "fa-pepper-hot", category: "Finding products" },
+      { id: 31, template: "Where is the cooking oil?", template_en: "Where is the cooking oil?", template_si: "පිසින තෙල් කොහෙද?", icon: "fa-oil-can", category: "Finding products" },
+      { id: 32, template: "Where are the eggs?", template_en: "Where are the eggs?", template_si: "බිත්තර කොහෙද?", icon: "fa-egg", category: "Finding products" },
+      { id: 33, template: "Where is the sugar?", template_en: "Where is the sugar?", template_si: "සීනි කොහෙද?", icon: "fa-cubes-stacked", category: "Finding products" },
+      { id: 34, template: "Where is the salt?", template_en: "Where is the salt?", template_si: "ලුණු කොහෙද?", icon: "fa-mortar-pestle", category: "Finding products" },
+      { id: 35, template: "Where is the tea?", template_en: "Where is the tea?", template_si: "තේ කොළ කොහෙද?", icon: "fa-mug-hot", category: "Finding products" },
+      { id: 36, template: "Where is the flour?", template_en: "Where is the flour?", template_si: "පිටි කොහෙද?", icon: "fa-wheat-awn", category: "Finding products" },
+      { id: 37, template: "Where are the lentils?", template_en: "Where are the lentils?", template_si: "පරිප්පු කොහෙද?", icon: "fa-seedling", category: "Finding products" },
+      { id: 38, template: "Where are the snacks?", template_en: "Where are the snacks?", template_si: "කෙටි ආහාර (ස්නැක්ස්) කොහෙද?", icon: "fa-cookie-bite", category: "Finding products" },
+      { id: 39, template: "Where are the beverages?", template_en: "Where are the beverages?", template_si: "බීම වර්ග කොහෙද?", icon: "fa-wine-glass", category: "Finding products" },
+      { id: 40, template: "Where are the frozen foods?", template_en: "Where are the frozen foods?", template_si: "ශීත කළ ආහාර කොහෙද?", icon: "fa-snowflake", category: "Finding products" },
+      { id: 41, template: "Where are the cleaning products?", template_en: "Where are the cleaning products?", template_si: "පිරිසිදු කිරීමේ නිෂ්පාදන කොහෙද?", icon: "fa-pump-soap", category: "Finding products" },
+      { id: 42, template: "Where are the personal care items?", template_en: "Where are the personal care items?", template_si: "පුද්ගලික සුව පහසු භාණ්ඩ කොහෙද?", icon: "fa-spa", category: "Finding products" },
+      { id: 43, template: "Where are the baby products?", template_en: "Where are the baby products?", template_si: "ළදරු භාණ්ඩ කොහෙද?", icon: "fa-baby", category: "Finding products" },
+      { id: 44, template: "Where are the household items?", template_en: "Where are the household items?", template_si: "ගෘහ භාණ්ඩ කොහෙද?", icon: "fa-couch", category: "Finding products" },
+      { id: 45, template: "Where are the batteries?", template_en: "Where are the batteries?", template_si: "බැටරි කොහෙද?", icon: "fa-battery-full", category: "Finding products" },
+      { id: 46, template: "Do you have this item? (showing a picture)", template_en: "Do you have this item? (showing a picture)", template_si: "ඔබ ළඟ මෙම භාණ්ඩය තියෙනවා ද?", icon: "fa-image", category: "Finding products" }
+    ],
+    'sm-prices-offers': [
+      { id: 47, template: "How much is this?", template_en: "How much is this?", template_si: "මෙය කීයද?", icon: "fa-tag", category: "Prices and offers" },
+      { id: 48, template: "There is no price tag on this.", template_en: "There is no price tag on this.", template_si: "මෙයට මිල ලේබලයක් නැහැ.", icon: "fa-tags", category: "Prices and offers" },
+      { id: 49, template: "Can you check the price for me?", template_en: "Can you check the price for me?", template_si: "මට මිල පරීක්ෂා කර දෙන්න පුළුවන් ද?", icon: "fa-barcode", category: "Prices and offers" },
+      { id: 50, template: "Please write down the price.", template_en: "Please write down the price.", template_si: "කරුණාකර මිල ලියන්න.", icon: "fa-pen", category: "Prices and offers" },
+      { id: 51, template: "Is this on sale?", template_en: "Is this on sale?", template_si: "මෙය අඩු මිලට තියෙනවා ද?", icon: "fa-percent", category: "Prices and offers" },
+      { id: 52, template: "Are there any discounts today?", template_en: "Are there any discounts today?", template_si: "අද වට්ටම් තියෙනවා ද?", icon: "fa-badge-percent", category: "Prices and offers" },
+      { id: 53, template: "I have a membership card.", template_en: "I have a membership card.", template_si: "මා ළඟ සාමාජික කාඩ්පතක් තියෙනවා.", icon: "fa-id-card", category: "Prices and offers" },
+      { id: 54, template: "I have a discount coupon.", template_en: "I have a discount coupon.", template_si: "මා ළඟ වට්ටම් කූපනයක් තියෙනවා.", icon: "fa-ticket", category: "Prices and offers" },
+      { id: 55, template: "Do you have a cheaper option?", template_en: "Do you have a cheaper option?", template_si: "මීට වඩා ලාභ විකල්පයක් තියෙනවා ද?", icon: "fa-coins", category: "Prices and offers" },
+      { id: 56, template: "The price on the shelf is different.", template_en: "The price on the shelf is different.", template_si: "රාක්කයේ මිල වෙනස්.", icon: "fa-arrows-split-up-and-left", category: "Prices and offers" }
+    ],
+    'sm-product-info-dietary': [
+      { id: 57, template: "What is the expiry date?", template_en: "What is the expiry date?", template_si: "කල් ඉකුත් වන දිනය කුමක්ද?", icon: "fa-calendar-xmark", category: "Product information and dietary needs" },
+      { id: 58, template: "Please check the expiry date for me.", template_en: "Please check the expiry date for me.", template_si: "කරුණාකර කල් ඉකුත් වන දිනය බලා දෙන්න.", icon: "fa-calendar-check", category: "Product information and dietary needs" },
+      { id: 59, template: "Is there a fresher one?", template_en: "Is there a fresher one?", template_si: "මීට වඩා නැවුම් එකක් තියෙනවා ද?", icon: "fa-leaf", category: "Product information and dietary needs" },
+      { id: 60, template: "Does this contain nuts? I am allergic.", template_en: "Does this contain nuts? I am allergic.", template_si: "මෙහි පරිප්පු අඩංගු ද? මට අසාත්මිකතාවක් තියෙනවා.", icon: "fa-shield-virus", category: "Product information and dietary needs" },
+      { id: 61, template: "Please check the ingredients for me.", template_en: "Please check the ingredients for me.", template_si: "කරුණාකර අමුද්රව්ය බලා දෙන්න.", icon: "fa-list-check", category: "Product information and dietary needs" },
+      { id: 62, template: "I am diabetic. Do you have sugar-free products?", template_en: "I am diabetic. Do you have sugar-free products?", template_si: "මම දියවැඩියා රෝගියෙක්. සීනි රහිත නිෂ්පාදන තියෙනවා ද?", icon: "fa-heart-pulse", category: "Product information and dietary needs" },
+      { id: 63, template: "Do you have low-salt products?", template_en: "Do you have low-salt products?", template_si: "ලුණු අඩු නිෂ්පාදන තියෙනවා ද?", icon: "fa-bottle-droplet", category: "Product information and dietary needs" },
+      { id: 64, template: "Is this suitable for vegetarians?", template_en: "Is this suitable for vegetarians?", template_si: "මෙය නිර්මාංශිකයන්ට සුදුසු ද?", icon: "fa-seedling", category: "Product information and dietary needs" },
+      { id: 65, template: "Is this halal?", template_en: "Is this halal?", template_si: "මෙය හලාල් ද?", icon: "fa-circle-check", category: "Product information and dietary needs" },
+      { id: 66, template: "Do you have gluten-free products?", template_en: "Do you have gluten-free products?", template_si: "ග්ලූටන් රහිත නිෂ්පාදන තියෙනවා ද?", icon: "fa-wheat-awn-circle-exclamation", category: "Product information and dietary needs" },
+      { id: 67, template: "Do you have a larger size?", template_en: "Do you have a larger size?", template_si: "විශාල ප්රමාණයක් තියෙනවා ද?", icon: "fa-up-right-and-down-left-from-center", category: "Product information and dietary needs" },
+      { id: 68, template: "Do you have a smaller size?", template_en: "Do you have a smaller size?", template_si: "කුඩා ප්රමාණයක් තියෙනවා ද?", icon: "fa-down-left-and-up-right-to-center", category: "Product information and dietary needs" }
+    ],
+    'sm-weighing-packing': [
+      { id: 69, template: "Please weigh this for me.", template_en: "Please weigh this for me.", template_si: "කරුණාකර මෙය කිරලා දෙන්න.", icon: "fa-scale-balanced", category: "Weighing, cutting and packing" },
+      { id: 70, template: "I would like 250 grams.", template_en: "I would like 250 grams.", template_si: "මට ග්රෑම් 250ක් අවශ්යයි.", icon: "fa-weight-scale", category: "Weighing, cutting and packing" },
+      { id: 71, template: "I would like half a kilogram.", template_en: "I would like half a kilogram.", template_si: "මට කිලෝ භාගයක් අවශ්යයි.", icon: "fa-weight-hanging", category: "Weighing, cutting and packing" },
+      { id: 72, template: "I would like one kilogram.", template_en: "I would like one kilogram.", template_si: "මට කිලෝවක් අවශ්යයි.", icon: "fa-weight-scale", category: "Weighing, cutting and packing" },
+      { id: 73, template: "Please cut it into small pieces.", template_en: "Please cut it into small pieces.", template_si: "කරුණාකර කුඩා කෑලි වලට කපන්න.", icon: "fa-scissors", category: "Weighing, cutting and packing" },
+      { id: 74, template: "Please clean the fish.", template_en: "Please clean the fish.", template_si: "කරුණාකර මාළු පිරිසිදු කරන්න.", icon: "fa-fish", category: "Weighing, cutting and packing" },
+      { id: 75, template: "Please give me fresh ones.", template_en: "Please give me fresh ones.", template_si: "කරුණාකර නැවුම් ඒවා දෙන්න.", icon: "fa-apple-whole", category: "Weighing, cutting and packing" },
+      { id: 76, template: "Please pack it separately.", template_en: "Please pack it separately.", template_si: "කරුණාකර වෙන වෙනම ඇසුරුම් කරන්න.", icon: "fa-box-archive", category: "Weighing, cutting and packing" }
     ],
     'sm-checkout-payment': [
-      { id: 1, template: "I would like to check out now.", template_en: "I would like to check out now.", template_si: "මට දැන් මුදල් ගෙවීමට අවශ්‍යයි.", icon: "fa-cash-register", category: "Checkout and payment" },
-      { id: 2, template: "I will pay with credit or debit card.", template_en: "I will pay with credit or debit card.", template_si: "මම ක්‍රෙඩිට් හෝ ඩෙබිට් කාඩ්පතකින් ගෙවන්නම්.", icon: "fa-credit-card", category: "Checkout and payment" },
-      { id: 3, template: "I will pay in cash.", template_en: "I will pay in cash.", template_si: "මම මුදලින් ගෙවන්නම්.", icon: "fa-money-bill-wave", category: "Checkout and payment" },
-      { id: 4, template: "Do you accept loyalty points or club card?", template_en: "Do you accept loyalty points or club card?", template_si: "ලෝයල්ටි ලකුණු හෝ ක්ලබ් කාඩ්පත පිළිගන්නවාද?", icon: "fa-id-card-clip", category: "Checkout and payment" },
-      { id: 5, template: "I have my own reusable shopping bag.", template_en: "I have my own reusable shopping bag.", template_si: "මා ළඟ නැවත භාවිත කළ හැකි සාප්පු බෑගයක් ඇත.", icon: "fa-bag-shopping", category: "Checkout and payment" },
-      { id: 6, template: "Please give me a printed receipt.", template_en: "Please give me a printed receipt.", template_si: "කරුණාකර මට මුද්‍රිත රිසිට්පතක් ලබා දෙන්න.", icon: "fa-receipt", category: "Checkout and payment" },
-      { id: 7, template: "Can you help me pack the groceries?", template_en: "Can you help me pack the groceries?", template_si: "බඩු බෑග්වලට අසුරා ගැනීමට උදව් කළ හැකිද?", icon: "fa-box-open", category: "Checkout and payment" }
+      { id: 77, template: "Which counter is open?", template_en: "Which counter is open?", template_si: "කුමන කවුන්ටරය විවෘතද?", icon: "fa-door-open", category: "Checkout and payment" },
+      { id: 78, template: "Is this the queue for payment?", template_en: "Is this the queue for payment?", template_si: "ගෙවීම සඳහා පෝලිම මෙයද?", icon: "fa-users-line", category: "Checkout and payment" },
+      { id: 79, template: "I have only a few items. May I go first?", template_en: "I have only a few items. May I go first?", template_si: "මා ළඟ ඇත්තේ භාණ්ඩ කිහිපයයි. මට කලින් යන්න පුළුවන් ද?", icon: "fa-hand", category: "Checkout and payment" },
+      { id: 80, template: "Please show me the total amount.", template_en: "Please show me the total amount.", template_si: "කරුණාකර මුළු මුදල මට පෙන්වන්න.", icon: "fa-calculator", category: "Checkout and payment" },
+      { id: 81, template: "Please write down the total amount.", template_en: "Please write down the total amount.", template_si: "කරුණාකර මුළු මුදල ලියන්න.", icon: "fa-pen-to-square", category: "Checkout and payment" },
+      { id: 82, template: "Can I pay by card?", template_en: "Can I pay by card?", template_si: "කාඩ්පතෙන් ගෙවන්න පුළුවන් ද?", icon: "fa-credit-card", category: "Checkout and payment" },
+      { id: 83, template: "I will pay in cash.", template_en: "I will pay in cash.", template_si: "මම මුදලින් ගෙවන්නම්.", icon: "fa-money-bill-wave", category: "Checkout and payment" },
+      { id: 84, template: "Can I pay using a QR code?", template_en: "Can I pay using a QR code?", template_si: "QR කේතයෙන් ගෙවන්න පුළුවන් ද?", icon: "fa-qrcode", category: "Checkout and payment" },
+      { id: 85, template: "Please give me a receipt.", template_en: "Please give me a receipt.", template_si: "කරුණාකර රිසිට්පතක් දෙන්න.", icon: "fa-receipt", category: "Checkout and payment" },
+      { id: 86, template: "May I have a bag, please?", template_en: "May I have a bag, please?", template_si: "කරුණාකර මට බෑගයක් දෙන්න.", icon: "fa-bag-shopping", category: "Checkout and payment" },
+      { id: 87, template: "I have my own bag.", template_en: "I have my own bag.", template_si: "මා ළඟ මගේම බෑගයක් තියෙනවා.", icon: "fa-bag-shopping", category: "Checkout and payment" },
+      { id: 88, template: "Please pack the items in separate bags.", template_en: "Please pack the items in separate bags.", template_si: "කරුණාකර භාණ්ඩ වෙනම බෑග් වල දාන්න.", icon: "fa-boxes-packing", category: "Checkout and payment" },
+      { id: 89, template: "Can you help me carry my shopping?", template_en: "Can you help me carry my shopping?", template_si: "මගේ බඩු රැගෙන යාමට උදව් කරන්න පුළුවන් ද?", icon: "fa-person-walking-luggage", category: "Checkout and payment" },
+      { id: 90, template: "I think the change is incorrect. Please check.", template_en: "I think the change is incorrect. Please check.", template_si: "ඉතිරි මුදල වැරදියි කියා මට හිතෙනවා. කරුණාකර පරීක්ෂා කරන්න.", icon: "fa-coins", category: "Checkout and payment" }
+    ],
+    'sm-problems-returns': [
+      { id: 91, template: "I think I was charged twice.", template_en: "I think I was charged twice.", template_si: "මට දෙවරක් අය කළා කියා හිතෙනවා.", icon: "fa-triangle-exclamation", category: "Problems and returns" },
+      { id: 92, template: "I want to return this item.", template_en: "I want to return this item.", template_si: "මට මෙම භාණ්ඩය ආපසු දීමට අවශ්යයි.", icon: "fa-arrow-rotate-left", category: "Problems and returns" },
+      { id: 93, template: "I want to exchange this item.", template_en: "I want to exchange this item.", template_si: "මට මෙම භාණ්ඩය මාරු කරගැනීමට අවශ්යයි.", icon: "fa-right-left", category: "Problems and returns" },
+      { id: 94, template: "This item is damaged.", template_en: "This item is damaged.", template_si: "මෙම භාණ්ඩය හානි වී තියෙනවා.", icon: "fa-box-open", category: "Problems and returns" },
+      { id: 95, template: "This item is expired.", template_en: "This item is expired.", template_si: "මෙම භාණ්ඩය කල් ඉකුත් වී තියෙනවා.", icon: "fa-calendar-xmark", category: "Problems and returns" },
+      { id: 96, template: "I want a refund.", template_en: "I want a refund.", template_si: "මට මුදල් ආපසු ලබාගැනීමට අවශ්යයි.", icon: "fa-hand-holding-dollar", category: "Problems and returns" }
+    ],
+    'sm-closing-courtesy': [
+      { id: 97, template: "Please tap my shoulder or wave to get my attention.", template_en: "Please tap my shoulder or wave to get my attention.", template_si: "කරුණාකර මගේ අවධානය ලබාගැනීමට උරහිසට තට්ටු කරන්න හෝ අත වනන්න.", icon: "fa-hand", category: "Closing and courtesy" },
+      { id: 98, template: "Do you offer home delivery?", template_en: "Do you offer home delivery?", template_si: "ඔබ ගෙදරටම බෙදාහරින්නේ ද?", icon: "fa-truck", category: "Closing and courtesy" },
+      { id: 99, template: "What time do you close?", template_en: "What time do you close?", template_si: "ඔබ වසන්නේ කීයටද?", icon: "fa-clock", category: "Closing and courtesy" },
+      { id: 100, template: "Thank you for your help.", template_en: "Thank you for your help.", template_si: "ඔබේ උදව්වට ස්තූතියි.", icon: "fa-hands-clapping", category: "Closing and courtesy" }
     ]
   };
 
@@ -2411,37 +2493,82 @@ document.addEventListener('DOMContentLoaded', () => {
       buttonId: 'btn-cat-sm-basic-comm',
       badgeId: 'cat-badge-sm-basic-comm'
     },
-    'sm-finding-items': {
-      titleSi: '2. භාණ්ඩ සහ අන්තරාල සෙවීම',
-      titleEn: 'Finding items & aisles',
-      label: '2. භාණ්ඩ සහ අන්තරාල සෙවීම / Finding items & aisles',
-      icon: 'fa-boxes-stacked',
-      buttonId: 'btn-cat-sm-finding-items',
-      badgeId: 'cat-badge-sm-finding-items'
+    'sm-help-facilities': {
+      titleSi: '2. ආධාර සහ පහසුකම් ලබා ගැනීම',
+      titleEn: 'Getting help and facilities',
+      label: '2. ආධාර සහ පහසුකම් ලබා ගැනීම / Getting help and facilities',
+      icon: 'fa-hand-holding-hand',
+      buttonId: 'btn-cat-sm-help-facilities',
+      badgeId: 'cat-badge-sm-help-facilities'
     },
-    'sm-pricing-weights': {
-      titleSi: '3. මිල ගණන් සහ බර කිරුම්',
-      titleEn: 'Pricing & weighing',
-      label: '3. මිල ගණන් සහ බර කිරුම් / Pricing & weighing',
+    'sm-finding-products': {
+      titleSi: '3. නිෂ්පාදන සොයා ගැනීම',
+      titleEn: 'Finding products',
+      label: '3. නිෂ්පාදන සොයා ගැනීම / Finding products',
+      icon: 'fa-boxes-stacked',
+      buttonId: 'btn-cat-sm-finding-products',
+      badgeId: 'cat-badge-sm-finding-products'
+    },
+    'sm-prices-offers': {
+      titleSi: '4. මිල ගණන් සහ දීමනා',
+      titleEn: 'Prices and offers',
+      label: '4. මිල ගණන් සහ දීමනා / Prices and offers',
+      icon: 'fa-tags',
+      buttonId: 'btn-cat-sm-prices-offers',
+      badgeId: 'cat-badge-sm-prices-offers'
+    },
+    'sm-product-info-dietary': {
+      titleSi: '5. නිෂ්පාදන තොරතුරු සහ ආහාරමය අවශ්යතා',
+      titleEn: 'Product information and dietary needs',
+      label: '5. නිෂ්පාදන තොරතුරු සහ ආහාරමය අවශ්යතා / Product information and dietary needs',
+      icon: 'fa-circle-info',
+      buttonId: 'btn-cat-sm-product-info-dietary',
+      badgeId: 'cat-badge-sm-product-info-dietary'
+    },
+    'sm-weighing-packing': {
+      titleSi: '6. බර කිරා බැලීම, කැපීම සහ ඇසුරුම් කිරීම',
+      titleEn: 'Weighing, cutting and packing',
+      label: '6. බර කිරා බැලීම, කැපීම සහ ඇසුරුම් කිරීම / Weighing, cutting and packing',
       icon: 'fa-scale-balanced',
-      buttonId: 'btn-cat-sm-pricing-weights',
-      badgeId: 'cat-badge-sm-pricing-weights'
+      buttonId: 'btn-cat-sm-weighing-packing',
+      badgeId: 'cat-badge-sm-weighing-packing'
     },
     'sm-checkout-payment': {
-      titleSi: '4. මුදල් ගෙවීම සහ චෙක්අවුට්',
-      titleEn: 'Checkout & payment',
-      label: '4. මුදල් ගෙවීම සහ චෙක්අවුට් / Checkout & payment',
+      titleSi: '7. පිරික්සුම සහ ගෙවීම',
+      titleEn: 'Checkout and payment',
+      label: '7. පිරික්සුම සහ ගෙවීම / Checkout and payment',
       icon: 'fa-cash-register',
       buttonId: 'btn-cat-sm-checkout-payment',
       badgeId: 'cat-badge-sm-checkout-payment'
+    },
+    'sm-problems-returns': {
+      titleSi: '8. නිෂ්පාදන ආපසු යැවීම',
+      titleEn: 'Problems and returns',
+      label: '8. නිෂ්පාදන ආපසු යැවීම / Problems and returns',
+      icon: 'fa-arrow-rotate-left',
+      buttonId: 'btn-cat-sm-problems-returns',
+      badgeId: 'cat-badge-sm-problems-returns'
+    },
+    'sm-closing-courtesy': {
+      titleSi: '9. සමාප්තිය සහ ආචාරශීලීත්වය',
+      titleEn: 'Closing and courtesy',
+      label: '9. සමාප්තිය සහ ආචාරශීලීත්වය / Closing and courtesy',
+      icon: 'fa-handshake',
+      buttonId: 'btn-cat-sm-closing-courtesy',
+      badgeId: 'cat-badge-sm-closing-courtesy'
     }
   };
 
   const ALL_SUPERMARKET_CAT_KEYS = [
     'sm-basic-comm',
-    'sm-finding-items',
-    'sm-pricing-weights',
-    'sm-checkout-payment'
+    'sm-help-facilities',
+    'sm-finding-products',
+    'sm-prices-offers',
+    'sm-product-info-dietary',
+    'sm-weighing-packing',
+    'sm-checkout-payment',
+    'sm-problems-returns',
+    'sm-closing-courtesy'
   ];
 
   // Screen 1 & Screen 2 Navigation:
@@ -3872,7 +3999,7 @@ document.addEventListener('DOMContentLoaded', () => {
         hospitalBadge.classList.remove('badge-bank-theme', 'badge-restaurant-theme');
         hospitalBadge.classList.add('badge-supermarket-theme');
         hospitalBadge.style.display = 'inline-flex';
-        hospitalBadge.innerHTML = '<i class="fa-solid fa-cart-shopping"></i> 4 Categories';
+        hospitalBadge.innerHTML = '<i class="fa-solid fa-cart-shopping"></i> 9 Categories';
         hospitalBadge.style.background = '#d1fae5';
         hospitalBadge.style.color = '#059669';
       }

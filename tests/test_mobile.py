@@ -614,7 +614,7 @@ class TestMobileInterface(unittest.TestCase):
         self.assertIn('Supercentre', data['poi_name'])
         self.assertEqual(len(data['messages']), 0)
         self.assertIn('supermarket_categories', data)
-        self.assertEqual(len(data['supermarket_categories']), 4)
+        self.assertEqual(len(data['supermarket_categories']), 9)
 
     def test_manual_supermarket_selection_api(self):
         # 1. Manually select Cargills Food City Staples by supermarket_id
@@ -628,9 +628,9 @@ class TestMobileInterface(unittest.TestCase):
         self.assertEqual(data['category_name'], '1. මූලික සන්නිවේදනය / Basic communication')
         self.assertIn('supermarket_categories', data)
         cats = data['supermarket_categories']
-        self.assertEqual(len(cats['sm-basic-comm']), 6)
-        self.assertEqual(cats['sm-basic-comm'][0]['template_en'], 'I am deaf / non-verbal.')
-        self.assertEqual(cats['sm-basic-comm'][0]['template_si'], 'මම බිහිරි / කතා කිරීමට අපහසු අයෙක්.')
+        self.assertEqual(len(cats['sm-basic-comm']), 10)
+        self.assertEqual(cats['sm-basic-comm'][0]['template_en'], 'I am deaf.')
+        self.assertEqual(cats['sm-basic-comm'][0]['template_si'], 'මම බිහිරි කෙනෙක්.')
 
         # 2. Manually select Keells Crescat Colombo
         res_keells = self.client.post('/api/select-supermarket', json={'supermarket_id': 'keells-crescat-colombo'})
@@ -640,9 +640,9 @@ class TestMobileInterface(unittest.TestCase):
         self.assertTrue(data_keells['is_supermarket'])
         self.assertIn('Keells', data_keells['poi_name'])
         self.assertIn('supermarket_categories', data_keells)
-        self.assertEqual(len(data_keells['supermarket_categories']['sm-basic-comm']), 6)
+        self.assertEqual(len(data_keells['supermarket_categories']['sm-basic-comm']), 10)
 
-    def test_supermarket_all_4_categories_messages(self):
+    def test_supermarket_all_9_categories_messages(self):
         res = self.client.post('/api/select-supermarket', json={'supermarket_id': 'arpico-supercentre-hyde-park'})
         self.assertEqual(res.status_code, 200)
         data = res.get_json()
@@ -650,59 +650,113 @@ class TestMobileInterface(unittest.TestCase):
         self.assertIn('supermarket_categories', data)
         cats = data['supermarket_categories']
 
-        # Verify all 4 categories exist
+        # Verify all 9 categories exist
         expected_cats = [
             'sm-basic-comm',
-            'sm-finding-items',
-            'sm-pricing-weights',
-            'sm-checkout-payment'
+            'sm-help-facilities',
+            'sm-finding-products',
+            'sm-prices-offers',
+            'sm-product-info-dietary',
+            'sm-weighing-packing',
+            'sm-checkout-payment',
+            'sm-problems-returns',
+            'sm-closing-courtesy'
         ]
         for c in expected_cats:
             self.assertIn(c, cats)
 
-        # Category 1: Basic communication (6)
+        # Total message count across all 9 categories must equal 100
+        total_msgs = sum(len(cats[c]) for c in expected_cats)
+        self.assertEqual(total_msgs, 100)
+
+        # Category 1: Basic communication (1-10) [10 msgs]
         basic_msgs = cats['sm-basic-comm']
-        self.assertEqual(len(basic_msgs), 6)
-        self.assertEqual(basic_msgs[0]['template_en'], 'I am deaf / non-verbal.')
-        self.assertEqual(basic_msgs[0]['template_si'], 'මම බිහිරි / කතා කිරීමට අපහසු අයෙක්.')
-        self.assertEqual(basic_msgs[5]['template_en'], 'Thank you for your assistance.')
-        self.assertEqual(basic_msgs[5]['template_si'], 'ඔබගේ උදව්වට ස්තූතියි.')
+        self.assertEqual(len(basic_msgs), 10)
+        self.assertEqual(basic_msgs[0]['template_en'], 'I am deaf.')
+        self.assertEqual(basic_msgs[0]['template_si'], 'මම බිහිරි කෙනෙක්.')
+        self.assertEqual(basic_msgs[9]['template_en'], 'Thank you.')
+        self.assertEqual(basic_msgs[9]['template_si'], 'ස්තූතියි.')
 
-        # Category 2: Finding items & aisles (9)
-        finding_msgs = cats['sm-finding-items']
-        self.assertEqual(len(finding_msgs), 9)
-        self.assertEqual(finding_msgs[0]['template_en'], 'Where can I find milk and dairy products?')
-        self.assertEqual(finding_msgs[0]['template_si'], 'කිරි සහ කිරි නිෂ්පාදන තිබෙන්නේ කොහේද?')
-        self.assertEqual(finding_msgs[8]['template_en'], 'Can you check the back storeroom for more?')
-        self.assertEqual(finding_msgs[8]['template_si'], 'තව තිබේදැයි පසුපස ගබඩාව පරීක්ෂා කළ හැකිද?')
+        # Category 2: Getting help and facilities (11-20) [10 msgs]
+        help_msgs = cats['sm-help-facilities']
+        self.assertEqual(len(help_msgs), 10)
+        self.assertEqual(help_msgs[0]['template_en'], 'I need help.')
+        self.assertEqual(help_msgs[0]['template_si'], 'මට උදව්වක් අවශ්යයි.')
+        self.assertEqual(help_msgs[9]['template_en'], 'Can you show me the way?')
+        self.assertEqual(help_msgs[9]['template_si'], 'මට පාර පෙන්වන්න පුළුවන් ද?')
 
-        # Category 3: Pricing & weighing (6)
-        pricing_msgs = cats['sm-pricing-weights']
-        self.assertEqual(len(pricing_msgs), 6)
-        self.assertEqual(pricing_msgs[0]['template_en'], 'How much does this item cost?')
-        self.assertEqual(pricing_msgs[0]['template_si'], 'මේ භාණ්ඩයේ මිල කීයද?')
-        self.assertEqual(pricing_msgs[5]['template_en'], 'Can I return or exchange this item?')
-        self.assertEqual(pricing_msgs[5]['template_si'], 'මට මෙම භාණ්ඩය මාරු කිරීමට හෝ ආපසු දීමට හැකිද?')
+        # Category 3: Finding products (21-46) [26 msgs]
+        finding_msgs = cats['sm-finding-products']
+        self.assertEqual(len(finding_msgs), 26)
+        self.assertEqual(finding_msgs[0]['template_en'], 'Where is the rice?')
+        self.assertEqual(finding_msgs[0]['template_si'], 'සහල් කොහෙද?')
+        self.assertEqual(finding_msgs[25]['template_en'], 'Do you have this item? (showing a picture)')
+        self.assertEqual(finding_msgs[25]['template_si'], 'ඔබ ළඟ මෙම භාණ්ඩය තියෙනවා ද?')
 
-        # Category 4: Checkout & payment (7)
+        # Category 4: Prices and offers (47-56) [10 msgs]
+        price_msgs = cats['sm-prices-offers']
+        self.assertEqual(len(price_msgs), 10)
+        self.assertEqual(price_msgs[0]['template_en'], 'How much is this?')
+        self.assertEqual(price_msgs[0]['template_si'], 'මෙය කීයද?')
+        self.assertEqual(price_msgs[9]['template_en'], 'The price on the shelf is different.')
+        self.assertEqual(price_msgs[9]['template_si'], 'රාක්කයේ මිල වෙනස්.')
+
+        # Category 5: Product info & dietary needs (57-68) [12 msgs]
+        info_msgs = cats['sm-product-info-dietary']
+        self.assertEqual(len(info_msgs), 12)
+        self.assertEqual(info_msgs[0]['template_en'], 'What is the expiry date?')
+        self.assertEqual(info_msgs[0]['template_si'], 'කල් ඉකුත් වන දිනය කුමක්ද?')
+        self.assertEqual(info_msgs[11]['template_en'], 'Do you have a smaller size?')
+        self.assertEqual(info_msgs[11]['template_si'], 'කුඩා ප්රමාණයක් තියෙනවා ද?')
+
+        # Category 6: Weighing, cutting and packing (69-76) [8 msgs]
+        weigh_msgs = cats['sm-weighing-packing']
+        self.assertEqual(len(weigh_msgs), 8)
+        self.assertEqual(weigh_msgs[0]['template_en'], 'Please weigh this for me.')
+        self.assertEqual(weigh_msgs[0]['template_si'], 'කරුණාකර මෙය කිරලා දෙන්න.')
+        self.assertEqual(weigh_msgs[7]['template_en'], 'Please pack it separately.')
+        self.assertEqual(weigh_msgs[7]['template_si'], 'කරුණාකර වෙන වෙනම ඇසුරුම් කරන්න.')
+
+        # Category 7: Checkout and payment (77-90) [14 msgs]
         checkout_msgs = cats['sm-checkout-payment']
-        self.assertEqual(len(checkout_msgs), 7)
-        self.assertEqual(checkout_msgs[0]['template_en'], 'I would like to check out now.')
-        self.assertEqual(checkout_msgs[0]['template_si'], 'මට දැන් මුදල් ගෙවීමට අවශ්‍යයි.')
-        self.assertEqual(checkout_msgs[6]['template_en'], 'Can you help me pack the groceries?')
-        self.assertEqual(checkout_msgs[6]['template_si'], 'බඩු බෑග්වලට අසුරා ගැනීමට උදව් කළ හැකිද?')
+        self.assertEqual(len(checkout_msgs), 14)
+        self.assertEqual(checkout_msgs[0]['template_en'], 'Which counter is open?')
+        self.assertEqual(checkout_msgs[0]['template_si'], 'කුමන කවුන්ටරය විවෘතද?')
+        self.assertEqual(checkout_msgs[13]['template_en'], 'I think the change is incorrect. Please check.')
+        self.assertEqual(checkout_msgs[13]['template_si'], 'ඉතිරි මුදල වැරදියි කියා මට හිතෙනවා. කරුණාකර පරීක්ෂා කරන්න.')
+
+        # Category 8: Problems and returns (91-96) [6 msgs]
+        prob_msgs = cats['sm-problems-returns']
+        self.assertEqual(len(prob_msgs), 6)
+        self.assertEqual(prob_msgs[0]['template_en'], 'I think I was charged twice.')
+        self.assertEqual(prob_msgs[0]['template_si'], 'මට දෙවරක් අය කළා කියා හිතෙනවා.')
+        self.assertEqual(prob_msgs[5]['template_en'], 'I want a refund.')
+        self.assertEqual(prob_msgs[5]['template_si'], 'මට මුදල් ආපසු ලබාගැනීමට අවශ්යයි.')
+
+        # Category 9: Closing and courtesy (97-100) [4 msgs]
+        close_msgs = cats['sm-closing-courtesy']
+        self.assertEqual(len(close_msgs), 4)
+        self.assertEqual(close_msgs[0]['template_en'], 'Please tap my shoulder or wave to get my attention.')
+        self.assertEqual(close_msgs[0]['template_si'], 'කරුණාකර මගේ අවධානය ලබාගැනීමට උරහිසට තට්ටු කරන්න හෝ අත වනන්න.')
+        self.assertEqual(close_msgs[3]['template_en'], 'Thank you for your help.')
+        self.assertEqual(close_msgs[3]['template_si'], 'ඔබේ උදව්වට ස්තූතියි.')
 
     def test_mobile_supermarket_ui_elements(self):
-        # Verify /mobile/supermarket renders all 4 supermarket category buttons and badge
+        # Verify /mobile/supermarket renders all 9 supermarket category buttons and badge
         resp = self.client.get('/mobile/supermarket')
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b'id="supermarket-category-selector-bar"', resp.data)
         self.assertIn(b'id="btn-cat-sm-basic-comm"', resp.data)
-        self.assertIn(b'id="btn-cat-sm-finding-items"', resp.data)
-        self.assertIn(b'id="btn-cat-sm-pricing-weights"', resp.data)
+        self.assertIn(b'id="btn-cat-sm-help-facilities"', resp.data)
+        self.assertIn(b'id="btn-cat-sm-finding-products"', resp.data)
+        self.assertIn(b'id="btn-cat-sm-prices-offers"', resp.data)
+        self.assertIn(b'id="btn-cat-sm-product-info-dietary"', resp.data)
+        self.assertIn(b'id="btn-cat-sm-weighing-packing"', resp.data)
         self.assertIn(b'id="btn-cat-sm-checkout-payment"', resp.data)
+        self.assertIn(b'id="btn-cat-sm-problems-returns"', resp.data)
+        self.assertIn(b'id="btn-cat-sm-closing-courtesy"', resp.data)
         self.assertIn(b'Supermarket Message Criteria', resp.data)
-        self.assertIn(b'4 Categories', resp.data)
+        self.assertIn(b'9 Categories', resp.data)
         self.assertIn(b'id="modal-manual-supermarket-select"', resp.data)
         self.assertIn(b'gps-supermarket-sim-chip', resp.data)
         self.assertIn(b'map-sl-supermarkets-quick-btn', resp.data)
