@@ -261,12 +261,18 @@ class AudioClassifierService {
 
     final nowMs = DateTime.now().millisecondsSinceEpoch;
 
-    // Fast acoustic sound level detected (> 0.32)
-    // Sample quickly when non-speech acoustic sound has played for >= 200ms and NO speech in last 1.5s
-    if (soundVol >= 0.32) {
+    // Warmup guard: Ignore sound events during the first 1500ms after enabling microphone
+    if (nowMs - _listeningStartTimeMs < 1500) {
+      _highVolumeStartTimeMs = 0;
+      return;
+    }
+
+    // High acoustic sound level detected (> 0.38)
+    // Only sample if non-speech acoustic sound has played for >= 300ms and NO speech in last 2.0s
+    if (soundVol >= 0.38) {
       if (_highVolumeStartTimeMs == 0) {
         _highVolumeStartTimeMs = nowMs;
-      } else if (nowMs - _highVolumeStartTimeMs >= 200 && nowMs - _lastSpeechTimeMs >= 1500) {
+      } else if (nowMs - _highVolumeStartTimeMs >= 300 && nowMs - _lastSpeechTimeMs >= 2000) {
         _triggerAcousticNeuralSample();
       }
     } else {
@@ -470,9 +476,10 @@ class AudioClassifierService {
     _isRestartingStt = false;
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     _listeningStartTimeMs = nowMs;
+    _lastSpeechTimeMs = nowMs;
     _rollingIdx = 0;
     _total16kPushed = 0;
-    _latestSoundVolume = 0.25;
+    _latestSoundVolume = 0.02;
 
     try {
       _speechAvailable = await _speech.initialize(
@@ -493,9 +500,6 @@ class AudioClassifierService {
 
     // 2. Watchdog timer to ensure STT stays alive continuously
     _startSttWatchdog();
-
-    // 3. Audio Streamer for continuous offline audio monitoring & live visualizer
-    _startAudioStreamer();
 
     return true;
   }
