@@ -240,7 +240,7 @@ class AudioClassifierService {
 
       await _speech.listen(
         onResult: (result) {
-          if (!_isListening) return;
+          if (!_isListening || _isAnimatingTranscript) return;
           final String rawWords = result.recognizedWords.trim();
           if (rawWords.isNotEmpty) {
             _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
@@ -591,7 +591,7 @@ class AudioClassifierService {
               _lastSpeechTimeMs = nowMs;
             }
 
-            final sinhalaHit = (!_speech.isListening && canAlert) ? _matchSinhalaKeyword(allProbs, pred.label) : null;
+            final sinhalaHit = canAlert ? _matchSinhalaKeyword(allProbs, pred.label) : null;
 
             if (sinhalaHit != null) {
               // Reset any pending environmental sound tracking
@@ -625,6 +625,14 @@ class AudioClassifierService {
                   _pendingSinhalaHits = 0;
                   _pendingEnvClass = null;
                   _pendingEnvHits = 0;
+
+                  // Stop STT listening if active so it doesn't collide with offline recognition
+                  try {
+                    if (_speech.isListening) {
+                      _speech.stop();
+                    }
+                  } catch (_) {}
+
                   _animateOfflineTranscriptAndAlert(mappedKey);
                   return;
                 }
