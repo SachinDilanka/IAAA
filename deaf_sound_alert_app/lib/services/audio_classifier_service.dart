@@ -611,13 +611,13 @@ class AudioClassifierService {
               }
               _pendingSinhalaMs = nowMs;
 
-              if (_pendingSinhalaHits >= 2) {
+              if (sinhalaHit.probability >= 0.70 || _pendingSinhalaHits >= 2) {
                 _pendingSinhalaClass = null;
                 _pendingSinhalaHits = 0;
 
                 final mappedKey = _labelToSoundKey[sinhalaHit.className] ?? sinhalaHit.className;
                 final lastHitTime = _lastKeywordTriggerTimes[mappedKey];
-                final bool classCooldownOk = (lastHitTime == null || now.difference(lastHitTime).inMilliseconds > 5500);
+                final bool classCooldownOk = (lastHitTime == null || now.difference(lastHitTime).inMilliseconds > 5000);
 
                 if (canAlert && classCooldownOk) {
                   _lastGlobalAlertTime = now;
@@ -718,7 +718,7 @@ class AudioClassifierService {
     if (!_sinhalaClasses.contains(topLabel)) return null;
 
     final double topP = allProbs[topLabel] ?? 0.0;
-    if (topP < 0.75) return null;
+    if (topP < 0.65) return null;
 
     double runnerUp = 0.0;
     allProbs.forEach((name, p) {
@@ -728,7 +728,7 @@ class AudioClassifierService {
     });
 
     final double margin = topP - runnerUp;
-    if (margin >= 0.40) {
+    if (margin >= 0.25) {
       return _SinhalaHit(topLabel, topP);
     }
     return null;
