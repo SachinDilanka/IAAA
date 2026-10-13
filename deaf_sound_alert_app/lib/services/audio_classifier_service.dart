@@ -228,9 +228,6 @@ class AudioClassifierService {
         },
         onSoundLevelChange: (level) {
           if (!_isListening) return;
-          if (level > -8.0) {
-            _lastSpeechTimeMs = DateTime.now().millisecondsSinceEpoch;
-          }
           double soundVol = (0.25 + (level.clamp(-2.0, 10.0) / 10.0)).clamp(0.18, 1.0);
           _updateWaveformVolume(soundVol);
         },
@@ -501,21 +498,16 @@ class AudioClassifierService {
           }
 
           // Whenever speech energy/probability is detected (far or near), update speech active timestamp
-          if (totalSpeechProb >= 0.04 || mappedKey.startsWith('sinhala_')) {
+          if (totalSpeechProb >= 0.20 || mappedKey.startsWith('sinhala_')) {
             _lastSpeechTimeMs = nowMs;
           }
 
-          // 1. SINHALA SPEECH KEYWORDS (100% OFFLINE & ONLINE Neural Classifier)
+          // 1. SINHALA SPEECH KEYWORDS (Instant Pure-Dart Neural Speech Classifier & STT)
           if (mappedKey.startsWith('sinhala_')) {
             _lastSpeechTimeMs = nowMs;
 
-            // When Speech-To-Text (STT) is active, STT handles full live sentence speech transcription & exact emergency keyword card popups!
-            if (_speech.isListening) {
-              return;
-            }
-
-            // Offline Fallback Mode (when STT is idle/offline): require high confidence topProb >= 0.80 to avoid false popups
-            if (topProb >= 0.80) {
+            // When user says "udaw" or any emergency keyword, neural model detects it reliably with >= 0.60 confidence
+            if (topProb >= 0.60) {
               final lastTime = _lastKeywordTriggerTimes[mappedKey];
               if (lastTime != null && (nowMs - lastTime.millisecondsSinceEpoch < 1500)) {
                 return;
@@ -531,14 +523,14 @@ class AudioClassifierService {
           }
 
           // 2. ENVIRONMENTAL SOUNDS (Dog Barking, Baby Crying, Vehicle Horns, Ambulance Siren, Fire Truck, Traffic Noise)
-          // Environmental sounds evaluate ONLY when speech has been idle for >= 3000ms AND totalSpeechProb < 0.05
-          final bool isSpeechIdle = (nowMs - _lastSpeechTimeMs >= 3000);
+          // Environmental sounds evaluate when speech has been idle for >= 1200ms AND totalSpeechProb < 0.20
+          final bool isSpeechIdle = (nowMs - _lastSpeechTimeMs >= 1200);
 
-          if (isSpeechIdle && totalSpeechProb < 0.05 && !mappedKey.startsWith('sinhala_')) {
+          if (isSpeechIdle && totalSpeechProb < 0.20 && !mappedKey.startsWith('sinhala_')) {
             // 1. Dog Barking (Evaluate FIRST with dominance check so playing dog barking ONLY pops up Dog Barking!)
-            if ((mappedKey == 'dog_bark_dataset' || topLabel == 'dog_barking' || dogProb >= 0.50) &&
+            if ((mappedKey == 'dog_bark_dataset' || topLabel == 'dog_barking' || dogProb >= 0.45) &&
                 dogProb >= hornProb && dogProb >= sirenProb && dogProb >= fireProb && dogProb >= babyProb) {
-              if (math.max(dogProb, topProb) >= 0.50 && (rms >= 0.012 || maxAmp >= 0.030)) {
+              if (math.max(dogProb, topProb) >= 0.45 && (rms >= 0.010 || maxAmp >= 0.025)) {
                 final String displayName = _displayNames['dog_bark_dataset'] ?? 'Dog Barking';
                 _transcriptController.add(displayName);
                 simulateSoundDetection('dog_bark_dataset', confidence: math.max(dogProb, topProb));
@@ -547,9 +539,9 @@ class AudioClassifierService {
             }
 
             // 2. Baby Crying (Guarded: must NOT trigger on Dog Barking!)
-            if ((mappedKey == 'baby crying' || topLabel == 'baby_crying' || babyProb >= 0.70) &&
+            if ((mappedKey == 'baby crying' || topLabel == 'baby_crying' || babyProb >= 0.65) &&
                 babyProb > dogProb && babyProb > hornProb) {
-              if (math.max(babyProb, topProb) >= 0.70 && (rms >= 0.020 || maxAmp >= 0.050)) {
+              if (math.max(babyProb, topProb) >= 0.65 && (rms >= 0.015 || maxAmp >= 0.040)) {
                 final String displayName = _displayNames['baby crying'] ?? 'Baby Crying';
                 _transcriptController.add(displayName);
                 simulateSoundDetection('baby crying', confidence: math.max(babyProb, topProb));
@@ -558,9 +550,9 @@ class AudioClassifierService {
             }
 
             // 3. Vehicle Horns (Guarded: must NOT trigger on Dog Barking or Baby Crying!)
-            if ((mappedKey == 'vehicle horns' || topLabel == 'vehicle_horn' || hornProb >= 0.70) &&
+            if ((mappedKey == 'vehicle horns' || topLabel == 'vehicle_horn' || hornProb >= 0.65) &&
                 hornProb > dogProb && hornProb > babyProb && dogProb < 0.35) {
-              if (math.max(hornProb, topProb) >= 0.70 && (rms >= 0.020 || maxAmp >= 0.050)) {
+              if (math.max(hornProb, topProb) >= 0.65 && (rms >= 0.015 || maxAmp >= 0.040)) {
                 final String displayName = _displayNames['vehicle horns'] ?? 'Vehicle Horns';
                 _transcriptController.add(displayName);
                 simulateSoundDetection('vehicle horns', confidence: math.max(hornProb, topProb));
@@ -569,9 +561,9 @@ class AudioClassifierService {
             }
 
             // 4. Ambulance Siren (Guarded: must NOT trigger on Dog Barking!)
-            if ((mappedKey == 'ambulance' || topLabel == 'ambulance_siren' || sirenProb >= 0.65) &&
+            if ((mappedKey == 'ambulance' || topLabel == 'ambulance_siren' || sirenProb >= 0.60) &&
                 sirenProb > dogProb && dogProb < 0.35) {
-              if (math.max(sirenProb, topProb) >= 0.65 && (rms >= 0.020 || maxAmp >= 0.050)) {
+              if (math.max(sirenProb, topProb) >= 0.60 && (rms >= 0.015 || maxAmp >= 0.040)) {
                 final String displayName = _displayNames['ambulance'] ?? 'Ambulance Siren';
                 _transcriptController.add(displayName);
                 simulateSoundDetection('ambulance', confidence: math.max(sirenProb, topProb));
@@ -580,9 +572,9 @@ class AudioClassifierService {
             }
 
             // 5. Fire Truck Siren / Fire Alarm (Guarded: must NOT trigger on Dog Barking!)
-            if ((mappedKey == 'fire_truck' || topLabel == 'fire_truck' || topLabel == 'fire_alarm' || fireProb >= 0.65) &&
+            if ((mappedKey == 'fire_truck' || topLabel == 'fire_truck' || topLabel == 'fire_alarm' || fireProb >= 0.60) &&
                 fireProb > dogProb && dogProb < 0.35) {
-              if (math.max(fireProb, topProb) >= 0.65 && (rms >= 0.020 || maxAmp >= 0.050)) {
+              if (math.max(fireProb, topProb) >= 0.60 && (rms >= 0.015 || maxAmp >= 0.040)) {
                 final String displayName = _displayNames['fire_truck'] ?? 'Fire Alarm / Siren';
                 _transcriptController.add(displayName);
                 simulateSoundDetection('fire_truck', confidence: math.max(fireProb, topProb));
@@ -591,9 +583,9 @@ class AudioClassifierService {
             }
 
             // 6. Traffic Noise (Guarded: must NOT trigger on Dog Barking!)
-            if ((mappedKey == 'traffic' || topLabel == 'background_traffic' || trafficProb >= 0.55) &&
+            if ((mappedKey == 'traffic' || topLabel == 'background_traffic' || trafficProb >= 0.50) &&
                 trafficProb > dogProb && dogProb < 0.35) {
-              if (math.max(trafficProb, topProb) >= 0.55 && (rms >= 0.015 || maxAmp >= 0.035)) {
+              if (math.max(trafficProb, topProb) >= 0.50 && (rms >= 0.010 || maxAmp >= 0.025)) {
                 final String displayName = _displayNames['traffic'] ?? 'Traffic Noise';
                 _transcriptController.add(displayName);
                 simulateSoundDetection('traffic', confidence: math.max(trafficProb, topProb));
