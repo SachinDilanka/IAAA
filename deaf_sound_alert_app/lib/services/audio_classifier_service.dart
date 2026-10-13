@@ -665,6 +665,8 @@ class AudioClassifierService {
                   'dog_barking': 'dog_bark_dataset',
                   'baby_crying': 'baby crying',
                   'background_traffic': 'traffic',
+                  'traffic_noise': 'traffic',
+                  'road': 'traffic',
                 };
 
                 if (envClasses.containsKey(top)) {
@@ -674,7 +676,21 @@ class AudioClassifierService {
                   });
 
                   final double margin = topP - runnerUp;
-                  if (topP >= 0.70 && margin >= 0.35) {
+
+                  // Tuned thresholds:
+                  // Dog barking is transient (short bark burst, 200-350ms): allow 1 decisive hit at >= 0.70 confidence!
+                  // Traffic noise is continuous ambient rumble: allow detection at >= 0.55 confidence with margin >= 0.20!
+                  // Sirens & baby crying remain strictly at >= 0.70 confidence, margin >= 0.35, 2 hits.
+                  final bool isDogBark = (top == 'dog_barking');
+                  final bool isTraffic = (top == 'background_traffic' || top == 'traffic_noise' || top == 'road');
+
+                  final bool confPass = isDogBark
+                      ? (topP >= 0.65 && margin >= 0.30)
+                      : isTraffic
+                          ? (topP >= 0.55 && margin >= 0.20)
+                          : (topP >= 0.70 && margin >= 0.35);
+
+                  if (confPass) {
                     if (_pendingEnvClass == top && (nowMs - _pendingEnvMs < 700)) {
                       _pendingEnvHits++;
                     } else {
@@ -683,7 +699,9 @@ class AudioClassifierService {
                     }
                     _pendingEnvMs = nowMs;
 
-                    if (_pendingEnvHits >= 2) {
+                    final int requiredHits = (isDogBark && topP >= 0.70) ? 1 : 2;
+
+                    if (_pendingEnvHits >= 2 || (isDogBark && _pendingEnvHits >= requiredHits)) {
                       _pendingEnvClass = null;
                       _pendingEnvHits = 0;
                       final soundKey = envClasses[top]!;
