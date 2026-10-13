@@ -11,57 +11,13 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.deafalert.app/flashlight"
-    private val BG_CHANNEL = "com.deafalert.app/background_service"
     private var cameraManager: CameraManager? = null
     private var cameraId: String? = null
     private val handler = Handler(Looper.getMainLooper())
     private val activeRunnables = mutableListOf<Runnable>()
 
-    override fun onCreate(savedInstanceState: android.os.Bundle?) {
-        super.onCreate(savedInstanceState)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-            setShowWhenLocked(true)
-            setTurnScreenOn(true)
-        }
-        @Suppress("DEPRECATION")
-        window.addFlags(
-            android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-            android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-            android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
-            android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-        )
-    }
-
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BG_CHANNEL).setMethodCallHandler { call, result ->
-            when (call.method) {
-                "startService" -> {
-                    BackgroundAudioService.startService(this)
-                    result.success(true)
-                }
-                "stopService" -> {
-                    BackgroundAudioService.stopService(this)
-                    result.success(true)
-                }
-                "wakeScreen" -> {
-                    BackgroundAudioService.wakeScreen(this)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-                        setShowWhenLocked(true)
-                        setTurnScreenOn(true)
-                    }
-                    @Suppress("DEPRECATION")
-                    window.addFlags(
-                        android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                        android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-                        android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-                    )
-                    result.success(true)
-                }
-                else -> result.notImplemented()
-            }
-        }
 
         try {
             cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
@@ -124,30 +80,20 @@ class MainActivity : FlutterActivity() {
 
     private fun flashPattern(pattern: List<Int>) {
         cancelFlashing()
-        if (pattern.isEmpty()) return
-
         var totalDelay = 0L
-        var isTurnOn = false
+        var isOn = true
 
         for (duration in pattern) {
-            val d = duration.toLong()
-            if (isTurnOn) {
-                val delay = totalDelay
-                val r = Runnable {
-                    setTorchMode(true)
-                }
-                activeRunnables.add(r)
-                handler.postDelayed(r, delay)
-            } else if (totalDelay > 0L) {
-                val delay = totalDelay
-                val r = Runnable {
-                    setTorchMode(false)
-                }
-                activeRunnables.add(r)
-                handler.postDelayed(r, delay)
+            val delay = totalDelay
+            val state = isOn
+            val r = Runnable {
+                setTorchMode(state)
             }
-            totalDelay += d
-            isTurnOn = !isTurnOn
+            activeRunnables.add(r)
+            handler.postDelayed(r, delay)
+
+            totalDelay += duration.toLong()
+            isOn = !isOn
         }
 
         // Final safety turn off after pattern finishes
@@ -155,7 +101,7 @@ class MainActivity : FlutterActivity() {
             setTorchMode(false)
         }
         activeRunnables.add(finalOff)
-        handler.postDelayed(finalOff, totalDelay + 50L)
+        handler.postDelayed(finalOff, totalDelay)
     }
 }
 
