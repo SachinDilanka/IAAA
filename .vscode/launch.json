@@ -1,0 +1,45 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Flutter: Chrome (Web)",
+            "type": "dart",
+            "request": "launch",
+            "program": "flutter_app/lib/main.dart",
+            "deviceId": "chrome",
+            "toolArgs": [
+                "--dart-define=API_BASE_URL=http://127.0.0.1:8000"
+            ]
+        },
+        {
+            "name": "Flutter: Android",
+            "type": "dart",
+            "request": "launch",
+            "program": "flutter_app/lib/main.dart",
+            "toolArgs": [
+                "--dart-define=API_BASE_URL=http://10.0.2.2:8000"
+            ]
+        },
+        {
+            "name": "Start Sinhala Speech Therapy Web App",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": [
+                "backend.main:app",
+                "--reload",
+                "--port",
+                "8000"
+            ],
+            "jinja": true,
+            "justMyCode": true
+        },
+        {
+            "name": "Inspect Kaggle Emotion Dataset",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/backend/ml/train_emotion_model.py",
+            "console": "integratedTerminal"
+        }
+    ]
+}
