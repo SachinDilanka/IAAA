@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import '../models/communication_models.dart';
 import '../data/communication_data.dart';
 import '../data/venue_data.dart';
 

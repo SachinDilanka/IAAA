@@ -1,3 +1,5 @@
+import os
+import requests
 from flask import Blueprint, jsonify, request
 from app.services.message_service import get_all_locations, get_location_messages
 from app.services.geo_service import (
@@ -176,5 +178,35 @@ def select_supermarket():
 
     result = select_supermarket_by_id(supermarket_id, supermarket_name)
     return jsonify(result)
+
+@api_bp.route('/suggest', methods=['POST'])
+def suggest():
+    data = request.get_json(silent=True) or {}
+    category = data.get('category')
+    query = data.get('query', '')
+    top_k = data.get('top_k', 5)
+
+    ml_api_url = os.environ.get('ML_API_URL', 'http://127.0.0.1:8000').rstrip('/')
+    url = f"{ml_api_url}/suggest"
+
+    payload = {
+        'category': category,
+        'query': query,
+        'top_k': top_k,
+    }
+
+    try:
+        resp = requests.post(
+            url,
+            json=payload,
+            headers={'Content-Type': 'application/json; charset=utf-8'},
+            timeout=5.0
+        )
+        if resp.status_code != 200:
+            return jsonify({'error': f'ML service error ({resp.status_code})'}), 503
+        return jsonify(resp.json())
+    except Exception as e:
+        return jsonify({'error': f'ML service unavailable: {str(e)}'}), 503
+
 
 

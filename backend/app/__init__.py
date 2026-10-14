@@ -9,8 +9,12 @@ def create_app(test_config=None):
     backend_dir   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     workspace_root = os.path.dirname(backend_dir)
 
-    template_dir = os.path.join(workspace_root, 'frontend', 'templates')
-    static_dir   = os.path.join(workspace_root, 'frontend', 'static')
+    template_dir = os.path.join(workspace_root, 'app', 'templates')
+    static_dir   = os.path.join(workspace_root, 'app', 'static')
+    if not os.path.isdir(template_dir):
+        template_dir = os.path.join(workspace_root, 'frontend', 'templates')
+    if not os.path.isdir(static_dir):
+        static_dir = os.path.join(workspace_root, 'frontend', 'static')
     instance_dir = os.path.join(backend_dir, 'instance')
 
     app = Flask(

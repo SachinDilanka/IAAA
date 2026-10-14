@@ -35,7 +35,7 @@ class CategoryDetailScreen extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: venueType.backgroundColor,
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: venueType.themeColor.withOpacity(0.4), width: 2),
+                  border: Border.all(color: venueType.themeColor.withValues(alpha: 0.4), width: 2),
                 ),
                 child: Column(
                   children: [
@@ -140,7 +140,7 @@ class CategoryDetailScreen extends StatelessWidget {
             margin: const EdgeInsets.only(right: 16),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(20),
             ),
             alignment: Alignment.center,
@@ -156,7 +156,7 @@ class CategoryDetailScreen extends StatelessWidget {
           : ListView.separated(
               padding: const EdgeInsets.all(16),
               itemCount: category.messages.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              separatorBuilder: (_, index) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final msg = category.messages[index];
                 return InkWell(
@@ -169,7 +169,7 @@ class CategoryDetailScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.04),
+                          color: Colors.black.withValues(alpha: 0.04),
                           blurRadius: 8,
                           offset: const Offset(0, 3),
                         ),
