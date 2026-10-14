@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Runtime data and logs
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+# Trained model artifacts
+*.pth
+*.pt
+*.h5
+*.keras
+
+# OS files
+.DS_Store
+Thumbs.db
