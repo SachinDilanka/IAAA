@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from typing import List
 
-from backend.database import engine, Base, get_db
+from backend.database import engine, Base, DATABASE_PATH, get_db
 from backend.models.db_models import Child, Exercise, Attempt
 from backend.models.schemas import (
     ChildCreate, ChildUpdate, ChildResponse, ExerciseResponse,
@@ -31,10 +31,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/api/health")
+def health_check(db: Session = Depends(get_db)):
+    return {
+        "status": "ok",
+        "database": str(DATABASE_PATH),
+        "children": db.query(Child).count(),
+        "exercises": db.query(Exercise).count(),
+    }
+
 # ----------------- Child Profile APIs -----------------
 @app.get("/api/children", response_model=List[ChildResponse])
 def get_children(db: Session = Depends(get_db)):
     return db.query(Child).all()
+
+@app.get("/api/children/{child_id}", response_model=ChildResponse)
+def get_child(child_id: int, db: Session = Depends(get_db)):
+    db_child = db.query(Child).filter(Child.id == child_id).first()
+    if not db_child:
+        raise HTTPException(status_code=404, detail="Child not found")
+    return db_child
 
 @app.post("/api/children", response_model=ChildResponse)
 def create_child(child: ChildCreate, db: Session = Depends(get_db)):
@@ -125,6 +141,7 @@ def analyze_emotion(req: EmotionRequest):
     return result
 
 # ----------------- Frontend Static Files -----------------
-frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
-if os.path.exists(frontend_path):
-    app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+flutter_web_path = os.path.join(project_root, "flutter_app", "build", "web")
+if os.path.exists(flutter_web_path):
+    app.mount("/", StaticFiles(directory=flutter_web_path, html=True), name="flutter_frontend")
