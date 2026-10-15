@@ -8,6 +8,7 @@ import '../../core/widgets/confirmation_dialog.dart';
 import '../../core/widgets/loading_error_view.dart';
 import '../app/app_controller.dart';
 import '../../l10n/l10n.dart';
+import 'practice_tools_panel.dart';
 
 class LetterPracticeScreen extends StatefulWidget {
   const LetterPracticeScreen({super.key});
@@ -20,6 +21,14 @@ class _LetterPracticeScreenState extends State<LetterPracticeScreen> {
   int _index = 0;
   bool _saving = false;
   bool _talking = false;
+  String _detectedEmotion = 'happy';
+
+  void _changeLetter(int index) {
+    setState(() {
+      _index = index;
+      _detectedEmotion = 'happy';
+    });
+  }
 
   String _instruction(BuildContext context, Exercise exercise) {
     if (context.read<AppController>().isSinhala) {
@@ -49,7 +58,10 @@ class _LetterPracticeScreenState extends State<LetterPracticeScreen> {
     if (_saving) return;
     setState(() => _saving = true);
     try {
-      await context.read<AppController>().completeExercise(exercise);
+      await context.read<AppController>().completeExercise(
+        exercise,
+        emotion: _detectedEmotion,
+      );
       if (!mounted) return;
       await showConfirmationDialog(
         context,
@@ -123,22 +135,52 @@ class _LetterPracticeScreenState extends State<LetterPracticeScreen> {
                 saving: _saving,
                 onSpeak: () => _speak(exercise),
                 onComplete: () => _complete(exercise),
-                onPrevious: _index == 0 ? null : () => setState(() => _index--),
+                onPrevious: _index == 0
+                    ? null
+                    : () => _changeLetter(_index - 1),
                 onNext: _index == exercises.length - 1
                     ? null
-                    : () => setState(() => _index++),
+                    : () => _changeLetter(_index + 1),
               );
-              if (constraints.maxWidth < 760) {
-                return Column(
-                  children: [guide, const SizedBox(height: 18), activity],
+              final tools = PracticeToolsPanel(
+                exercise: exercise,
+                onEmotionChanged: (emotion) => _detectedEmotion = emotion,
+              );
+              if (constraints.maxWidth >= 1080) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(width: 250, child: guide),
+                    const SizedBox(width: 18),
+                    Expanded(child: activity),
+                    const SizedBox(width: 18),
+                    SizedBox(width: 360, child: tools),
+                  ],
                 );
               }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              if (constraints.maxWidth >= 700) {
+                return Column(
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(width: 250, child: guide),
+                        const SizedBox(width: 18),
+                        Expanded(child: activity),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    tools,
+                  ],
+                );
+              }
+              return Column(
                 children: [
-                  SizedBox(width: 310, child: guide),
-                  const SizedBox(width: 22),
-                  Expanded(child: activity),
+                  guide,
+                  const SizedBox(height: 18),
+                  activity,
+                  const SizedBox(height: 18),
+                  tools,
                 ],
               );
             },
