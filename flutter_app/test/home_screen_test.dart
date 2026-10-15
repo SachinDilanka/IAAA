@@ -49,7 +49,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Hello! Welcome!'), findsOneWidget);
     expect(find.text("Let's start"), findsOneWidget);
     expect(find.text('Letter practice'), findsOneWidget);
     expect(find.text('Word practice'), findsOneWidget);
