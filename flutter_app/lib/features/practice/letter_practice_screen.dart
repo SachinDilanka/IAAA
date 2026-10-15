@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/models/exercise.dart';
+import '../../core/services/letter_audio.dart';
 import '../../core/widgets/animated_guide.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/confirmation_dialog.dart';
@@ -23,11 +26,23 @@ class _LetterPracticeScreenState extends State<LetterPracticeScreen> {
   bool _talking = false;
   String _detectedEmotion = 'happy';
 
-  void _changeLetter(int index) {
+  Future<void> _changeLetter(int index) async {
+    try {
+      await LetterAudio.instance.stop();
+    } catch (_) {
+      // Playback may already be stopped or unavailable on the current device.
+    }
+    if (!mounted) return;
     setState(() {
       _index = index;
       _detectedEmotion = 'happy';
     });
+  }
+
+  @override
+  void dispose() {
+    unawaited(LetterAudio.instance.stop().catchError((_) {}));
+    super.dispose();
   }
 
   String _instruction(BuildContext context, Exercise exercise) {
@@ -39,18 +54,22 @@ class _LetterPracticeScreenState extends State<LetterPracticeScreen> {
 
   Future<void> _speak(Exercise exercise) async {
     setState(() => _talking = true);
-    final success = await context.read<AppController>().speech.speakSinhala(
-      exercise.sinhalaText,
-    );
-    if (!mounted) return;
-    setState(() => _talking = false);
-    if (!success) {
-      await showConfirmationDialog(
-        context,
-        title: context.l10n.audioUnavailableTitle,
-        message: context.l10n.audioUnavailableMessage,
-        kind: ConfirmationKind.error,
+    try {
+      if (LetterAudio.instance.hasAudio(exercise.sinhalaText)) {
+        await LetterAudio.instance.play(exercise.sinhalaText);
+      } else {
+        final success = await context.read<AppController>().speech.speakSinhala(
+          exercise.sinhalaText,
+        );
+        if (!success) throw StateError('Sinhala audio is unavailable');
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.audioUnavailableMessage)),
       );
+    } finally {
+      if (mounted) setState(() => _talking = false);
     }
   }
 
