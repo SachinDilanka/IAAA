@@ -1,0 +1,99 @@
+name: adaptive_sign_language_tutor
+description: "A new Adaptive Sign Language Tutor Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # UI & Styling
+  cupertino_icons: ^1.0.8
+  google_fonts: ^6.2.1
+
+  # Local Storage & Database (SQLite)
+  sqflite: ^2.3.3+1
+  path: ^1.9.0
+
+  # Hardware & Camera Processing
+  camera: ^0.12.1
+  permission_handler: ^11.3.1
+
+  # Analytics & Performance Charts
+  fl_chart: ^0.68.0
+  hand_landmarker: ^3.1.0
+  model_viewer_plus: ^1.10.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - dataset/landmarks/letter/a/
+    - dataset/landmarks/letter/b_first_way/
+    - dataset/landmarks/letter/b_second_way/
+    - dataset/landmarks/letter/c/
+    - dataset/landmarks/letter/d/
+    - dataset/landmarks/letter/e/
+    - dataset/landmarks/letter/f/
+    - dataset/landmarks/letter/g/
+    - dataset/landmarks/letter/h/
+    - dataset/landmarks/letter/i/
+    - dataset/landmarks/letter/j/
+    - dataset/landmarks/letter/k_first_way/
+    - dataset/landmarks/letter/k_second_way/
+    - dataset/landmarks/letter/l/
+    - dataset/landmarks/letter/m/
+    - dataset/landmarks/letter/o/
+    - dataset/landmarks/letter/p/
+    - dataset/landmarks/letter/q/
+    - dataset/landmarks/letter/r/
+    - dataset/landmarks/letter/s/
+    - dataset/landmarks/letter/t/
+    - dataset/landmarks/letter/u/
+    - dataset/landmarks/letter/v/
+    - dataset/landmarks/letter/w/
+    - dataset/landmarks/letter/x/
+    - dataset/landmarks/letter/y/
+    - dataset/landmarks/letter/z/
+    - dataset/landmarks/month/april/
+    - dataset/landmarks/month/august/
+    - dataset/landmarks/month/december/
+    - dataset/landmarks/month/february/
+    - dataset/landmarks/month/january/
+    - dataset/landmarks/month/july/
+    - dataset/landmarks/month/june/
+    - dataset/landmarks/month/march/
+    - dataset/landmarks/month/may/
+    - dataset/landmarks/month/november/
+    - dataset/landmarks/month/october/
+    - dataset/landmarks/month/september/
+    - dataset/landmarks/verb/adinawa/
+    - dataset/landmarks/verb/adum_sodanawa/
+    - dataset/landmarks/verb/ahanawa/
+    - dataset/landmarks/verb/andanawa/
+    - dataset/landmarks/verb/athu_gaanawa/
+    - dataset/landmarks/verb/awidinawa/
+    - dataset/landmarks/verb/bonawa/
+    - dataset/landmarks/verb/duwanawa/
+    - dataset/landmarks/verb/hinawenawa/
+    - dataset/landmarks/verb/kaamak_hadanawa/
+    - dataset/landmarks/verb/kanawa/
+    - dataset/landmarks/verb/liyanawa/
+    - dataset/landmarks/verb/muuna_soodanawa/
+    - dataset/landmarks/verb/naanawa/
+    - dataset/landmarks/verb/nagitinawa/
+    - dataset/landmarks/verb/paadam_karanawa/
+    - dataset/landmarks/verb/paninawa/
+    - dataset/landmarks/verb/soynawa/
+    - dataset/landmarks/verb/udaw_karanawa/
+    - dataset/landmarks/verb/waadi_wenawa/
+    - assets/models/avatar_signs.glb
+    - assets/js/
