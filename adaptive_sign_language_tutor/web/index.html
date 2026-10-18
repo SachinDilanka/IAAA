@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <title>Adaptive Sign Language Tutor</title>
+  <script
+    type="module"
+    src="./assets/packages/model_viewer_plus/assets/model-viewer.min.js"
+    defer
+  ></script>
+  <script src="./assets/assets/js/avatar_animation.js"></script>
+
+  <!-- MediaPipe dependencies -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+  <script>
+    let hands = null;
+    let cameraStream = null;
+    let animationFrame = null;
+    let processingFrame = false;
+    let initializing = false;
+
+    function reportTracking(hands, error) {
+      window.dispatchEvent(new CustomEvent('onHandTracked', {
+        detail: JSON.stringify({ hands: hands || [], error: error || null })
+      }));
+    }
+
+    window.initMediaPipeWeb = async function() {
+      if (cameraStream || initializing) return;
+      initializing = true;
+
+      try {
+        const videoElement = document.getElementById('mediapipe-video') ||
+          document.createElement('video');
+        videoElement.setAttribute('playsinline', '');
+        videoElement.setAttribute('autoplay', '');
+        videoElement.muted = true;
+        videoElement.id = 'mediapipe-video';
+        if (!videoElement.isConnected) document.body.appendChild(videoElement);
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error('Camera access requires HTTPS or localhost.');
+        }
+
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: 'user',
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+          }
+        });
+        videoElement.srcObject = cameraStream;
+        await videoElement.play();
+
+        if (typeof Hands === 'undefined') {
+          throw new Error('MediaPipe could not load. Check your network connection.');
+        }
+
+        hands = new Hands({
+          locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+        hands.setOptions({
+          maxNumHands: 2,
+          modelComplexity: 1,
+          minDetectionConfidence: 0.5,
+          minTrackingConfidence: 0.5
+        });
+        hands.onResults((results) => {
+          const detectedHands = (results.multiHandLandmarks || []).map((hand) =>
+            hand.map((lm, idx) => ({
+              id: idx,
+              x: lm.x,
+              y: lm.y,
+              z: lm.z
+            }))
+          );
+          reportTracking(detectedHands);
+        });
+
+        const processFrame = async () => {
+          if (!cameraStream) return;
+          if (videoElement.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+              !processingFrame) {
+            processingFrame = true;
+            try {
+              await hands.send({ image: videoElement });
+            } catch (error) {
+              console.error('MediaPipe frame processing failed:', error);
+              reportTracking([], 'Hand tracking failed. Reload the page to retry.');
+            } finally {
+              processingFrame = false;
+            }
+          }
+          animationFrame = requestAnimationFrame(processFrame);
+        };
+        initializing = false;
+        processFrame();
+      } catch (error) {
+        console.error('Camera or hand-tracking initialization failed:', error);
+        const message = error && error.name === 'NotAllowedError'
+          ? 'Camera permission denied. Allow camera access and reload.'
+          : error.message || 'Camera initialization failed.';
+        reportTracking([], message);
+        initializing = false;
+      }
+    };
+
+    window.stopMediaPipeWeb = function() {
+      if (animationFrame !== null) cancelAnimationFrame(animationFrame);
+      animationFrame = null;
+      processingFrame = false;
+      initializing = false;
+      if (cameraStream) {
+        cameraStream.getTracks().forEach((track) => track.stop());
+        cameraStream = null;
+      }
+      if (hands) {
+        hands.close();
+        hands = null;
+      }
+    };
+  </script>
+</head>
+<body>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
