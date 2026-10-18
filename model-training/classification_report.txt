@@ -1,0 +1,19 @@
+                    precision    recall  f1-score   support
+
+              udaw     0.8840    0.8889    0.8864       180
+        beeraganna     0.9870    0.9620    0.9744       158
+            ginnak     0.9825    1.0000    0.9912       112
+         anathurak     0.8896    0.9236    0.9062       157
+       karadarayak     0.9097    0.8924    0.9010       158
+          balagena     0.9141    0.9430    0.9283       158
+        parissamin     0.9048    0.9500    0.9268       180
+   ambulance_siren     0.9884    0.9444    0.9659        90
+        fire_alarm     0.8415    0.7667    0.8023        90
+      vehicle_horn     1.0000    0.9889    0.9944        90
+       baby_crying     0.9512    0.8667    0.9070       135
+       dog_barking     1.0000    1.0000    1.0000        90
+background_traffic     0.9525    0.9698    0.9610       496
+
+          accuracy                         0.9365      2094
+         macro avg     0.9389    0.9305    0.9342      2094
+      weighted avg     0.9366    0.9365    0.9362      2094

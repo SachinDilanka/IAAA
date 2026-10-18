@@ -1,0 +1,27 @@
+# Audio Datasets (Large binary files)
+dataset/
+
+# Python caches and virtual environments
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+ENV/
+
+# Flutter & Dart build artifacts
+**/build/
+**/.dart_tool/
+**/.pub-cache/
+**/.pub/
+**/.packages
+
+# IDE & OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Audio/
+*.log
+
