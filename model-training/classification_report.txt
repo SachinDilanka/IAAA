@@ -1,19 +1,23 @@
+Accuracy: 0.9519502543810062
+
+Classification Report:
                     precision    recall  f1-score   support
 
-              udaw     0.9120    0.9222    0.9171       180
-        beeraganna     0.9870    0.9684    0.9776       158
-            ginnak     0.9825    1.0000    0.9912       112
-         anathurak     0.9160    0.9363    0.9260       157
-       karadarayak     0.9286    0.9051    0.9167       158
-          balagena     0.9312    0.9494    0.9402       158
-        parissamin     0.9211    0.9556    0.9380       180
-   ambulance_siren     0.9884    0.9556    0.9718        90
-        fire_alarm     0.8864    0.8667    0.8764        90
-      vehicle_horn     1.0000    0.9889    0.9944        90
-       baby_crying     0.9512    0.8963    0.9229       135
-       dog_barking     1.0000    1.0000    1.0000        90
-background_traffic     0.9658    0.9758    0.9708       496
+              udaw     0.9355    0.8969    0.9158        97
+        beeraganna     0.9278    0.9278    0.9278        97
+            ginnak     0.9300    0.9490    0.9394        98
+         anathurak     0.9468    0.9175    0.9319        97
+       karadarayak     0.9320    0.9796    0.9552        98
+          balagena     0.9072    0.9072    0.9072        97
+        parissamin     0.9500    0.9794    0.9645        97
+       ehata wenna     0.9490    0.9588    0.9538        97
+   ambulance_siren     1.0000    0.9889    0.9944        90
+        fire_alarm     0.8816    0.7444    0.8072        90
+      vehicle_horn     1.0000    1.0000    1.0000        90
+       baby_crying     0.9926    1.0000    0.9963       135
+       dog_barking     0.9890    1.0000    0.9945        90
+background_traffic     0.9545    0.9718    0.9630       496
 
-          accuracy                         0.9520      2094
-         macro avg     0.9516    0.9477    0.9495      2094
-      weighted avg     0.9523    0.9520    0.9521      2094
+          accuracy                         0.9520      1769
+         macro avg     0.9497    0.9444    0.9465      1769
+      weighted avg     0.9514    0.9520    0.9513      1769
