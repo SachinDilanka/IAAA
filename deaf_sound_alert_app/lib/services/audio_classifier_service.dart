@@ -508,7 +508,7 @@ class AudioClassifierService {
 
             // When user says "udaw" or any emergency keyword, neural model detects it reliably with >= 0.60 confidence
             if (topProb >= 0.60) {
-              final lastTime = _lastKeywordTriggerTimes[mappedKey];
+              final lastTime = _la stKeywordTriggerTimes[mappedKey];
               if (lastTime != null && (nowMs - lastTime.millisecondsSinceEpoch < 1500)) {
                 return;
               }
