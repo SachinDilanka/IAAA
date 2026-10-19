@@ -23,6 +23,7 @@ class HandLandmark {
     );
   }
 
+
   Map<String, dynamic> toJson() => {'id': id, 'x': x, 'y': y, 'z': z};
 
   /// Calculates Euclidean distance between this landmark and another landmark in 3D space
