@@ -35,6 +35,6 @@ flutter:
 
   assets:
     - assets/models/
-    - assets/models/sound_classifier.tflite
-    - assets/models/labels.txt
+    - assets/models/sound_model.tflite
+    - assets/models/labels.json
     - assets/models/sound_metadata.json
