@@ -1,6 +1,6 @@
-# AcousticAware: Offline Real-Time Sound & Sinhala Emergency Keyword Awareness System for Deaf Individuals
+# AcousticAware:  Real-Time Sound & Sinhala Emergency Keyword Awareness System for Deaf Individuals
 
-**AcousticAware** is a comprehensive, multi-platform assistive ecosystem designed for deaf and hard-of-hearing individuals. It provides 100% offline, real-time awareness of critical environmental sounds and spoken Sinhala emergency keywords through tactile skin haptics, dual-language visual guidance, and wearable smartwatch alert delivery.
+**AcousticAware** is a comprehensive, multi-platform assistive ecosystem designed for deaf and hard-of-hearing individuals. It provides real-time awareness of critical environmental sounds and spoken Sinhala emergency keywords through tactile skin haptics, dual-language visual guidance, and wearable smartwatch alert delivery.
 
 ---
 
