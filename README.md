@@ -31,7 +31,7 @@ sound-alert-system/
 
 ### 3. 🧠 `model-training/` (Deep Learning Pipeline)
 - `prepare_dataset.py`: Synthesizes audio samples across 16 emergency sound and Sinhala keyword classes.
-- `train_multibranch_model.py`: 2D CNN model trained on 64-band Log-Mel spectrograms, exported to Float16 `.tflite` and `labels.json`.
+- `train_multibranch_model.py`: DNN model trained on 64-band Log-Mel spectrograms, exported to Float16 `.tflite` and `labels.json`.
 - `train_kws.py`: Dense neural classifier exporting `.keras`, `.tflite`, and embedded C++ headers (`sound_model.h`) for microcontrollers.
 
 ### 4. ⌚ `esp32-firmware/` (TTGO T-Wristband Wearable Firmware)
