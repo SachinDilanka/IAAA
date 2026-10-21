@@ -1,0 +1,63 @@
+======================================================================
+  TENSORFLOW LITE MODEL INSPECTION & ARCHITECTURE DETAILS
+======================================================================
+
+Model File:       sound_model.tflite
+File Format:      TensorFlow Lite FlatBuffer (.tflite)
+Size:             780,964 Bytes (~762.66 KB)
+Model Type:       5-Layer Deep Neural Network (DNN / MLP)
+Target Platform:  Mobile Phone (Android / Flutter Offline Engine)
+
+----------------------------------------------------------------------
+1. INPUT SPECIFICATION (TENSOR 0)
+----------------------------------------------------------------------
+  Tensor Name:    serving_default_keras_tensor_9:0
+  Tensor Shape:   [1, 40]  (Batch Size: 1, MFCC Features: 40)
+  Data Type:      Float32
+  Description:    40 Mel-Frequency Cepstral Coefficients (MFCCs)
+                  extracted from a 1.0-second 16,000 Hz audio frame.
+
+----------------------------------------------------------------------
+2. NEURAL NETWORK LAYERS & WEIGHTS
+----------------------------------------------------------------------
+  Input Layer:    Shape (40,)
+  Dense Layer 1:  512 Units (ReLU Activation) + Dropout (0.25)
+  Dense Layer 2:  256 Units (ReLU Activation) + Dropout (0.20)
+  Dense Layer 3:  128 Units (ReLU Activation) + Dropout (0.15)
+  Dense Layer 4:  64 Units  (ReLU Activation)
+  Output Layer:   14 Units  (Softmax Multi-Class Activation)
+
+----------------------------------------------------------------------
+3. OUTPUT SPECIFICATION (TENSOR 0)
+----------------------------------------------------------------------
+  Tensor Name:    StatefulPartitionedCall_1:0
+  Tensor Shape:   [1, 14]  (14 Class Probability Distribution)
+  Data Type:      Float32 (Normalized between 0.0 and 1.0, Sum = 1.0)
+
+----------------------------------------------------------------------
+4. TARGET SOUND CLASSES (14 CLASSES)
+----------------------------------------------------------------------
+  [0]  udaw                 (උදව් - Help)          [CRITICAL PRIORITY]
+  [1]  beeraganna           (බේරගන්න - Save Me)    [CRITICAL PRIORITY]
+  [2]  ginnak               (ගින්නක් - Fire)       [CRITICAL PRIORITY]
+  [3]  anathurak            (අනතුරක් - Danger)     [HIGH PRIORITY]
+  [4]  karadarayak          (කරදරයක් - Trouble)    [MEDIUM PRIORITY]
+  [5]  balagena             (බලාගෙන - Watch Out)   [MEDIUM PRIORITY]
+  [6]  parissamin           (පරිස්සමින් - Careful) [LOW PRIORITY]
+  [7]  ehata wenna          (එහාට වෙන්න - Aside)   [MEDIUM PRIORITY]
+  [8]  ambulance_siren      (Ambulance Siren)      [CRITICAL PRIORITY]
+  [9]  fire_alarm           (Fire Alarm)           [CRITICAL PRIORITY]
+  [10] vehicle_horn         (Vehicle Horn)         [HIGH PRIORITY]
+  [11] baby_crying          (Baby Crying)          [MEDIUM PRIORITY]
+  [12] dog_barking          (Dog Barking)          [HIGH PRIORITY]
+  [13] background_traffic   (Background Traffic)   [LOW PRIORITY]
+
+----------------------------------------------------------------------
+5. EVALUATION PERFORMANCE
+----------------------------------------------------------------------
+  Final Test Accuracy:    95.20% (0.95195)
+  Evaluated Samples:      1,769 Audio Test Samples
+  Macro F1-Score:         94.65%
+  Weighted F1-Score:      95.13%
+  Status:                 100% HEALTHY, VALID & OPERATIONAL
+======================================================================

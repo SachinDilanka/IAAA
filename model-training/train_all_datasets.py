@@ -83,7 +83,6 @@ CLASSES = [
     "dog_barking",
     "background_traffic",
 ]
-
 def extract_mfcc(file_path):
     """Load audio file and extract normalized 40-MFCC feature vector on 1-second audio."""
     try:
