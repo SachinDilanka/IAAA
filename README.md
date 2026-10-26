@@ -1,107 +1,158 @@
-# AcousticAware: Offline Real-Time Sound & Sinhala Emergency Keyword Awareness System for Deaf Individuals
+# AcousticAware: Real-Time Sound & Sinhala Emergency Keyword Awareness System for Deaf Individuals
 
-**AcousticAware** is a comprehensive, multi-platform assistive ecosystem designed for deaf and hard-of-hearing individuals. It provides 100% offline, real-time awareness of critical environmental sounds and spoken Sinhala emergency keywords through tactile skin haptics, dual-language visual guidance, and wearable smartwatch alert delivery.
+[![GitHub Branch](https://img.shields.io/badge/Branch-Sound--Detection--Module-blue?logo=github)](https://github.com/SachinDilanka/IAAA/tree/Sound-Detection-Module)
+[![Flutter](https://img.shields.io/badge/Flutter-3.2.0+-02569B?logo=flutter)](https://flutter.dev)
+[![TensorFlow](https://img.shields.io/badge/TensorFlow-DNN%20(95.20%25)-FF6F00?logo=tensorflow)](https://tensorflow.org)
 
----
+> **Official Repository Branch:**  
+> 🔗 [https://github.com/SachinDilanka/IAAA/tree/Sound-Detection-Module](https://github.com/SachinDilanka/IAAA/tree/Sound-Detection-Module)
 
-## 🏛️ System Architecture & Repository Modules
-
-The workspace is organized into four clean, modular, production-ready components:
-
-```
-sound-alert-system/
-├── flutter_mobile_app/      # Cross-platform Flutter mobile & web application
-├── live-python-detector/    # Python real-time microphone classifier with terminal HUD
-├── model-training/          # Audio dataset synthesis & deep learning training pipeline
-└── esp32-firmware/          # TTGO T-Wristband ESP32 BLE vibration & TFT firmware
-```
-
-### 1. 📱 `flutter_mobile_app/` (Flutter Mobile & Web App)
-- **Real-Time Classification Engine**: Sliding audio window inference with offline confidence filtering.
-- **Side Overlay Alert System**: Responsive floating side toast with urgency glow, countdown progress bar, and swipe-to-dismiss gesture.
-- **Interactive AI Avatar**: Visual state machine with dual Sinhala and English action guidance banners.
-- **Smartwatch Notification Gateway**: Transmits mirrored emergency alerts to the **Yesido IO39** smartwatch via system notification channels and companion apps (e.g., XO FIT).
-- **Haptic Vibration Engine**: Multi-tiered vibration patterns (High, Medium, Low urgency).
-- **Offline History Storage**: Persistent local database using `shared_preferences`.
-
-### 2. 🐍 `live-python-detector/` (Python Microphone Classifier)
-- Direct microphone audio stream processing via `sounddevice` and `librosa`.
-- 40-element MFCC feature extraction and normalization (`mean.npy`, `std.npy`).
-- Real-time ANSI terminal HUD dashboard with live volume metering, dominant pitch analysis, and horizontal probability bars.
-
-### 3. 🧠 `model-training/` (Deep Learning Pipeline)
-- `prepare_dataset.py`: Synthesizes audio samples across 16 emergency sound and Sinhala keyword classes.
-- `train_multibranch_model.py`: 2D CNN model trained on 64-band Log-Mel spectrograms, exported to Float16 `.tflite` and `labels.json`.
-- `train_kws.py`: Dense neural classifier exporting `.keras`, `.tflite`, and embedded C++ headers (`sound_model.h`) for microcontrollers.
-
-### 4. ⌚ `esp32-firmware/` (TTGO T-Wristband Wearable Firmware)
-- Standalone C++/Arduino firmware for LilyGO TTGO T-Wristband (ESP32).
-- BLE GATT Server receiver (`SERVICE_UUID: 4fafc201-1fb5-459e-8fcc-c5c9c331914b`).
-- 100% PWM vibration motor drive (duty cycle 255/255) executing continuous incoming call ringing cadence (1500ms ON / 50ms OFF).
-- ST7735 TFT color display rendering warning banners.
+**AcousticAware** is an assistive acoustic awareness system designed for deaf and hard-of-hearing individuals. The system continuously monitors environmental sounds and spoken Sinhala speech, identifies critical emergency sounds and Sinhala distress keywords using a **Deep Neural Network (DNN)**, and delivers multi-sensory alerts via mobile visual displays, camera LED flash patterns, and phone haptic vibration feedback.
 
 ---
 
-## 🔊 Supported Sound Classes & Sinhala Keywords
+## 🏛️ System Architecture & Repository Structure
 
-| Category | Class / Keyword | Sinhala Translation | Urgency Level | Tactile Action |
-|---|---|---|---|---|
-| **Emergency Sound** | `fire_alarm` / `ginna` | ගින්නක් / ගින්න | **HIGH** | Continuous Call-Style Pulse |
-| **Emergency Sound** | `ambulance_siren` | ගිලන් රථ අනතුරු සංඥාව | **HIGH** | Continuous Call-Style Pulse |
-| **Emergency Sound** | `screaming` | කෑගැසීමක් | **HIGH** | Continuous Call-Style Pulse |
-| **Emergency Sound** | `vehicle_horn` | රථවාහන හෝන් ශබ්දය | **HIGH** | Strong Warning Vibration |
-| **Sinhala Keyword** | `udaw` / `udaw_karanna` | උදව් / උදව් කරන්න | **HIGH** | Continuous Call-Style Pulse |
-| **Sinhala Keyword** | `anathurak` | අනතුරක් | **HIGH** | Continuous Call-Style Pulse |
-| **Sinhala Keyword** | `nawaththanna` | නවත්තන්න | **HIGH** | Continuous Call-Style Pulse |
-| **Sinhala Keyword** | `beeraganna` | බේරගන්න | **HIGH** | Continuous Call-Style Pulse |
-| **Environmental** | `baby_crying` | ළදරුවෙකුගේ හැඬීම | **MEDIUM** | Double Warning Pulse |
-| **Sinhala Keyword** | `parissamin` | පරිස්සමින් | **MEDIUM** | Double Warning Pulse |
-| **Sinhala Keyword** | `karadarayak` | කරදරයක් | **MEDIUM** | Double Warning Pulse |
-| **Sinhala Keyword** | `ehata_wenna` | එහාට වෙන්න | **MEDIUM** | Double Warning Pulse |
-| **Sinhala Keyword** | `balagena` | බලාගෙන | **MEDIUM** | Double Warning Pulse |
-| **Environmental** | `dog_barking` | බල්ලෙකුගේ බිරුම | **LOW** | Single Gentle Pulse |
-| **Negative Class** | `background_other` | සාමාන්‍ය පසුබිම් ශබ්ද | **NONE** | No Vibration (Standby) |
+```
+AcousticAware/
+├── deaf_sound_alert_app/      # Cross-platform Flutter mobile application
+│   ├── lib/ai/ & services/    # Live audio capture, DSP MFCC extraction & DNN inference
+│   ├── lib/screens/           # Dashboard, Waveform Visualizer, Sound Config, History
+│   └── assets/models/         # Quantized DNN model (sound_model.tflite) & DSP constants
+│
+├── model-training/            # Deep Neural Network (DNN) training & evaluation pipeline
+│   ├── train_all_datasets.py  # Model architecture, training, and TFLite quantization script
+│   ├── classification_report.txt # Official evaluation metrics (95.20% test accuracy)
+│   ├── mean.npy / std.npy     # 40-MFCC feature standardization matrices
+│   └── sound_model.tflite     # Trained 5-layer DNN model (~780 KB)
+│
+└── dataset/                   # Raw audio datasets (.wav) across 15 sound classes
+```
+
+---
+
+## 🧠 Deep Neural Network (DNN) Model Architecture
+
+The core sound recognition and keyword spotting pipeline uses a **5-Layer Deep Neural Network (DNN)** trained on **40 Mel-Frequency Cepstral Coefficients (MFCCs)**.
+
+### 1. Acoustic Feature Extraction (DSP)
+* **Sampling Rate:** 16,000 Hz (16 kHz audio)
+* **Analysis Window:** 1.0 second (16,000 samples)
+* **FFT Window Size:** 2,048 samples
+* **Hop Length:** 512 samples (75% overlap)
+* **Filterbank:** 128 triangular Mel-scale filters
+* **Output Coefficients:** 40 MFCCs with Z-Score feature standardization:
+  $$\hat{X} = \frac{X - \mu}{\sigma + \epsilon}$$
+
+### 2. Deep Neural Network (DNN) Layers
+```
+Input Feature Vector [40 MFCCs]
+       │
+       ▼
+[Dense Layer 1: 512 Units, ReLU Activation] ──► Dropout (0.25)
+       │
+       ▼
+[Dense Layer 2: 256 Units, ReLU Activation] ──► Dropout (0.20)
+       │
+       ▼
+[Dense Layer 3: 128 Units, ReLU Activation] ──► Dropout (0.15)
+       │
+       ▼
+[Dense Layer 4:  64 Units, ReLU Activation]
+       │
+       ▼
+[Output Dense:   14 Units, Softmax Multi-Class]
+```
+
+* **Total Trainable Parameters:** **194,382 parameters**
+* **Optimizer:** Adam ($\text{learning rate} = 0.0008$)
+* **Loss Function:** `sparse_categorical_crossentropy`
+* **Batch Size:** 32 | **Max Epochs:** 60 with Early Stopping (`patience=12`)
+* **Quantized Deployment Size:** **~780 KB** (`sound_model.tflite`)
+
+### 3. Model Performance & Evaluation
+Evaluated on **1,769 unseen test audio samples** (Stratified 85% Train / 15% Test split):
+* **Overall Test Accuracy:** **95.20%**
+* **Macro F1-Score:** **94.65%**
+* **Weighted F1-Score:** **95.13%**
+
+---
+
+## 🔊 Supported Sound Classes & Priority Tiers
+
+The system detects **14 distinct acoustic classes** divided into Sinhala Emergency Keywords, Environmental Hazards, and Ambient Background Noise:
+
+| # | Class Name | Sound / Keyword Description | Category | Priority Tier | Alert Response |
+|---|---|---|---|---|---|
+| **00** | `udaw` | උදව් (Help / Distress Cry) | Sinhala Keyword | **CRITICAL** | Strobe Flashlight + Heavy Phone Vibration |
+| **01** | `beeraganna` | බේරාගන්න (Save Me) | Sinhala Keyword | **CRITICAL** | Strobe Flashlight + Heavy Phone Vibration |
+| **02** | `ginnak` | ගින්නක් (Fire Emergency) | Sinhala Keyword | **CRITICAL** | Strobe Flashlight + Heavy Phone Vibration |
+| **03** | `anathurak` | අනතුරක් (Danger / Accident) | Sinhala Keyword | **HIGH** | Double Pulse Flash + Fast Phone Vibration |
+| **04** | `karadarayak` | කරදරයක් (Trouble) | Sinhala Keyword | **MEDIUM** | Moderate Pulse Vibration |
+| **05** | `balagena` | බලාගෙන (Watch Out) | Sinhala Keyword | **MEDIUM** | Moderate Pulse Vibration |
+| **06** | `parissamin` | පරිස්සමින් (Be Careful) | Sinhala Keyword | **LOW** | Gentle Single Vibration |
+| **07** | `ehata wenna` | එහාට වෙන්න (Move Aside) | Sinhala Keyword | **MEDIUM** | Moderate Pulse Vibration |
+| **08** | `ambulance_siren` | Ambulance Siren | Environmental | **CRITICAL** | Strobe Flashlight + Heavy Phone Vibration |
+| **09** | `fire_alarm` | Fire Truck / Fire Alarm | Environmental | **CRITICAL** | Strobe Flashlight + Heavy Phone Vibration |
+| **10** | `vehicle_horn` | Car / Vehicle Horn | Environmental | **HIGH** | Double Pulse Flash + Fast Phone Vibration |
+| **11** | `baby_crying` | Baby Crying | Environmental | **MEDIUM** | Moderate Double Pulse Vibration |
+| **12** | `dog_barking` | Dog Barking | Environmental | **MEDIUM** | Moderate Pulse Vibration |
+| **13** | `background_traffic` | Ambient Road / Traffic Noise | Environmental | **LOW** | Informational Screen Log |
+
+---
+
+## 📱 Mobile Application Features
+
+* **Real-Time Sound Classification:** 1.0-second sliding audio window evaluated via on-device TFLite neural inference.
+* **Continuous Audio Waveform Visualizer:** 40-band real-time audio spectrum responding continuously to ambient volume and pitch.
+* **Instant Visual Alerts:** Heads-up alert banners displaying sound name, priority badge, and emergency category with zero latency.
+* **Camera LED Strobe:** Synchronized rapid flashlight flashing patterns for deaf visual alerting in bright or noisy environments.
+* **Haptic Vibration Engine:** Multi-tier vibration pulses calibrated to danger level (Critical, High, Medium, Low).
+* **Detection History Log:** Persistent local storage tracking every detected alert with timestamps and confidence scores.
+* **Customizable Sound Settings:** Ability to enable/disable specific sounds and adjust individual priority levels.
 
 ---
 
 ## 🚀 Getting Started
 
-### Prerequisites
-- **Flutter SDK**: `>=3.0.0`
-- **Python**: `3.9+` with `tensorflow`, `numpy`, `librosa`, `sounddevice`
-- **Arduino IDE / PlatformIO**: For ESP32 firmware compilation
+### 1. Cloning the Repository Branch
+```bash
+# Clone the repository and checkout the Sound-Detection-Module branch
+git clone -b Sound-Detection-Module https://github.com/SachinDilanka/IAAA.git
+cd IAAA
+```
+
+### 2. Prerequisites
+* **Flutter SDK:** `>=3.2.0`
+* **Android Device:** Android 8.0+ (API 26+)
+* **Python:** `3.9+` (for model training only)
 
 ---
 
-### Running the Flutter Mobile App
-
-#### Option A: On Android Phone (USB / Wireless Debugging)
+### 3. Building & Running the Mobile Application
 ```bash
-cd flutter_mobile_app
+# Navigate to the mobile app directory
+cd deaf_sound_alert_app
+
+# Install Flutter dependencies
+flutter pub get
+
+# Run on connected Android smartphone
 flutter run
 ```
 
-#### Option B: In Chrome Browser (Quick Testing)
-```bash
-cd flutter_mobile_app
-flutter run -d chrome
-```
-
 ---
 
-### Running the Python Live Classifier
+### 4. Training the Deep Neural Network (DNN) Model
+To train or evaluate the 5-layer DNN on custom audio:
 ```bash
-cd live-python-detector
-python live_audio_classifier.py
-```
-
----
-
-### Training the Machine Learning Models
-```bash
+# Navigate to the model training directory
 cd model-training
-pip install -r requirements.txt
-python prepare_dataset.py
-python train_multibranch_model.py
-```
 
+# Install Python audio & ML dependencies
+pip install librosa tensorflow scikit-learn numpy
+
+# Train DNN classifier & export quantized TFLite model
+python train_all_datasets.py
+```
+Evaluation metrics, confusion matrices, and classification reports will output to `classification_report.txt`.
