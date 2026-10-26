@@ -1,6 +1,6 @@
 # Real-Time Sound & Sinhala Emergency Keyword Awareness System for Deaf Individuals
 
-**AcousticAware** is a comprehensive, multi-platform assistive ecosystem designed for deaf and hard-of-hearing individuals. It provides 100% offline, real-time awareness of critical environmental sounds and spoken Sinhala emergency keywords through tactile skin haptics, dual-language visual guidance, and wearable smartwatch alert delivery.
+**AcousticAware** is a comprehensive, multi-platform assistive ecosystem designed for deaf and hard-of-hearing individuals. It provides  real-time awareness of critical environmental sounds and spoken Sinhala emergency keywords through tactile skin haptics, dual-language visual guidance, and wearable smartwatch alert delivery.
 
 ---
 
@@ -16,7 +16,7 @@ sound-alert-system/
 └── esp32-firmware/          # TTGO T-Wristband ESP32 BLE vibration & TFT firmware
 ```
 
-### 1. 📱 `flutter_mobile_app/` (Flutter Mobile & Web App)
+### 1. 📱 `flutter_mobile_app/` (Flutter Mobile )
 - **Real-Time Classification Engine**: Sliding audio window inference with offline confidence filtering.
 - **Side Overlay Alert System**: Responsive floating side toast with urgency glow, countdown progress bar, and swipe-to-dismiss gesture.
 - **Interactive AI Avatar**: Visual state machine with dual Sinhala and English action guidance banners.
