@@ -1721,7 +1721,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const isFav = favoritesData.some(f => f.text === text || (textSi && f.text.includes(textSi)));
     updateFavButtonUI(isFav);
 
-    if (billboardModal) billboardModal.classList.add('open');
+    if (billboardModal) {
+      billboardModal.classList.add('open');
+      billboardModal.scrollTop = 0;
+      if (typeof billboardModal.scrollIntoView === 'function') {
+        billboardModal.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
 
     // Add to history
     const historyEntry = textSi ? `${textSi} (${text})` : text;
@@ -4867,7 +4873,372 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Initialize Area Map
+  // =========================================================================
+  // 13. SINHALA LIVE SPEECH RECOGNITION ENGINE (si-LK / en-US) - ALL SCREENS
+  // Real-time speech-to-text detection using Web Speech API
+  // Fully synchronous user-activation start, continuous listening with auto-reconnect,
+  // interim transcript live display, language toggle (Sinhala / English),
+  // contextual AI suggestion query sync, and tap-to-billboard.
+  // =========================================================================
+
+  let activeSpeechRecognition = null;
+  let isSinhalaSpeechActive = false;
+  let isListeningDesired = true;
+  let globalSinhalaTranscript = '';
+  let speechRestartTimer = null;
+  let speechLang = 'si-LK'; // 'si-LK' (Sinhala) or 'en-US' (English)
+
+  function initSinhalaLiveSpeechEngine() {
+    const speechBoxes = document.querySelectorAll('.sinhala-live-speech-box');
+    const headerMicBtn = document.getElementById('header-mic-btn');
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    function updateSpeechUI(active, text, interim = '') {
+      isSinhalaSpeechActive = active;
+
+      if (headerMicBtn) {
+        headerMicBtn.classList.toggle('is-active', active);
+        headerMicBtn.title = active ? 'Live Speech: Listening...' : 'Live Speech: Tap to listen';
+      }
+
+      speechBoxes.forEach(box => {
+        const transcriptEl = box.querySelector('.speech-transcript-text');
+        const interimEl = box.querySelector('.speech-interim-text');
+        const btnClear = box.querySelector('.btn-speech-clear');
+        const btnLang = box.querySelector('.btn-speech-lang');
+
+        box.classList.toggle('is-recording', active);
+
+        if (btnLang) {
+          btnLang.textContent = speechLang === 'si-LK' ? 'සිං' : 'EN';
+          btnLang.title = speechLang === 'si-LK' ? 'Language: Sinhala (Tap for English)' : 'Language: English (Tap for Sinhala)';
+        }
+
+        // Update transcript text
+        if (transcriptEl) {
+          const hasFinal = text && text.trim().length > 0;
+          const hasInterim = interim && interim.trim().length > 0;
+
+          if (hasFinal || hasInterim) {
+            transcriptEl.textContent = hasFinal ? text + ' ' : '';
+            transcriptEl.classList.remove('placeholder');
+
+            if (interimEl) {
+              interimEl.textContent = interim;
+              interimEl.style.display = hasInterim ? 'inline' : 'none';
+            }
+          } else if (active) {
+            transcriptEl.textContent = speechLang === 'si-LK' ? 'සවන් දෙමින් පවතී... (Listening...)' : 'Listening... (Speak now)';
+            transcriptEl.classList.add('placeholder');
+            if (interimEl) interimEl.style.display = 'none';
+          } else {
+            transcriptEl.textContent = speechLang === 'si-LK' ? 'කතා කරන්න, සජීවීව හඳුනාගැනේ... (Auto-detecting...)' : 'Speak now, auto-detecting...';
+            transcriptEl.classList.add('placeholder');
+            if (interimEl) interimEl.style.display = 'none';
+          }
+        }
+
+        // Show clear button when any text is captured
+        if (btnClear) {
+          const hasText = (text && text.trim().length > 0) || (interim && interim.trim().length > 0);
+          btnClear.style.display = hasText ? 'inline-flex' : 'none';
+        }
+      });
+    }
+
+    function buildRecognition() {
+      if (!SpeechRecognition) return null;
+
+      try {
+        const rec = new SpeechRecognition();
+        rec.lang = speechLang;
+        rec.continuous = true;
+        rec.interimResults = true;
+        rec.maxAlternatives = 1;
+
+        rec.onstart = () => {
+          isSinhalaSpeechActive = true;
+          updateSpeechUI(true, globalSinhalaTranscript);
+        };
+
+        rec.onaudiostart = () => {
+          updateSpeechUI(true, globalSinhalaTranscript);
+        };
+
+        rec.onspeechstart = () => {
+          updateSpeechUI(true, globalSinhalaTranscript);
+        };
+
+        rec.onresult = (event) => {
+          let interimTranscript = '';
+          let newlyFinal = '';
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            const res = event.results[i];
+            if (res.isFinal) {
+              newlyFinal += res[0].transcript;
+            } else {
+              interimTranscript += res[0].transcript;
+            }
+          }
+
+          if (newlyFinal.trim().length > 0) {
+            globalSinhalaTranscript = (globalSinhalaTranscript ? globalSinhalaTranscript + ' ' : '') + newlyFinal.trim();
+            // Automatically feed captured speech into AI suggestion queries
+            const suggestInput = document.getElementById('suggest-input-field');
+            if (suggestInput && typeof executeSuggestFetch === 'function') {
+              suggestInput.value = globalSinhalaTranscript;
+              executeSuggestFetch(globalSinhalaTranscript);
+            }
+          }
+
+          updateSpeechUI(true, globalSinhalaTranscript, interimTranscript);
+        };
+
+        rec.onerror = (event) => {
+          console.warn('Live Speech recognition event error:', event.error);
+
+          if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+            isListeningDesired = false;
+            isSinhalaSpeechActive = false;
+            updateSpeechUI(false, globalSinhalaTranscript);
+            showGpsToast("⚠️ Microphone permission denied. Please allow microphone in your browser settings.", 4000);
+            return;
+          }
+
+          if (event.error === 'audio-capture') {
+            isListeningDesired = false;
+            isSinhalaSpeechActive = false;
+            updateSpeechUI(false, globalSinhalaTranscript);
+            showGpsToast("⚠️ Microphone not found or busy. Check your audio device.", 4000);
+            return;
+          }
+
+          if (event.error === 'language-not-supported') {
+            if (speechLang === 'si-LK') {
+              speechLang = navigator.language || 'en-US';
+              showGpsToast(`Sinhala speech model unavailable. Switched to ${speechLang}.`, 3000);
+            }
+          }
+
+          if (event.error === 'network') {
+            showGpsToast("Speech recognition network error. Reconnecting...", 2500);
+          }
+
+          // 'no-speech' is triggered when silence occurs. Do not stop listening!
+        };
+
+        rec.onend = () => {
+          if (isListeningDesired) {
+            clearTimeout(speechRestartTimer);
+            speechRestartTimer = setTimeout(() => {
+              if (isListeningDesired) {
+                restartLiveSpeech();
+              }
+            }, 300);
+          } else {
+            isSinhalaSpeechActive = false;
+            updateSpeechUI(false, globalSinhalaTranscript);
+          }
+        };
+
+        return rec;
+      } catch (err) {
+        console.error("Failed to construct SpeechRecognition instance:", err);
+        return null;
+      }
+    }
+
+    function startLiveSpeech(silent = false) {
+      isListeningDesired = true;
+
+      if (!SpeechRecognition) {
+        console.warn('Web Speech API not supported in this browser.');
+        if (!silent) {
+          showGpsToast("Speech recognition requires Chrome/Edge on http://127.0.0.1:5001 or HTTPS.", 3500);
+          const customSheet = document.getElementById('custom-sheet-backdrop');
+          if (customSheet) {
+            customSheet.classList.add('open');
+            const input = document.getElementById('custom-input-text');
+            if (input) input.focus();
+          }
+        }
+        return;
+      }
+
+      // Stop previous instance cleanly
+      if (activeSpeechRecognition) {
+        try {
+          activeSpeechRecognition.onend = null;
+          activeSpeechRecognition.onerror = null;
+          activeSpeechRecognition.abort();
+        } catch (e) {}
+        activeSpeechRecognition = null;
+      }
+
+      activeSpeechRecognition = buildRecognition();
+      if (!activeSpeechRecognition) {
+        updateSpeechUI(false, globalSinhalaTranscript);
+        return;
+      }
+
+      try {
+        // Direct synchronous start inside user gesture
+        activeSpeechRecognition.start();
+        updateSpeechUI(true, globalSinhalaTranscript);
+      } catch (err) {
+        console.warn("Speech synchronous start error:", err);
+        if (err.name === 'InvalidStateError') {
+          clearTimeout(speechRestartTimer);
+          speechRestartTimer = setTimeout(() => {
+            if (isListeningDesired && activeSpeechRecognition) {
+              try { activeSpeechRecognition.start(); } catch (e) {}
+            }
+          }, 250);
+        } else {
+          isListeningDesired = false;
+          updateSpeechUI(false, globalSinhalaTranscript);
+        }
+      }
+    }
+
+    function restartLiveSpeech() {
+      if (!isListeningDesired || !SpeechRecognition) return;
+
+      if (activeSpeechRecognition) {
+        try {
+          activeSpeechRecognition.onend = null;
+          activeSpeechRecognition.onerror = null;
+          activeSpeechRecognition.abort();
+        } catch (e) {}
+        activeSpeechRecognition = null;
+      }
+
+      activeSpeechRecognition = buildRecognition();
+      if (activeSpeechRecognition) {
+        try {
+          activeSpeechRecognition.start();
+        } catch (err) {
+          console.warn("Restart speech recognition error:", err);
+        }
+      }
+    }
+
+    function stopLiveSpeech() {
+      isListeningDesired = false;
+      clearTimeout(speechRestartTimer);
+      if (activeSpeechRecognition) {
+        try {
+          activeSpeechRecognition.onend = null;
+          activeSpeechRecognition.onerror = null;
+          activeSpeechRecognition.stop();
+        } catch (e) {}
+        activeSpeechRecognition = null;
+      }
+      isSinhalaSpeechActive = false;
+      updateSpeechUI(false, globalSinhalaTranscript);
+    }
+
+    function toggleLiveSpeech() {
+      if (isSinhalaSpeechActive || isListeningDesired) {
+        stopLiveSpeech();
+      } else {
+        startLiveSpeech();
+      }
+    }
+
+    function clearLiveSpeech() {
+      globalSinhalaTranscript = '';
+      updateSpeechUI(isSinhalaSpeechActive, '');
+    }
+
+    function toggleSpeechLanguage() {
+      speechLang = speechLang === 'si-LK' ? 'en-US' : 'si-LK';
+      const langName = speechLang === 'si-LK' ? 'Sinhala (si-LK)' : 'English (en-US)';
+      showGpsToast(`Speech recognition language: ${langName}`, 2500);
+
+      // If active, smoothly restart with new language
+      if (isListeningDesired) {
+        restartLiveSpeech();
+      } else {
+        updateSpeechUI(false, globalSinhalaTranscript);
+      }
+    }
+
+    // Attach listeners across all screen speech boxes
+    speechBoxes.forEach(box => {
+      const btnMic = box.querySelector('.btn-speech-mic');
+      const transcriptContainer = box.querySelector('.speech-transcript-container');
+      const btnClear = box.querySelector('.btn-speech-clear');
+      const btnLang = box.querySelector('.btn-speech-lang');
+
+      if (btnMic) {
+        btnMic.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleLiveSpeech();
+        });
+      }
+
+      if (transcriptContainer) {
+        transcriptContainer.addEventListener('click', (e) => {
+          e.preventDefault();
+          if (globalSinhalaTranscript && globalSinhalaTranscript.trim().length > 0) {
+            displayMessageBillboard(globalSinhalaTranscript, 'fa-microphone-lines', globalSinhalaTranscript);
+          } else {
+            toggleLiveSpeech();
+          }
+        });
+      }
+
+      if (btnClear) {
+        btnClear.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          clearLiveSpeech();
+        });
+      }
+
+      if (btnLang) {
+        btnLang.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleSpeechLanguage();
+        });
+      }
+    });
+
+    // Header Mic toggle
+    if (headerMicBtn) {
+      headerMicBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        toggleLiveSpeech();
+        const activeBox = document.querySelector('.tab-content-panel.active .sinhala-live-speech-box');
+        if (activeBox) {
+          activeBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      });
+    }
+
+    // Initial UI state
+    updateSpeechUI(false, '');
+
+    // Automatically capture speech without requiring manual tap on mic
+    startLiveSpeech(true);
+
+    // If browser security blocks microphone until the user interacts with the page,
+    // automatically activate on the very first touch/click anywhere on the page
+    const autoActivateSpeechOnGesture = () => {
+      if (!isSinhalaSpeechActive && isListeningDesired) {
+        startLiveSpeech(true);
+      }
+    };
+    document.addEventListener('click', autoActivateSpeechOnGesture, { once: true, passive: true });
+    document.addEventListener('touchstart', autoActivateSpeechOnGesture, { once: true, passive: true });
+    document.addEventListener('keydown', autoActivateSpeechOnGesture, { once: true, passive: true });
+  }
+
+  // Initialize Speech Engine and Area Map
+  initSinhalaLiveSpeechEngine();
   initAreaMap();
 
   // 12. AUTO-START GPS DETECTION ON INITIAL APP LOAD

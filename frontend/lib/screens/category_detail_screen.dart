@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../models/communication_models.dart';
+import '../widgets/sinhala_speech_box.dart';
+import '../widgets/message_card_overlay.dart';
 
 class CategoryDetailScreen extends StatelessWidget {
   final CommunicationCategory category;
@@ -13,104 +14,45 @@ class CategoryDetailScreen extends StatelessWidget {
   });
 
   void _showFullscreenCard(BuildContext context, CommunicationMessage msg) {
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog.fullscreen(
-        child: Container(
-          color: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Align(
-                alignment: Alignment.topRight,
-                child: IconButton(
-                  icon: const Icon(Icons.close, size: 32, color: Colors.black87),
-                  onPressed: () => Navigator.of(ctx).pop(),
-                ),
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.all(28),
-                decoration: BoxDecoration(
-                  color: venueType.backgroundColor,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: venueType.themeColor.withValues(alpha: 0.4), width: 2),
-                ),
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: venueType.themeColor,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Text(
-                        '#${msg.id}  ${category.nameEn}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      msg.templateSi,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF1E293B),
-                        height: 1.3,
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    const Divider(color: Colors.black12),
-                    const SizedBox(height: 14),
-                    Text(
-                      msg.templateEn,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF475569),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Show this screen to the staff member',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-              const Spacer(),
-              ElevatedButton.icon(
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: '${msg.templateSi} / ${msg.templateEn}'));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Message copied to clipboard!')),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: venueType.themeColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                ),
-                icon: const Icon(Icons.copy),
-                label: const Text('Copy Text / පිටපත් කරන්න', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
-        ),
-      ),
+    showMessageCard(
+      context,
+      sinhala: msg.templateSi,
+      english: msg.templateEn,
+      categoryName: category.nameEn,
+      id: msg.id,
+    );
+  }
+
+  void _showFullscreenCustomText(BuildContext context, String text) {
+    final cleanText = text.trim();
+    final bool hasSi = RegExp(r'[\u0D80-\u0DFF]').hasMatch(cleanText);
+
+    String si = hasSi ? cleanText : '';
+    String en = hasSi ? '' : cleanText;
+
+    for (final m in category.messages) {
+      if (si.isEmpty && en.isNotEmpty) {
+        if (m.templateEn.trim().toLowerCase() == en.toLowerCase()) {
+          si = m.templateSi;
+          break;
+        }
+      }
+      if (en.isEmpty && si.isNotEmpty) {
+        if (m.templateSi.trim() == si || si.contains(m.templateSi.trim()) || m.templateSi.trim().contains(si)) {
+          en = m.templateEn;
+          break;
+        }
+      }
+    }
+
+    if (si.isEmpty) si = en.isNotEmpty ? 'පණිවිඩය: $en' : 'මම බිහිරි කෙනෙක්.';
+    if (en.isEmpty) en = hasSi ? 'Live Sinhala Speech Detection' : (si.isNotEmpty ? si : 'I am deaf.');
+
+    showMessageCard(
+      context,
+      sinhala: si,
+      english: en,
+      categoryName: category.nameEn,
     );
   }
 
@@ -151,15 +93,25 @@ class CategoryDetailScreen extends StatelessWidget {
           )
         ],
       ),
-      body: category.messages.isEmpty
-          ? const Center(child: Text('No messages available for this category.'))
-          : ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: category.messages.length,
-              separatorBuilder: (_, index) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final msg = category.messages[index];
-                return InkWell(
+      body: ListView(
+        padding: const EdgeInsets.only(bottom: 24),
+        children: [
+          // Live Sinhala Speech Box at the top of category screen
+          SinhalaSpeechBox(
+            themeColor: venueType.themeColor,
+            onShowFullscreen: (txt) => _showFullscreenCustomText(context, txt),
+          ),
+
+          if (category.messages.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(32.0),
+              child: Center(child: Text('No messages available for this category.')),
+            )
+          else
+            ...category.messages.map((msg) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                child: InkWell(
                   onTap: () => _showFullscreenCard(context, msg),
                   borderRadius: BorderRadius.circular(16),
                   child: Container(
@@ -231,9 +183,11 @@ class CategoryDetailScreen extends StatelessWidget {
                       ],
                     ),
                   ),
-                );
-              },
-            ),
+                ),
+              );
+            }),
+        ],
+      ),
     );
   }
 }

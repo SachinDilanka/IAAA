@@ -197,6 +197,23 @@
               </footer>
             </article>
 
+            <!-- ================= SCREEN 1: SINHALA LIVE SPEECH BOX ================= -->
+            <section class="sinhala-live-speech-box" id="speech-box-home" data-speech-screen="home" aria-label="Sinhala Live Speech Detection Box">
+              <div class="speech-box-compact">
+                <button type="button" class="btn-speech-mic" aria-label="Toggle Sinhala Speech Recognition" title="Tap to Start / Stop Listening">
+                  <i class="fa-solid fa-microphone"></i>
+                </button>
+                <div class="speech-transcript-container" role="button" tabindex="0" title="Automatic speech detection" aria-label="Speech transcript">
+                  <span class="speech-transcript-text placeholder">කතා කරන්න, සජීවීව හඳුනාගැනේ... (Auto-detecting speech...)</span>
+                  <span class="speech-interim-text" style="display: none;"></span>
+                </div>
+                <button type="button" class="btn-speech-lang" title="Toggle Language: Sinhala (සිං) / English (EN)" aria-label="Toggle Speech Recognition Language">සිං</button>
+                <button type="button" class="btn-speech-clear" style="display:none;" title="Clear transcript" aria-label="Clear transcript">
+                  <i class="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+            </section>
+
             <!-- Section: Message Criteria (Revealed when a Hospital, Bank, Restaurant, or Supermarket is detected or selected) -->
             <div id="section-category-criteria" class="{% if location_slug in ['hospital', 'bank', 'restaurant', 'supermarket'] and not auto_detect %}category-criteria-shown{% else %}category-criteria-hidden{% endif %}">
               <div class="section-heading-wrap" style="display: flex; flex-direction: column; gap: 4px; margin: 14px 0 10px 0;">
@@ -617,6 +634,98 @@
               </div>
             </div>
 
+            <!-- ================= SCREEN 2: SINHALA LIVE SPEECH BOX ================= -->
+            <section class="sinhala-live-speech-box" id="speech-box-category" data-speech-screen="category" aria-label="Sinhala Live Speech Detection Box">
+              <div class="speech-box-compact">
+                <button type="button" class="btn-speech-mic" aria-label="Toggle Sinhala Speech Recognition" title="Tap to Start / Stop Listening">
+                  <i class="fa-solid fa-microphone"></i>
+                </button>
+                <div class="speech-transcript-container" role="button" tabindex="0" title="Automatic speech detection" aria-label="Speech transcript">
+                  <span class="speech-transcript-text placeholder">කතා කරන්න, සජීවීව හඳුනාගැනේ... (Auto-detecting speech...)</span>
+                  <span class="speech-interim-text" style="display: none;"></span>
+                </div>
+                <button type="button" class="btn-speech-lang" title="Toggle Language: Sinhala (සිං) / English (EN)" aria-label="Toggle Speech Recognition Language">සිං</button>
+                <button type="button" class="btn-speech-clear" style="display:none;" title="Clear transcript" aria-label="Clear transcript">
+                  <i class="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+            </section>
+
+            <!-- AI Suggestion & Search Box Section (POST /api/suggest) -->
+            <div id="suggest-panel-container" class="suggest-panel-container">
+              <!-- Small Category Selector (shown when no venue is selected, e.g. Outside predefined venues) -->
+              <div id="suggest-category-selector" class="suggest-cat-selector" style="display: none;">
+                <span class="suggest-cat-label"><i class="fa-solid fa-layer-group"></i> Venue Category:</span>
+                <div class="suggest-cat-pills" role="tablist" aria-label="Venue Category Selection">
+                  <button type="button" class="suggest-cat-pill active" data-cat="hospital">
+                    <i class="fa-solid fa-hospital" style="color:#ef4444;"></i> Hospital
+                  </button>
+                  <button type="button" class="suggest-cat-pill" data-cat="bank">
+                    <i class="fa-solid fa-building-columns" style="color:#2563eb;"></i> Bank
+                  </button>
+                  <button type="button" class="suggest-cat-pill" data-cat="restaurant">
+                    <i class="fa-solid fa-utensils" style="color:#f59e0b;"></i> Restaurant
+                  </button>
+                  <button type="button" class="suggest-cat-pill" data-cat="supermarket">
+                    <i class="fa-solid fa-cart-shopping" style="color:#10b981;"></i> Supermarket
+                  </button>
+                </div>
+              </div>
+
+              <!-- Text Box -->
+              <div class="suggest-input-wrapper">
+                <i class="fa-solid fa-magnifying-glass suggest-input-icon"></i>
+                <input type="text" id="suggest-input-field" class="suggest-input-field" 
+                       placeholder="Type what you want to say (Sinhala or English)..." 
+                       aria-label="Type what you want to say in Sinhala or English" autocomplete="off">
+                <button type="button" id="suggest-clear-btn" class="suggest-clear-btn" style="display:none;" aria-label="Clear typed text">
+                  <i class="fa-solid fa-circle-xmark"></i>
+                </button>
+              </div>
+
+              <!-- "Use my own words" button (shown when text is typed) -->
+              <button type="button" id="suggest-own-words-btn" class="suggest-own-words-btn" style="display: none;">
+                <i class="fa-solid fa-paper-plane"></i>
+                <span>Use my own words: "<strong id="suggest-own-words-text"></strong>"</span>
+              </button>
+
+              <!-- Loading Indicator -->
+              <div id="suggest-loading-bar" class="suggest-loading-bar" style="display: none;">
+                <div class="suggest-loading-pulse"></div>
+              </div>
+
+              <!-- Low Confidence Notice -->
+              <div id="suggest-low-confidence-notice" class="suggest-confidence-notice" style="display: none;">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                <span>These may not match well.</span>
+              </div>
+
+              <!-- Error Note: Suggestions unavailable -->
+              <div id="suggest-error-notice" class="suggest-error-notice" style="display: none;">
+                <i class="fa-solid fa-circle-exclamation"></i>
+                <span>Suggestions unavailable</span>
+              </div>
+
+              <!-- Dynamic Suggestions Container (Pinned + Results) -->
+              <div id="suggest-results-container" class="suggest-results-container" style="display: none;">
+                <!-- Quick Phrases (Pinned) Section -->
+                <div id="suggest-pinned-section" style="display: none;">
+                  <div class="suggest-section-title">
+                    <i class="fa-solid fa-thumbtack"></i> Quick phrases
+                  </div>
+                  <div id="suggest-pinned-grid" class="messages-grid-2col"></div>
+                </div>
+
+                <!-- Suggestions Section -->
+                <div id="suggest-results-section" style="display: none;">
+                  <div class="suggest-section-title">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> Suggestions
+                  </div>
+                  <div id="suggest-results-grid" class="messages-grid-2col"></div>
+                </div>
+              </div>
+            </div>
+
             <!-- Suggested Message Grid (Populated with suggested messages for selected category) -->
             <div class="messages-grid-2col" id="messages-grid" role="list" aria-label="Hospital Situation Messages" style="display: none;">
               {% if messages %}
@@ -672,6 +781,23 @@
           <div class="section-heading-wrap">
             <h3 id="cat-heading" class="section-messages-title">Browse Categories</h3>
           </div>
+
+          <!-- ================= SCREEN 3 (TAB 2): SINHALA LIVE SPEECH BOX ================= -->
+          <section class="sinhala-live-speech-box" id="speech-box-categories" data-speech-screen="categories" aria-label="Sinhala Live Speech Detection Box">
+            <div class="speech-box-compact">
+              <button type="button" class="btn-speech-mic" aria-label="Toggle Sinhala Speech Recognition" title="Tap to Start / Stop Listening">
+                <i class="fa-solid fa-microphone"></i>
+              </button>
+              <div class="speech-transcript-container" role="button" tabindex="0" title="Automatic speech detection" aria-label="Speech transcript">
+                <span class="speech-transcript-text placeholder">කතා කරන්න, සජීවීව හඳුනාගැනේ... (Auto-detecting speech...)</span>
+                <span class="speech-interim-text" style="display: none;"></span>
+              </div>
+              <button type="button" class="btn-speech-lang" title="Toggle Language: Sinhala (සිං) / English (EN)" aria-label="Toggle Speech Recognition Language">සිං</button>
+              <button type="button" class="btn-speech-clear" style="display:none;" title="Clear transcript" aria-label="Clear transcript">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+          </section>
           
           <div class="category-list-wrap">
             <button type="button" class="cat-item-card gps-sim-btn" data-slug="supermarket">
@@ -726,6 +852,23 @@
             <button id="clear-history-btn" type="button" style="background:transparent; border:none; color:#ef4444; font-size:12px; font-weight:700; cursor:pointer;">Clear All</button>
           </div>
 
+          <!-- ================= SCREEN 4 (TAB 3): SINHALA LIVE SPEECH BOX ================= -->
+          <section class="sinhala-live-speech-box" id="speech-box-history" data-speech-screen="history" aria-label="Sinhala Live Speech Detection Box">
+            <div class="speech-box-compact">
+              <button type="button" class="btn-speech-mic" aria-label="Toggle Sinhala Speech Recognition" title="Tap to Start / Stop Listening">
+                <i class="fa-solid fa-microphone"></i>
+              </button>
+              <div class="speech-transcript-container" role="button" tabindex="0" title="Automatic speech detection" aria-label="Speech transcript">
+                <span class="speech-transcript-text placeholder">කතා කරන්න, සජීවීව හඳුනාගැනේ... (Auto-detecting speech...)</span>
+                <span class="speech-interim-text" style="display: none;"></span>
+              </div>
+              <button type="button" class="btn-speech-lang" title="Toggle Language: Sinhala (සිං) / English (EN)" aria-label="Toggle Speech Recognition Language">සිං</button>
+              <button type="button" class="btn-speech-clear" style="display:none;" title="Clear transcript" aria-label="Clear transcript">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+          </section>
+
           <div id="history-empty" class="history-empty-state">
             <i class="fa-solid fa-clock-rotate-left"></i>
             <p>No messages displayed yet.<br>Tap any card to view and speak it.</p>
@@ -740,6 +883,23 @@
             <h3 id="fav-heading" class="section-messages-title">Favorite Messages</h3>
             <button id="clear-favs-btn" type="button" style="background:transparent; border:none; color:#ef4444; font-size:12px; font-weight:700; cursor:pointer;">Clear All</button>
           </div>
+
+          <!-- ================= SCREEN 5 (TAB 4): SINHALA LIVE SPEECH BOX ================= -->
+          <section class="sinhala-live-speech-box" id="speech-box-favorites" data-speech-screen="favorites" aria-label="Sinhala Live Speech Detection Box">
+            <div class="speech-box-compact">
+              <button type="button" class="btn-speech-mic" aria-label="Toggle Sinhala Speech Recognition" title="Tap to Start / Stop Listening">
+                <i class="fa-solid fa-microphone"></i>
+              </button>
+              <div class="speech-transcript-container" role="button" tabindex="0" title="Automatic speech detection" aria-label="Speech transcript">
+                <span class="speech-transcript-text placeholder">කතා කරන්න, සජීවීව හඳුනාගැනේ... (Auto-detecting speech...)</span>
+                <span class="speech-interim-text" style="display: none;"></span>
+              </div>
+              <button type="button" class="btn-speech-lang" title="Toggle Language: Sinhala (සිං) / English (EN)" aria-label="Toggle Speech Recognition Language">සිං</button>
+              <button type="button" class="btn-speech-clear" style="display:none;" title="Clear transcript" aria-label="Clear transcript">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+          </section>
 
           <div id="favorites-empty" class="favorites-empty-state">
             <i class="fa-solid fa-star"></i>
@@ -778,6 +938,7 @@
         <!-- iOS Home Indicator Swipe Bar -->
         <div class="iphone-home-indicator-bar" aria-hidden="true"></div>
       </nav>
+    </div> <!-- End phone-screen -->
 
       <!-- ================= MODAL: GPS DETECTION DIALOG & SIMULATION ================= -->
       <div id="gps-dialog-backdrop" class="mobile-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="gps-dialog-title">
@@ -1213,7 +1374,7 @@
         </div>
       </div>
 
-    </div> <!-- End phone-screen -->
+    <!-- End modals and overlays -->
   </div> <!-- End phone-mockup-frame -->
 
 </div> <!-- End mobile-page-wrapper -->

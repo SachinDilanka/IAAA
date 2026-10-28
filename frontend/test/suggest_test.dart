@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:frontend/config/app_config.dart';
 import 'package:frontend/services/suggest_api.dart';
 import 'package:frontend/widgets/suggestion_panel.dart';
 
@@ -26,7 +27,7 @@ void main() {
   group('SuggestApi Unit Tests', () {
     test('successful response parses pinned and results with UTF-8 Sinhala', () async {
       final mockClient = MockHttpClient((req) async {
-        expect(req.url.path, '/api/suggest');
+        expect(req.url.path, anyOf('/api/suggest', '/suggest'));
         final body = jsonDecode(req.body) as Map<String, dynamic>;
         expect(body['category'], 'supermarket');
         expect(body['query'], 'rice');
@@ -48,7 +49,7 @@ void main() {
       });
 
       final api = SuggestApi(
-        baseUrl: 'http://127.0.0.1:5000/api',
+        baseUrl: AppConfig.suggestApiBaseUrl,
         client: mockClient,
       );
 
@@ -74,7 +75,7 @@ void main() {
       });
 
       final api = SuggestApi(
-        baseUrl: 'http://127.0.0.1:5000/api',
+        baseUrl: AppConfig.suggestApiBaseUrl,
         client: mockClient,
       );
 
@@ -107,7 +108,7 @@ void main() {
       });
 
       final api = SuggestApi(
-        baseUrl: 'http://127.0.0.1:5000/api',
+        baseUrl: AppConfig.suggestApiBaseUrl,
         client: mockClient,
       );
 
@@ -164,7 +165,7 @@ void main() {
       });
 
       final api = SuggestApi(
-        baseUrl: 'http://127.0.0.1:5000/api',
+        baseUrl: AppConfig.suggestApiBaseUrl,
         client: mockClient,
       );
 

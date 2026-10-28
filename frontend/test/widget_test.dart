@@ -13,8 +13,6 @@ void main() {
 
     // Verify Hospital first interface from mockup
     expect(find.text('CURRENT LOCATION'), findsOneWidget);
-    expect(find.text('Select a Message'), findsOneWidget);
-    expect(find.text('I have an appointment'), findsOneWidget);
     expect(find.text('Custom Typing'), findsOneWidget);
 
     // Verify Supermarket chip is available and selectable

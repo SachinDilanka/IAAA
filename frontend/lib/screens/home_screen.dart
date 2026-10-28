@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 import '../models/communication_models.dart';
 import '../data/communication_data.dart';
 import '../data/venue_data.dart';
-import '../services/api_service.dart';
 import '../services/suggest_api.dart';
+import '../controllers/venue_controller.dart';
+import '../providers/venue_provider.dart';
 import '../widgets/suggestion_panel.dart';
 import '../widgets/interactive_venue_map.dart';
+import '../widgets/sinhala_speech_box.dart';
+import '../widgets/message_card_overlay.dart';
 import '../config/app_config.dart';
 import 'category_detail_screen.dart';
+import '../theme/app_theme.dart';
 
 class QuickMessageItem {
   final String english;
@@ -23,174 +27,51 @@ class QuickMessageItem {
 }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final VenueController? controller;
+
+  const HomeScreen({super.key, this.controller});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final ApiService _apiService = ApiService();
   late final SuggestApi _suggestApi;
+  VenueController? _localController;
 
-  // Selected state
-  VenueType _selectedVenueType = VenueType.hospital;
-  VenueItem? _activeVenue;
-  List<CommunicationCategory> _categories = CommunicationData.hospitalCategories;
+  VenueController get _venueController {
+    if (widget.controller != null) return widget.controller!;
+    final provider = VenueProvider.maybeOf(context);
+    if (provider != null) return provider;
+    _localController ??= VenueController();
+    return _localController!;
+  }
+
+  VenueType get _selectedVenueType => _venueController.currentVenueType;
+  VenueItem? get _activeVenue => _venueController.currentVenue;
+  List<CommunicationCategory> get _categories => _venueController.currentCategories;
+  bool get _isGpsDetected => _venueController.isGpsDetected;
+  double get _currentLat => _venueController.lastPosition?.latitude ?? _venueController.currentVenue?.lat ?? 6.9192;
+  double get _currentLon => _venueController.lastPosition?.longitude ?? _venueController.currentVenue?.lon ?? 79.8681;
+
   bool _isLoading = false;
   int _currentBottomNavIndex = 0;
-  bool _isGpsDetected = true;
-
-  // Current GPS coordinates (Default: Colombo Medical/Central Area)
-  double _currentLat = 6.9192;
-  double _currentLon = 79.8681;
 
   // Recent & favorites tracking
   final List<QuickMessageItem> _history = [];
   final Set<String> _favorites = {};
 
-  static const Map<VenueType, List<QuickMessageItem>> _quickMessagesByVenue = {
-    VenueType.hospital: [
-      QuickMessageItem(
-        english: 'I have an appointment',
-        sinhala: 'මට වෛද්‍යවරයා හමුවීමට වේලාවක් ඇත.',
-        category: 'Registration & Admission',
-      ),
-      QuickMessageItem(
-        english: 'I need to see a doctor',
-        sinhala: 'මට වෛද්‍යවරයකු හමුවීමට අවශ්‍යයි.',
-        category: 'Registration & Admission',
-      ),
-      QuickMessageItem(
-        english: 'I need emergency assistance',
-        sinhala: 'මට හදිසි වෛද්‍ය ප්‍රතිකාර අවශ්‍යයි.',
-        category: 'Emergency & Urgent Help',
-      ),
-      QuickMessageItem(
-        english: 'Where is the pharmacy?',
-        sinhala: 'රෝහල් ඖෂධාගාරය කොහේද?',
-        category: 'Pharmacy & Medication',
-      ),
-      QuickMessageItem(
-        english: 'Where is the restroom?',
-        sinhala: 'වැසිකිළිය කොහේද?',
-        category: 'Emergency & Urgent Help',
-      ),
-      QuickMessageItem(
-        english: 'I need a wheelchair',
-        sinhala: 'මට රෝද පුටුවක් අවශ්‍යයි.',
-        category: 'Emergency & Urgent Help',
-      ),
-    ],
-    VenueType.supermarket: [
-      QuickMessageItem(
-        english: 'Where is the dairy section?',
-        sinhala: 'කිරි නිෂ්පාදන අංශය කොහෙද?',
-        category: 'Finding products',
-      ),
-      QuickMessageItem(
-        english: 'How much is this?',
-        sinhala: 'මෙය කීයද?',
-        category: 'Prices and offers',
-      ),
-      QuickMessageItem(
-        english: 'Can you help me reach this?',
-        sinhala: 'මට මෙය අරන් දෙන්න පුළුවන්ද?',
-        category: 'Getting help and facilities',
-      ),
-      QuickMessageItem(
-        english: 'Where is the billing counter?',
-        sinhala: 'මුදල් ගෙවන කවුන්ටරය කොහෙද?',
-        category: 'Payments and checkout',
-      ),
-      QuickMessageItem(
-        english: 'Do you have fresh bread?',
-        sinhala: 'නැවුම් පාන් තියෙනවාද?',
-        category: 'Finding products',
-      ),
-      QuickMessageItem(
-        english: 'Do you accept card payment?',
-        sinhala: 'කාඩ්පත් මඟින් ගෙවීම් භාරගන්නවාද?',
-        category: 'Payments and checkout',
-      ),
-    ],
-    VenueType.bank: [
-      QuickMessageItem(
-        english: 'I want to deposit money',
-        sinhala: 'මට මුදල් තැන්පත් කිරීමට අවශ්‍යයි.',
-        category: 'Deposits & Withdrawals',
-      ),
-      QuickMessageItem(
-        english: 'Where is the ATM?',
-        sinhala: 'ATM යන්ත්‍රය කොහේද?',
-        category: 'Cards & ATM Services',
-      ),
-      QuickMessageItem(
-        english: 'I need to open an account',
-        sinhala: 'මට ගිණුමක් විවෘත කිරීමට අවශ්‍යයි.',
-        category: 'Deposits & Withdrawals',
-      ),
-      QuickMessageItem(
-        english: 'What is the token number?',
-        sinhala: 'මගේ ටෝකන් අංකය කුමක්ද?',
-        category: 'Basic communication',
-      ),
-      QuickMessageItem(
-        english: 'I need to speak to the manager',
-        sinhala: 'මට කළමනාකරු හමුවීමට අවශ්‍යයි.',
-        category: 'Basic communication',
-      ),
-      QuickMessageItem(
-        english: 'Where is the cash counter?',
-        sinhala: 'මුදල් කවුන්ටරය කොහේද?',
-        category: 'Deposits & Withdrawals',
-      ),
-    ],
-    VenueType.restaurant: [
-      QuickMessageItem(
-        english: 'Table for two please',
-        sinhala: 'දෙදෙනෙකුට මේසයක් දෙන්න.',
-        category: 'Arrival and seating',
-      ),
-      QuickMessageItem(
-        english: 'Can I see the menu?',
-        sinhala: 'කෑම මෙනුව බලන්න පුළුවන්ද?',
-        category: 'Menu and ordering',
-      ),
-      QuickMessageItem(
-        english: 'Is this vegetarian?',
-        sinhala: 'මෙය නිර්මාංශ ආහාරයක්ද?',
-        category: 'Menu and ordering',
-      ),
-      QuickMessageItem(
-        english: 'Could we have the bill?',
-        sinhala: 'කරුණාකර බිල ගෙනැවිත් දෙන්න.',
-        category: 'Menu and ordering',
-      ),
-      QuickMessageItem(
-        english: 'Where is the washroom?',
-        sinhala: 'අත් සෝදන ස්ථානය / වැසිකිළිය කොහේද?',
-        category: 'Basic communication',
-      ),
-      QuickMessageItem(
-        english: 'Water please',
-        sinhala: 'කරුණාකර වතුර ටිකක් දෙන්න.',
-        category: 'Menu and ordering',
-      ),
-    ],
-  };
 
   @override
   void initState() {
     super.initState();
     _suggestApi = SuggestApi(baseUrl: AppConfig.suggestApiBaseUrl);
-    _activeVenue = VenueData.hospitals.first;
-    _categories = CommunicationData.hospitalCategories;
   }
 
   @override
   void dispose() {
     _suggestApi.dispose();
+    _localController?.dispose();
     super.dispose();
   }
 
@@ -210,100 +91,203 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _switchVenueType(VenueType type) {
-    setState(() {
-      _selectedVenueType = type;
-      _isGpsDetected = false;
-      switch (type) {
-        case VenueType.supermarket:
-          _activeVenue = VenueData.supermarkets.first;
-          _categories = CommunicationData.supermarketCategories;
-          break;
-        case VenueType.hospital:
-          _activeVenue = VenueData.hospitals.first;
-          _categories = CommunicationData.hospitalCategories;
-          break;
-        case VenueType.bank:
-          _activeVenue = VenueData.banks.first;
-          _categories = CommunicationData.bankCategories;
-          break;
-        case VenueType.restaurant:
-          _activeVenue = VenueData.restaurants.first;
-          _categories = CommunicationData.restaurantCategories;
-          break;
-        case VenueType.other:
-          _activeVenue = null;
-          _categories = [];
-          break;
-      }
-    });
+    _venueController.selectManualCategory(type);
   }
 
   void _selectVenueItem(VenueItem item, {bool fromGps = false}) {
-    setState(() {
-      _activeVenue = item;
-      _selectedVenueType = item.type;
-      _categories = CommunicationData.getCategoriesForVenue(item.type);
-      _isGpsDetected = fromGps;
-      if (fromGps) {
-        _currentLat = item.lat;
-        _currentLon = item.lon;
-      }
-    });
+    if (fromGps) {
+      _venueController.useGpsAgain();
+    } else {
+      _venueController.selectManualVenue(item);
+    }
   }
 
   Future<void> _simulateGpsDetection(double lat, double lon) async {
     setState(() => _isLoading = true);
-    final result = await _apiService.detectLocation(lat, lon);
-    setState(() {
-      _isLoading = false;
-      _currentLat = lat;
-      _currentLon = lon;
-      _isGpsDetected = true;
+    try {
+      _venueController.onPositionUpdate(Position(
+        latitude: lat,
+        longitude: lon,
+        timestamp: DateTime.now(),
+        accuracy: 15.0,
+        altitude: 0.0,
+        heading: 0.0,
+        speed: 0.0,
+        speedAccuracy: 0.0,
+        altitudeAccuracy: 0.0,
+        headingAccuracy: 0.0,
+      ));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
-      final slug = result['detected_slug']?.toString() ?? 'hospital';
-      if (slug == 'hospital') {
-        _selectedVenueType = VenueType.hospital;
-        _categories = CommunicationData.hospitalCategories;
-        _activeVenue = VenueData.hospitals.firstWhere(
-          (h) => h.name == result['poi_name'],
-          orElse: () => VenueData.hospitals.first,
-        );
-      } else if (slug == 'supermarket') {
-        _selectedVenueType = VenueType.supermarket;
-        _categories = CommunicationData.supermarketCategories;
-        _activeVenue = VenueData.supermarkets.firstWhere(
-          (s) => s.name == result['poi_name'],
-          orElse: () => VenueData.supermarkets.first,
-        );
-      } else if (slug == 'bank') {
-        _selectedVenueType = VenueType.bank;
-        _categories = CommunicationData.bankCategories;
-        _activeVenue = VenueData.banks.firstWhere(
-          (b) => b.name == result['poi_name'],
-          orElse: () => VenueData.banks.first,
-        );
-      } else if (slug == 'restaurant') {
-        _selectedVenueType = VenueType.restaurant;
-        _categories = CommunicationData.restaurantCategories;
-        _activeVenue = VenueData.restaurants.firstWhere(
-          (r) => r.name == result['poi_name'],
-          orElse: () => VenueData.restaurants.first,
-        );
-      }
-    });
+  QuickMessageItem _resolveBilingualPair({
+    required String sinhala,
+    required String english,
+    String categoryName = '',
+  }) {
+    String rawSi = sinhala.trim();
+    String rawEn = english.trim();
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'GPS Detected: ${_activeVenue?.name ?? _selectedVenueType.displayNameEn}',
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          backgroundColor: _selectedVenueType.themeColor,
-          duration: const Duration(seconds: 2),
-        ),
+    final bool hasSi = RegExp(r'[\u0D80-\u0DFF]').hasMatch(rawSi);
+    final bool hasEnSi = RegExp(r'[\u0D80-\u0DFF]').hasMatch(rawEn);
+
+    // 1. If rawSi or rawEn has "Sinhala (English)"
+    final match = RegExp(r'^([\u0D80-\u0DFF\s.,!?\u200c\u200d]+)\s*\(([^)]+)\)$').firstMatch(rawSi.isNotEmpty ? rawSi : rawEn);
+    if (match != null) {
+      return QuickMessageItem(
+        sinhala: match.group(1)!.trim(),
+        english: match.group(2)!.trim(),
+        category: categoryName.isNotEmpty ? categoryName : 'Communication',
       );
     }
+
+    // 2. If rawSi or rawEn has " / "
+    final combined = rawSi.isNotEmpty ? rawSi : rawEn;
+    if (combined.contains(' / ')) {
+      final parts = combined.split(' / ');
+      if (parts.length == 2) {
+        final p0Has = RegExp(r'[\u0D80-\u0DFF]').hasMatch(parts[0]);
+        final p1Has = RegExp(r'[\u0D80-\u0DFF]').hasMatch(parts[1]);
+        if (p0Has && !p1Has) {
+          return QuickMessageItem(sinhala: parts[0].trim(), english: parts[1].trim(), category: categoryName);
+        } else if (!p0Has && p1Has) {
+          return QuickMessageItem(sinhala: parts[1].trim(), english: parts[0].trim(), category: categoryName);
+        }
+      }
+    }
+
+    String effSi = '';
+    String effEn = '';
+
+    if (hasSi && !hasEnSi) {
+      effSi = rawSi;
+      effEn = rawEn;
+    } else if (!hasSi && hasEnSi) {
+      effSi = rawEn;
+      effEn = rawSi;
+    } else if (hasSi && hasEnSi) {
+      effSi = rawSi.isNotEmpty ? rawSi : rawEn;
+      effEn = '';
+    } else {
+      effEn = rawEn.isNotEmpty ? rawEn : rawSi;
+      effSi = '';
+    }
+
+    // 3. Search in CommunicationData across all venues
+    final allCategories = [
+      ...CommunicationData.hospitalCategories,
+      ...CommunicationData.bankCategories,
+      ...CommunicationData.supermarketCategories,
+      ...CommunicationData.restaurantCategories,
+    ];
+
+    if (effSi.isEmpty || effEn.isEmpty) {
+      for (final cat in allCategories) {
+        for (final msg in cat.messages) {
+          if (effSi.isEmpty && effEn.isNotEmpty) {
+            if (msg.templateEn.trim().toLowerCase() == effEn.toLowerCase()) {
+              effSi = msg.templateSi;
+              break;
+            }
+          }
+          if (effEn.isEmpty && effSi.isNotEmpty) {
+            if (msg.templateSi.trim() == effSi || effSi.contains(msg.templateSi.trim()) || msg.templateSi.trim().contains(effSi)) {
+              effEn = msg.templateEn;
+              break;
+            }
+          }
+        }
+        if (effSi.isNotEmpty && effEn.isNotEmpty) break;
+      }
+    }
+
+
+    // 5. Common phrase fallback dictionary
+    const commonPhrases = {
+      'i am deaf': 'මම බිහිරි කෙනෙක්.',
+      'i am deaf.': 'මම බිහිරි කෙනෙක්.',
+      'i am deaf / hard of hearing': 'මම බිහිරි කෙනෙක්.',
+      'i cannot speak': 'මට කතා කරන්න බැහැ.',
+      'i cannot speak.': 'මට කතා කරන්න බැහැ.',
+      'please write down your message': 'කරුණාකර ඔබේ පණිවිඩය ලියන්න.',
+      'please write down your message.': 'කරුණාකර ඔබේ පණිවිඩය ලියන්න.',
+      'please write it down': 'කරුණාකර ඔබේ පණිවිඩය ලියන්න.',
+      'please speak slowly and face me': 'කරුණාකර සෙමින් කතා කර මා දෙස බලන්න.',
+      'please speak slowly and face me.': 'කරුණාකර සෙමින් කතා කර මා දෙස බලන්න.',
+      'please wait a moment': 'කරුණාකර මොහොතක් රැඳී සිටින්න.',
+      'please wait a moment.': 'කරුණාකර මොහොතක් රැඳී සිටින්න.',
+      'please repeat that': 'කරුණාකර නැවත කියන්න.',
+      'please repeat that.': 'කරුණාකර නැවත කියන්න.',
+      'i do not understand': 'මට තේරෙන්නේ නැහැ.',
+      'i do not understand.': 'මට තේරෙන්නේ නැහැ.',
+      'yes': 'ඔව්.',
+      'yes.': 'ඔව්.',
+      'no': 'නැහැ.',
+      'no.': 'නැහැ.',
+      'thank you': 'ස්තූතියි.',
+      'thank you.': 'ස්තූතියි.',
+      'i need help': 'මට උදව්වක් අවශ්‍යයි.',
+      'i need help.': 'මට උදව්වක් අවශ්‍යයි.',
+      'where is the restroom?': 'වැසිකිළිය කොහෙද?',
+      'where is the toilet?': 'වැසිකිළිය කොහෙද?',
+      'where is the entrance?': 'ඇතුල්වීමේ දොර කොහෙද?',
+      'where is the exit?': 'පිටවීමේ දොර කොහෙද?',
+      'where is the pharmacy?': 'ඖෂධ ශාලාව කොහෙද?',
+      'where is the opd?': 'බාහිර රෝගී අංශය (OPD) කොහෙද?',
+      'i need to see a doctor': 'මට වෛද්‍යවරයකු හමුවීමට අවශ්‍යයි.',
+      'i need to see a doctor.': 'මට වෛද්‍යවරයකු හමුවීමට අවශ්‍යයි.',
+      'i have an appointment': 'මට වේලාවක් වෙන්කරගෙන ඇත.',
+      'i have an appointment.': 'මට වේලාවක් වෙන්කරගෙන ඇත.',
+      'i need emergency assistance': 'මට හදිසි වෛද්‍ය ප්‍රතිකාර අවශ්‍යයි.',
+      'i need emergency assistance.': 'මට හදිසි වෛද්‍ය ප්‍රතිකාර අවශ්‍යයි.',
+      'i need a wheelchair': 'මට රෝද පුටුවක් අවශ්‍යයි.',
+      'i need a wheelchair.': 'මට රෝද පුටුවක් අවශ්‍යයි.',
+      'where is the billing counter?': 'මුදල් ගෙවන කවුන්ටරය කොහෙද?',
+      'how much is this?': 'මෙය කීයද?',
+      'how much is this': 'මෙය කීයද?',
+      'do you accept card payment?': 'කාඩ්පත් මඟින් ගෙවීම් භාරගන්නවාද?',
+      'where is the dairy section?': 'කිරි නිෂ්පාදන අංශය කොහෙද?',
+      'do you have fresh bread?': 'නැවුම් පාන් තියෙනවාද?',
+      'i want to deposit money': 'මට මුදල් තැන්පත් කිරීමට අවශ්‍යයි.',
+      'i want to deposit money.': 'මට මුදල් තැන්පත් කිරීමට අවශ්‍යයි.',
+      'i want to withdraw money': 'මට මුදල් ලබා ගැනීමට අවශ්‍යයි.',
+      'i want to withdraw money.': 'මට මුදල් ලබා ගැනීමට අවශ්‍යයි.',
+      'where is the atm?': 'ස්වයංක්‍රීය ටෙලර් යන්ත්‍රය (ATM) කොහෙද?',
+      'where do i get a queue token?': 'පෝලිම් ටෝකන් අංකය ලබාගන්නේ කොහෙන්ද?',
+      'which counter should i go to?': 'මම යා යුත්තේ කුමන කවුන්ටරයට ද?',
+    };
+
+    if (effSi.isEmpty && effEn.isNotEmpty) {
+      final cleanKey = effEn.toLowerCase().replaceAll(RegExp(r'[.,!?]+$'), '').trim();
+      commonPhrases.forEach((k, v) {
+        if (k.replaceAll(RegExp(r'[.,!?]+$'), '').trim() == cleanKey) {
+          effSi = v;
+        }
+      });
+    }
+
+    if (effEn.isEmpty && effSi.isNotEmpty) {
+      commonPhrases.forEach((k, v) {
+        if (v.trim() == effSi.trim() || effSi.contains(v) || v.contains(effSi)) {
+          effEn = k[0].toUpperCase() + k.substring(1);
+        }
+      });
+    }
+
+    if (effSi.isEmpty) {
+      effSi = effEn.isNotEmpty ? 'පණිවිඩය: $effEn' : 'මම බිහිරි කෙනෙක්.';
+    }
+    if (effEn.isEmpty) {
+      effEn = hasSi ? 'Live Sinhala Speech Detection' : (effSi.isNotEmpty ? effSi : 'I am deaf.');
+    }
+
+    return QuickMessageItem(
+      sinhala: effSi,
+      english: effEn,
+      category: categoryName.isNotEmpty ? categoryName : 'Communication',
+    );
   }
 
   void _showFullscreenCardDisplay({
@@ -312,146 +296,31 @@ class _HomeScreenState extends State<HomeScreen> {
     required String categoryName,
     int? id,
   }) {
-    // Record to history
+    final resolved = _resolveBilingualPair(
+      sinhala: sinhala,
+      english: english,
+      categoryName: categoryName,
+    );
+    final effectiveSinhala = resolved.sinhala;
+    final effectiveEnglish = resolved.english;
+
+    // Record to history with both resolved Sinhala and English
     _history.insert(
       0,
-      QuickMessageItem(english: english, sinhala: sinhala, category: categoryName),
+      QuickMessageItem(
+        english: effectiveEnglish,
+        sinhala: effectiveSinhala,
+        category: categoryName,
+      ),
     );
     if (_history.length > 30) _history.removeLast();
 
-    final isFav = _favorites.contains(english.isNotEmpty ? english : sinhala);
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return Dialog.fullscreen(
-            child: Container(
-              color: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      IconButton(
-                        icon: Icon(
-                          isFav ? Icons.star : Icons.star_border,
-                          size: 30,
-                          color: isFav ? const Color(0xFFF59E0B) : Colors.grey,
-                        ),
-                        onPressed: () {
-                          final key = english.isNotEmpty ? english : sinhala;
-                          setState(() {
-                            if (_favorites.contains(key)) {
-                              _favorites.remove(key);
-                            } else {
-                              _favorites.add(key);
-                            }
-                          });
-                          setDialogState(() {});
-                        },
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close, size: 32, color: Colors.black87),
-                        onPressed: () => Navigator.of(ctx).pop(),
-                      ),
-                    ],
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.all(28),
-                    decoration: BoxDecoration(
-                      color: _selectedVenueType.backgroundColor,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(
-                        color: _selectedVenueType.themeColor.withValues(alpha: 0.4),
-                        width: 2,
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: _selectedVenueType.themeColor,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Text(
-                            id != null ? '#$id  $categoryName' : categoryName,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        Text(
-                          sinhala,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF1E293B),
-                            height: 1.3,
-                          ),
-                        ),
-                        if (english.isNotEmpty) ...[
-                          const SizedBox(height: 18),
-                          const Divider(color: Colors.black12),
-                          const SizedBox(height: 14),
-                          Text(
-                            english,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF475569),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'Show this screen to the staff member / කාර්ය මණ්ඩලයට පෙන්වන්න',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                  const Spacer(),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      final copyText = english.isNotEmpty ? '$sinhala / $english' : sinhala;
-                      Clipboard.setData(ClipboardData(text: copyText));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Message copied to clipboard!')),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _selectedVenueType.themeColor,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    ),
-                    icon: const Icon(Icons.copy),
-                    label: const Text(
-                      'Copy Text / පිටපත් කරන්න',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
+    showMessageCard(
+      context,
+      sinhala: effectiveSinhala,
+      english: effectiveEnglish,
+      categoryName: categoryName,
+      id: id,
     );
   }
 
@@ -681,41 +550,45 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: AppTheme.backgroundLight,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF1E293B),
+        backgroundColor: AppTheme.surfaceLight,
+        foregroundColor: AppTheme.textMain,
         elevation: 0,
+        scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
         leading: IconButton(
-          icon: const Icon(Icons.grid_view_rounded, size: 22, color: Color(0xFF334155)),
+          icon: const Icon(Icons.menu, size: 24, color: AppTheme.textMain),
           tooltip: 'Menu / Categories',
           onPressed: () {
             setState(() => _currentBottomNavIndex = 1);
           },
         ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
+            Text(
               'AI Communication Assistant',
               style: TextStyle(
+                fontFamily: AppTheme.fontHeading,
                 fontWeight: FontWeight.w800,
-                fontSize: 17,
-                color: Color(0xFF0F172A),
+                fontSize: 16.5,
+                color: AppTheme.textMain,
                 letterSpacing: -0.3,
               ),
             ),
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.hearing, size: 10, color: Color(0xFF64748B)),
-                const SizedBox(width: 4),
-                const Text(
+                Icon(Icons.hearing, size: 9, color: AppTheme.textMuted),
+                SizedBox(width: 3),
+                Text(
                   'CommAssist Sri Lanka',
                   style: TextStyle(
-                    fontSize: 10,
-                    color: Color(0xFF64748B),
+                    fontFamily: AppTheme.fontMain,
+                    fontSize: 9.5,
+                    color: AppTheme.textMuted,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -723,51 +596,80 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
-        centerTitle: true,
+        centerTitle: false,
         actions: [
           IconButton(
-            icon: const Icon(Icons.my_location, size: 22, color: Color(0xFF2563EB)),
-            tooltip: 'Detect via GPS',
-            onPressed: () => _simulateGpsDetection(6.9192, 79.8681),
+            key: const Key('appbar_location_debug_button'),
+            icon: const Icon(Icons.track_changes, size: 22, color: AppTheme.textMain),
+            tooltip: 'Location Debug Info',
+            onPressed: () => _showLocationDebugDialog(context, _venueController),
+            onLongPress: () => _simulateGpsDetection(6.9192, 79.8681),
           ),
+          const SizedBox(width: 4),
         ],
       ),
-      body: _buildCurrentBody(),
+      body: ListenableBuilder(
+        listenable: _venueController,
+        builder: (context, _) => _buildCurrentBody(),
+      ),
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
-          color: Colors.white,
-          border: Border(top: BorderSide(color: Color(0xFFE2E8F0), width: 1)),
+          color: AppTheme.surfaceLight,
+          border: Border(top: BorderSide(color: AppTheme.borderLight, width: 1)),
         ),
-        child: BottomNavigationBar(
-          currentIndex: _currentBottomNavIndex,
-          onTap: (index) => setState(() => _currentBottomNavIndex = index),
-          backgroundColor: Colors.white,
-          selectedItemColor: const Color(0xFF2563EB),
-          unselectedItemColor: const Color(0xFF94A3B8),
-          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 11),
-          type: BottomNavigationBarType.fixed,
-          elevation: 0,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home_outlined),
-              activeIcon: Icon(Icons.home),
-              label: 'Home',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.grid_view),
-              label: 'Categories',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.history),
-              label: 'History',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.star_border),
-              activeIcon: Icon(Icons.star),
-              label: 'Favorites',
-            ),
-          ],
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              BottomNavigationBar(
+                currentIndex: _currentBottomNavIndex,
+                onTap: (index) => setState(() => _currentBottomNavIndex = index),
+                backgroundColor: AppTheme.surfaceLight,
+                selectedItemColor: AppTheme.textMain,
+                unselectedItemColor: AppTheme.textDisabled,
+                selectedLabelStyle: const TextStyle(
+                  fontFamily: AppTheme.fontMain,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 11,
+                ),
+                unselectedLabelStyle: const TextStyle(
+                  fontFamily: AppTheme.fontMain,
+                  fontWeight: FontWeight.w500,
+                  fontSize: 11,
+                ),
+                type: BottomNavigationBarType.fixed,
+                elevation: 0,
+                items: const [
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.home),
+                    label: 'Home',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.grid_view),
+                    label: 'Categories',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.history),
+                    label: 'History',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.star),
+                    label: 'Favorites',
+                  ),
+                ],
+              ),
+              Container(
+                margin: const EdgeInsets.only(top: 2, bottom: 8),
+                width: 134,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: AppTheme.textMain,
+                  borderRadius: BorderRadius.circular(100),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -789,8 +691,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHomeTab() {
-    final messages = _quickMessagesByVenue[_selectedVenueType] ?? [];
-
     return _isLoading
         ? const Center(child: CircularProgressIndicator())
         : SingleChildScrollView(
@@ -798,9 +698,19 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 8),
+                // 0. Auto-switch notification banner with Undo button
+                if (_venueController.autoSwitchNotification != null)
+                  _buildAutoSwitchNotificationBanner(_venueController),
 
-                // 1. CURRENT LOCATION CARD (Faithful to Mockup)
+                // Top Floating Dark GPS Scan Toast (Matching original screenshot)
+                _buildGpsScanToast(_venueController),
+
+                // GPS Status Line with settings/permission buttons & debug shortcut
+                _buildGpsStatusBar(_venueController),
+
+                const SizedBox(height: 2),
+
+                // 1. CURRENT LOCATION CARD (Matching original screenshot)
                 _buildCurrentLocationCard(),
 
                 // 2. INTERACTIVE AREA MAP (Detecting Predefined Locations)
@@ -809,46 +719,45 @@ class _HomeScreenState extends State<HomeScreen> {
                   selectedVenueType: _selectedVenueType,
                   currentLat: _currentLat,
                   currentLon: _currentLon,
+                  accuracy: _venueController.lastPosition?.accuracy,
                   isGpsLive: _isGpsDetected,
+                  isFollowMode: _venueController.isFollowMode,
+                  onUserPan: () => _venueController.setFollowMode(false),
                   onVenueSelected: (venue) {
-                    _selectVenueItem(venue, fromGps: false);
+                    _venueController.selectManualVenue(venue);
                   },
                   onRecenterGps: () {
-                    _simulateGpsDetection(6.9192, 79.8681);
+                    _venueController.setFollowMode(true);
+                    _venueController.useGpsAgain();
+                  },
+                  onOpenDebug: () => _showLocationDebugDialog(context, _venueController),
+                  onUseGpsAgain: () {
+                    _venueController.setFollowMode(true);
+                    _venueController.useGpsAgain();
                   },
                   onOpenManualSelector: _showManualVenueSelector,
                 ),
 
-                // 3. PREDEFINED LOCATION MANUAL SELECTOR CHIPS
+                // 3. GPS DETECTION ACTIVE PANEL (Directly below map in original screenshot)
+                _buildGpsDetectionPanel(),
+
+                // 4. PREDEFINED LOCATION MANUAL SELECTOR CHIPS
                 _buildVenueTypeSelectorRow(),
 
-                // 4. "SELECT A MESSAGE" GRID (Faithful to Mockup)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 14, 18, 10),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Select a Message',
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF0F172A),
-                          letterSpacing: -0.2,
-                        ),
-                      ),
-                      Text(
-                        '${_selectedVenueType.displayNameEn} Phrases',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: _selectedVenueType.themeColor,
-                        ),
-                      ),
-                    ],
-                  ),
+                // Showing Messages For Banner (Step 3)
+                _buildShowingMessagesBanner(_venueController),
+
+                // Sinhala Live Speech Box (Screen 1: Home)
+                SinhalaSpeechBox(
+                  themeColor: _selectedVenueType.themeColor,
+                  onShowFullscreen: (txt) {
+                    _showFullscreenCardDisplay(
+                      sinhala: txt,
+                      english: '',
+                      categoryName: 'Sinhala Live Speech',
+                    );
+                  },
                 ),
-                _buildMessageGrid(messages),
 
                 const SizedBox(height: 14),
 
@@ -864,153 +773,605 @@ class _HomeScreenState extends State<HomeScreen> {
           );
   }
 
-  // 1. CURRENT LOCATION CARD
-  Widget _buildCurrentLocationCard() {
-    final venueName = _selectedVenueType.displayNameEn;
-    final specificName = _activeVenue?.shortName ?? _activeVenue?.name;
-
+  // Auto-switch notification banner with Undo button
+  Widget _buildAutoSwitchNotificationBanner(VenueController controller) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      padding: const EdgeInsets.all(16),
+      key: const Key('auto_switch_notification_banner'),
+      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        color: AppTheme.headerDark,
+        borderRadius: AppTheme.borderRadiusBtn,
+        boxShadow: AppTheme.buttonShadow,
       ),
       child: Row(
         children: [
-          // Circular Location Pin Icon Avatar
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: const Color(0xFFFFE4E6), // Light rose/pink as in screenshot
-              border: Border.all(color: const Color(0xFFFDA4AF), width: 1.5),
-            ),
-            child: const Icon(
-              Icons.location_on,
-              color: Color(0xFFE11D48), // Pink/Red pin as in screenshot
-              size: 26,
-            ),
-          ),
-          const SizedBox(width: 14),
-
-          // Location texts
+          const Icon(Icons.check_circle_rounded, color: AppTheme.liveGreen, size: 20),
+          const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'CURRENT LOCATION',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF64748B),
-                    letterSpacing: 0.8,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  venueName,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF0F172A),
-                  ),
-                ),
-                if (specificName != null)
-                  Text(
-                    specificName,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF334155),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                const SizedBox(height: 2),
-                Text(
-                  _isGpsDetected ? 'Detected via GPS' : 'Selected Manually',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF94A3B8),
-                  ),
-                ),
-              ],
+            child: Text(
+              controller.autoSwitchNotification ?? '',
+              style: const TextStyle(
+                fontFamily: AppTheme.fontMain,
+                color: AppTheme.textWhite,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
             ),
           ),
-
-          // LIVE Badge & Switch Place Button
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF10B981), // Live green dot
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 5),
-                    const Text(
-                      'LIVE',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF334155),
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 6),
-              InkWell(
-                onTap: _showManualVenueSelector,
-                borderRadius: BorderRadius.circular(8),
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  child: Text(
-                    'Change',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF2563EB),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+          TextButton(
+            key: const Key('undo_auto_switch_button'),
+            onPressed: () => controller.undoAutoSwitch(),
+            style: TextButton.styleFrom(
+              foregroundColor: AppTheme.warningAmber,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text('Undo', style: TextStyle(fontFamily: AppTheme.fontMain, fontWeight: FontWeight.bold)),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, color: Colors.white70, size: 18),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            onPressed: () => controller.dismissNotification(),
           ),
         ],
       ),
     );
   }
 
-  // 3. PREDEFINED LOCATION MANUAL SELECTOR CHIPS
+  // GPS Status Bar
+  Widget _buildGpsStatusBar(VenueController controller) {
+    final statusText = controller.gpsStatusText;
+    final isError = statusText.toLowerCase().contains('denied') || statusText.toLowerCase().contains('error');
+    final isLowAccuracy = statusText.toLowerCase().contains('low');
+    final isServiceDisabled = statusText.toLowerCase().contains('turned off') || statusText.toLowerCase().contains('disabled');
+
+    Color indicatorColor = AppTheme.liveGreen;
+    if (isError) {
+      indicatorColor = AppTheme.dangerRed;
+    } else if (isLowAccuracy || statusText.contains('searching')) {
+      indicatorColor = AppTheme.warningAmber;
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: isError
+            ? const Color(0xFFFEF2F2)
+            : (isLowAccuracy ? const Color(0xFFFFFBEB) : AppTheme.surfaceLight),
+        borderRadius: AppTheme.borderRadiusSm,
+        border: Border.all(
+          color: isError
+              ? AppTheme.hospitalBorder
+              : (isLowAccuracy ? AppTheme.restaurantBorder : AppTheme.borderLight),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: indicatorColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              statusText,
+              style: TextStyle(
+                fontFamily: AppTheme.fontMain,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: isError
+                    ? const Color(0xFF991B1B)
+                    : (isLowAccuracy ? const Color(0xFF92400E) : AppTheme.textSub),
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (isError) ...[
+            TextButton(
+              key: const Key('open_app_settings_button'),
+              onPressed: () => controller.openAppSettings(),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text('Settings', style: TextStyle(fontFamily: AppTheme.fontMain, fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.dangerRed)),
+            ),
+          ] else if (isServiceDisabled) ...[
+            TextButton(
+              key: const Key('open_location_settings_button'),
+              onPressed: () => controller.openLocationSettings(),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text('Enable GPS', style: TextStyle(fontFamily: AppTheme.fontMain, fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+            ),
+          ],
+          IconButton(
+            key: const Key('status_debug_info_button'),
+            icon: const Icon(Icons.info_outline, size: 16, color: AppTheme.textMuted),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            tooltip: 'Location Debug Info',
+            onPressed: () => _showLocationDebugDialog(context, controller),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Showing Messages For Banner (Step 3)
+  Widget _buildShowingMessagesBanner(VenueController controller) {
+    final venueName = controller.isOutsidePredefined
+        ? 'Outside Predefined Venues'
+        : (controller.currentVenue?.shortName ?? controller.currentVenue?.name ?? controller.currentVenueType.displayNameEn);
+    final sourceText = controller.isGpsDetected ? 'GPS' : 'chosen by you';
+
+    return Container(
+      key: const Key('showing_messages_banner'),
+      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: controller.currentVenueType.backgroundColor,
+        borderRadius: AppTheme.borderRadiusBtn,
+        border: Border.all(
+          color: controller.currentVenueType.themeColor.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(controller.currentVenueType.icon, size: 18, color: controller.currentVenueType.themeColor),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Showing messages for: $venueName ($sourceText)',
+              style: const TextStyle(
+                fontFamily: AppTheme.fontMain,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.textMain,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          TextButton(
+            key: const Key('banner_change_category_button'),
+            onPressed: () => _showCategoryPicker(context, controller),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(
+              'Change',
+              style: TextStyle(
+                fontFamily: AppTheme.fontMain,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: controller.currentVenueType.themeColor,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Floating Dark GPS Scan Toast (Matches original screenshot)
+  Widget _buildGpsScanToast(VenueController controller) {
+    final isTest = WidgetsBinding.instance.runtimeType.toString().contains('Test');
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.headerDark,
+        borderRadius: AppTheme.borderRadiusBtn,
+        boxShadow: AppTheme.toastShadow,
+      ),
+      child: Row(
+        children: [
+          // GPS Cyan Radar Spinner matching .gps-radar-spinner in mobile.css
+          Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: AppTheme.cyanRadarTrack,
+                width: 2.5,
+              ),
+            ),
+            child: Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: isTest
+                    ? Container(
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border(top: BorderSide(color: AppTheme.accentCyan, width: 2.5)),
+                        ),
+                      )
+                    : const CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        valueColor: AlwaysStoppedAnimation<Color>(AppTheme.accentCyan),
+                      ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'Acquiring GPS satellite coordinates...',
+              style: TextStyle(
+                fontFamily: AppTheme.fontMain,
+                color: AppTheme.textWhite,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.1,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 1. CURRENT LOCATION HERO CARD (Matches original screenshot)
+  Widget _buildCurrentLocationCard() {
+    final isOutside = _venueController.isOutsidePredefined;
+
+    // Category count string and badge color
+    String countBadgeText;
+    Color badgeBgColor;
+    Color badgeTextColor;
+    IconData badgeIcon;
+
+    switch (_selectedVenueType) {
+      case VenueType.hospital:
+        countBadgeText = '20 SL Hospitals';
+        badgeBgColor = AppTheme.hospitalBackground;
+        badgeTextColor = AppTheme.hospitalColor;
+        badgeIcon = Icons.local_hospital;
+        break;
+      case VenueType.bank:
+        countBadgeText = '12 SL Banks';
+        badgeBgColor = AppTheme.bankBackground;
+        badgeTextColor = AppTheme.bankColor;
+        badgeIcon = Icons.account_balance;
+        break;
+      case VenueType.restaurant:
+        countBadgeText = '10 SL Restaurants';
+        badgeBgColor = AppTheme.restaurantBackground;
+        badgeTextColor = AppTheme.restaurantColor;
+        badgeIcon = Icons.restaurant;
+        break;
+      case VenueType.supermarket:
+        countBadgeText = '10 SL Supermarkets';
+        badgeBgColor = AppTheme.supermarketBackground;
+        badgeTextColor = AppTheme.supermarketColor;
+        badgeIcon = Icons.shopping_cart;
+        break;
+      case VenueType.other:
+        countBadgeText = 'SL Venues';
+        badgeBgColor = const Color(0xFFF1F5F9);
+        badgeTextColor = AppTheme.textMuted;
+        badgeIcon = Icons.place;
+        break;
+    }
+
+    final venueTitle = isOutside
+        ? 'Outside Predefined Venues'
+        : (_activeVenue?.name ?? _activeVenue?.shortName ?? 'Detecting Location...');
+
+    final gpsSubText = isOutside
+        ? 'Not inside any predefined venue'
+        : (_isGpsDetected ? 'Detected via GPS' : 'Selected Manually');
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceLight,
+        borderRadius: AppTheme.borderRadiusCard,
+        border: Border.all(color: AppTheme.borderLight, width: 1.2),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Avatar: soft category-color rounded square matching original screenshot
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: badgeBgColor,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: badgeTextColor.withValues(alpha: 0.15),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  isOutside ? Icons.explore_off_outlined : Icons.location_on,
+                  color: badgeTextColor,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+
+              // Location details column
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Eyebrow row: CURRENT LOCATION + Category count badge
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Flexible(
+                          child: Text(
+                            'CURRENT LOCATION',
+                            style: AppTheme.textEyebrow,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                          decoration: BoxDecoration(
+                            color: badgeBgColor,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(badgeIcon, size: 10, color: badgeTextColor),
+                              const SizedBox(width: 3),
+                              Text(
+                                countBadgeText,
+                                style: TextStyle(
+                                  fontFamily: AppTheme.fontMain,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: badgeTextColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+
+                    // Main Title: Detecting Location... or Venue Name
+                    Text(
+                      venueTitle,
+                      style: AppTheme.textTitleMedium,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 3),
+
+                    // Bottom row: Detected via GPS + LIVE Badge Pill
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          gpsSubText,
+                          style: const TextStyle(
+                            fontFamily: AppTheme.fontMain,
+                            fontSize: 11,
+                            color: AppTheme.textMuted,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        InkWell(
+                          key: const Key('location_card_change_button'),
+                          onTap: _showManualVenueSelector,
+                          borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                            decoration: AppTheme.liveBadgeDecoration,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    color: isOutside ? AppTheme.warningAmber : AppTheme.liveDot,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                const Text(
+                                  'LIVE',
+                                  style: TextStyle(
+                                    fontFamily: AppTheme.fontMain,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppTheme.textMain,
+                                    letterSpacing: 0.8,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          // If outside predefined venues: show category picker
+          if (isOutside) ...[
+            const SizedBox(height: 12),
+            const Divider(height: 1),
+            const SizedBox(height: 8),
+            const Text(
+              'Outside predefined venues. Choose a category:',
+              style: TextStyle(fontFamily: AppTheme.fontMain, fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textSub),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildOutsideCategoryButton(
+                    type: VenueType.hospital,
+                    label: 'Hospital',
+                    icon: Icons.local_hospital,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: _buildOutsideCategoryButton(
+                    type: VenueType.bank,
+                    label: 'Bank',
+                    icon: Icons.account_balance,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildOutsideCategoryButton(
+                    type: VenueType.restaurant,
+                    label: 'Restaurant',
+                    icon: Icons.restaurant,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: _buildOutsideCategoryButton(
+                    type: VenueType.supermarket,
+                    label: 'Supermarket',
+                    icon: Icons.shopping_cart,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // GPS Detection Active Panel (Directly below map in original screenshot)
+  Widget _buildGpsDetectionPanel() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 26),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceLight,
+        borderRadius: AppTheme.borderRadiusCard,
+        border: Border.all(color: AppTheme.borderLight, width: 1.2),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: const BoxDecoration(
+              color: AppTheme.hospitalBackground,
+              shape: BoxShape.circle,
+            ),
+            child: const Center(
+              child: Icon(
+                Icons.track_changes,
+                color: AppTheme.hospitalColor,
+                size: 26,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'GPS Detection Active',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: AppTheme.fontHeading,
+              fontSize: 16.5,
+              fontWeight: FontWeight.w800,
+              color: AppTheme.textMain,
+              letterSpacing: -0.2,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Select a hospital (🔴), bank (🔵), restaurant (🟠), or supermarket (🟢) on the map, or wait for GPS to detect your location to view message categories.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: AppTheme.fontMain,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w500,
+              color: AppTheme.textMuted,
+              height: 1.45,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOutsideCategoryButton({
+    required VenueType type,
+    required String label,
+    required IconData icon,
+  }) {
+    final isSelected = _selectedVenueType == type;
+    return OutlinedButton.icon(
+      key: Key('outside_category_${type.name}'),
+      onPressed: () => _venueController.selectManualCategory(type),
+      icon: Icon(icon, size: 16, color: isSelected ? AppTheme.textWhite : type.themeColor),
+      label: Text(
+        label,
+        style: TextStyle(
+          fontFamily: AppTheme.fontMain,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: isSelected ? AppTheme.textWhite : AppTheme.textMain,
+        ),
+      ),
+      style: OutlinedButton.styleFrom(
+        backgroundColor: isSelected ? type.themeColor : AppTheme.surfaceLight,
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+        side: BorderSide(color: isSelected ? type.themeColor : AppTheme.borderHover),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
+  // 4. PREDEFINED LOCATION MANUAL SELECTOR CHIPS
   Widget _buildVenueTypeSelectorRow() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
@@ -1036,19 +1397,20 @@ class _HomeScreenState extends State<HomeScreen> {
       avatar: Icon(
         type.icon,
         size: 15,
-        color: isSelected ? Colors.white : type.themeColor,
+        color: isSelected ? AppTheme.textWhite : type.themeColor,
       ),
       selectedColor: type.themeColor,
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.surfaceLight,
       labelStyle: TextStyle(
-        color: isSelected ? Colors.white : const Color(0xFF334155),
+        fontFamily: AppTheme.fontMain,
+        color: isSelected ? AppTheme.textWhite : AppTheme.textSub,
         fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
         fontSize: 12,
       ),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: isSelected ? type.themeColor : const Color(0xFFE2E8F0),
+          color: isSelected ? type.themeColor : AppTheme.borderLight,
           width: 1.5,
         ),
       ),
@@ -1056,77 +1418,19 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 4. "SELECT A MESSAGE" GRID (Faithful to Mockup)
-  Widget _buildMessageGrid(List<QuickMessageItem> messages) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: messages.length,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-          childAspectRatio: 1.9,
-        ),
-        itemBuilder: (ctx, idx) {
-          final msg = messages[idx];
-          return InkWell(
-            onTap: () {
-              _showFullscreenCardDisplay(
-                sinhala: msg.sinhala,
-                english: msg.english,
-                categoryName: msg.category,
-              );
-            },
-            borderRadius: BorderRadius.circular(16),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFCBD5E1), width: 1.5),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.02),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Center(
-                child: Text(
-                  msg.english,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF0F172A),
-                    height: 1.25,
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
   // 5. CUSTOM TYPING CARD (Faithful to Mockup)
   Widget _buildCustomTypingCard() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
+      margin: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.surfaceLight,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFCBD5E1), width: 1.5),
-        boxShadow: [
+        border: Border.all(color: AppTheme.borderHover, width: 1.5),
+        boxShadow: const [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
+            color: Color(0x05000000),
             blurRadius: 6,
-            offset: const Offset(0, 2),
+            offset: Offset(0, 2),
           ),
         ],
       ),
@@ -1147,7 +1451,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   child: const Icon(
                     Icons.edit,
-                    color: Color(0xFF0F172A),
+                    color: AppTheme.textMain,
                     size: 20,
                   ),
                 ),
@@ -1159,17 +1463,19 @@ class _HomeScreenState extends State<HomeScreen> {
                       Text(
                         'Custom Typing',
                         style: TextStyle(
+                          fontFamily: AppTheme.fontHeading,
                           fontWeight: FontWeight.w800,
                           fontSize: 15,
-                          color: Color(0xFF0F172A),
+                          color: AppTheme.textMain,
                         ),
                       ),
                       SizedBox(height: 2),
                       Text(
                         'Type your own message',
                         style: TextStyle(
+                          fontFamily: AppTheme.fontMain,
                           fontSize: 12,
-                          color: Color(0xFF64748B),
+                          color: AppTheme.textMuted,
                         ),
                       ),
                     ],
@@ -1177,7 +1483,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const Icon(
                   Icons.chevron_right,
-                  color: Color(0xFF94A3B8),
+                  color: AppTheme.textDisabled,
                 ),
               ],
             ),
@@ -1187,22 +1493,16 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 6. AI SUGGESTION & QUICK SEARCH PANEL
+  // 7. AI SUGGESTION & QUICK SEARCH PANEL
   Widget _buildAiSuggestionSection() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
+      margin: const EdgeInsets.symmetric(horizontal: 14),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.surfaceLight,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
+        border: Border.all(color: AppTheme.borderLight),
+        boxShadow: AppTheme.cardShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1215,9 +1515,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Text(
                   'AI Phrase Suggestions / යෝජනා',
                   style: TextStyle(
+                    fontFamily: AppTheme.fontHeading,
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E293B),
+                    color: AppTheme.textMain,
                   ),
                 ),
               ),
@@ -1261,6 +1562,19 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Sinhala Live Speech Box (Screen 2 / Tab 1: Categories)
+          SinhalaSpeechBox(
+            themeColor: themeColor,
+            onShowFullscreen: (txt) {
+              _showFullscreenCardDisplay(
+                sinhala: txt,
+                english: '',
+                categoryName: 'Sinhala Live Speech',
+              );
+            },
+          ),
+          const SizedBox(height: 10),
+
           // Selector chips at top of categories
           _buildVenueTypeSelectorRow(),
           const SizedBox(height: 16),
@@ -1378,53 +1692,67 @@ class _HomeScreenState extends State<HomeScreen> {
   // TAB 2: HISTORY VIEW
   // -------------------------------------------------------------
   Widget _buildHistoryTab() {
-    if (_history.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.history, size: 48, color: Color(0xFFCBD5E1)),
-            SizedBox(height: 12),
-            Text(
-              'No message history yet',
-              style: TextStyle(fontSize: 16, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
-            ),
-            SizedBox(height: 4),
-            Text(
-              'Phrases you tap will appear here for quick access',
-              style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.separated(
+    return ListView(
       padding: const EdgeInsets.all(16),
-      itemCount: _history.length,
-      separatorBuilder: (_, index) => const SizedBox(height: 8),
-      itemBuilder: (ctx, idx) {
-        final item = _history[idx];
-        return Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: const BorderSide(color: Color(0xFFE2E8F0)),
-          ),
-          child: ListTile(
-            title: Text(item.sinhala, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            subtitle: Text(item.english, style: const TextStyle(fontSize: 13, color: Color(0xFF64748B))),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Color(0xFF94A3B8)),
-            onTap: () {
-              _showFullscreenCardDisplay(
-                sinhala: item.sinhala,
-                english: item.english,
-                categoryName: item.category,
-              );
-            },
-          ),
-        );
-      },
+      children: [
+        // Sinhala Live Speech Box (Screen 3 / Tab 2: History)
+        SinhalaSpeechBox(
+          themeColor: _selectedVenueType.themeColor,
+          onShowFullscreen: (txt) {
+            _showFullscreenCardDisplay(
+              sinhala: txt,
+              english: '',
+              categoryName: 'Sinhala Live Speech',
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        if (_history.isEmpty)
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.only(top: 32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.history, size: 48, color: Color(0xFFCBD5E1)),
+                  SizedBox(height: 12),
+                  Text(
+                    'No message history yet',
+                    style: TextStyle(fontSize: 16, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Phrases you tap will appear here for quick access',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          ..._history.map((item) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Card(
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: const BorderSide(color: Color(0xFFE2E8F0)),
+                  ),
+                  child: ListTile(
+                    title: Text(item.sinhala, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    subtitle: Text(item.english, style: const TextStyle(fontSize: 13, color: Color(0xFF64748B))),
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Color(0xFF94A3B8)),
+                    onTap: () {
+                      _showFullscreenCardDisplay(
+                        sinhala: item.sinhala,
+                        english: item.english,
+                        categoryName: item.category,
+                      );
+                    },
+                  ),
+                ),
+              )),
+      ],
     );
   }
 
@@ -1432,59 +1760,315 @@ class _HomeScreenState extends State<HomeScreen> {
   // TAB 3: FAVORITES VIEW
   // -------------------------------------------------------------
   Widget _buildFavoritesTab() {
-    if (_favorites.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.star_border, size: 48, color: Color(0xFFCBD5E1)),
-            SizedBox(height: 12),
-            Text(
-              'No favorites saved yet',
-              style: TextStyle(fontSize: 16, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
+    final favList = _favorites.toList();
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Sinhala Live Speech Box (Screen 4 / Tab 3: Favorites)
+        SinhalaSpeechBox(
+          themeColor: _selectedVenueType.themeColor,
+          onShowFullscreen: (txt) {
+            _showFullscreenCardDisplay(
+              sinhala: txt,
+              english: '',
+              categoryName: 'Sinhala Live Speech',
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        if (_favorites.isEmpty)
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.only(top: 32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.star_border, size: 48, color: Color(0xFFCBD5E1)),
+                  SizedBox(height: 12),
+                  Text(
+                    'No favorites saved yet',
+                    style: TextStyle(fontSize: 16, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Tap the star icon on any fullscreen phrase to save it here',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+                  ),
+                ],
+              ),
             ),
-            SizedBox(height: 4),
-            Text(
-              'Tap the star icon on any fullscreen phrase to save it here',
-              style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+          )
+        else
+          ...favList.map((phrase) {
+            final pair = _resolveBilingualPair(sinhala: phrase, english: '');
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                child: ListTile(
+                  leading: const Icon(Icons.star, color: Color(0xFFF59E0B)),
+                  title: Text(pair.sinhala, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  subtitle: Text(pair.english, style: const TextStyle(fontSize: 13, color: Color(0xFF64748B))),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                    onPressed: () {
+                      setState(() {
+                        _favorites.remove(phrase);
+                        _favorites.remove(pair.english);
+                        _favorites.remove(pair.sinhala);
+                      });
+                    },
+                  ),
+                  onTap: () {
+                    _showFullscreenCardDisplay(
+                      sinhala: pair.sinhala,
+                      english: pair.english,
+                      categoryName: 'Favorite / ප්‍රියතම',
+                    );
+                  },
+                ),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+
+  void _showCategoryPicker(BuildContext context, VenueController controller) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Choose Category',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.of(ctx).pop(),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Select which type of communication messages to display:',
+              style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildCategoryPickerItem(
+                    ctx,
+                    controller,
+                    type: VenueType.hospital,
+                    labelSi: 'රෝහල',
+                    labelEn: 'Hospital',
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildCategoryPickerItem(
+                    ctx,
+                    controller,
+                    type: VenueType.bank,
+                    labelSi: 'බැංකුව',
+                    labelEn: 'Bank',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildCategoryPickerItem(
+                    ctx,
+                    controller,
+                    type: VenueType.restaurant,
+                    labelSi: 'ආපනශාලාව',
+                    labelEn: 'Restaurant',
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildCategoryPickerItem(
+                    ctx,
+                    controller,
+                    type: VenueType.supermarket,
+                    labelSi: 'සුපිරි වෙළඳසැල',
+                    labelEn: 'Supermarket',
+                  ),
+                ),
+              ],
             ),
           ],
         ),
-      );
-    }
+      ),
+    );
+  }
 
-    final favList = _favorites.toList();
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: favList.length,
-      separatorBuilder: (_, index) => const SizedBox(height: 8),
-      itemBuilder: (ctx, idx) {
-        final phrase = favList[idx];
-        return Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: const BorderSide(color: Color(0xFFE2E8F0)),
-          ),
-          child: ListTile(
-            leading: const Icon(Icons.star, color: Color(0xFFF59E0B)),
-            title: Text(phrase, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            trailing: IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-              onPressed: () {
-                setState(() => _favorites.remove(phrase));
-              },
-            ),
-            onTap: () {
-              _showFullscreenCardDisplay(
-                sinhala: phrase,
-                english: '',
-                categoryName: 'Favorite / ප්‍රියතම',
-              );
-            },
-          ),
-        );
+  Widget _buildCategoryPickerItem(
+    BuildContext ctx,
+    VenueController controller, {
+    required VenueType type,
+    required String labelSi,
+    required String labelEn,
+  }) {
+    final isSelected = controller.currentVenueType == type;
+    return InkWell(
+      key: Key('category_picker_${type.name}'),
+      onTap: () {
+        Navigator.of(ctx).pop();
+        controller.selectManualCategory(type);
       },
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isSelected ? type.themeColor : type.backgroundColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? type.themeColor : type.themeColor.withValues(alpha: 0.3),
+            width: 1.5,
+          ),
+        ),
+        child: Column(
+          children: [
+            Icon(type.icon, color: isSelected ? Colors.white : type.themeColor, size: 24),
+            const SizedBox(height: 6),
+            Text(
+              labelSi,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: isSelected ? Colors.white : const Color(0xFF1E293B),
+              ),
+            ),
+            Text(
+              labelEn,
+              style: TextStyle(
+                fontSize: 11,
+                color: isSelected ? Colors.white70 : const Color(0xFF64748B),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showLocationDebugDialog(BuildContext context, VenueController controller) {
+    final pos = controller.lastPosition;
+    final timeStr = pos?.timestamp != null
+        ? '${pos!.timestamp.hour.toString().padLeft(2, '0')}:${pos.timestamp.minute.toString().padLeft(2, '0')}:${pos.timestamp.second.toString().padLeft(2, '0')}'
+        : 'No fix yet';
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.bug_report_outlined, color: Color(0xFF2563EB)),
+            SizedBox(width: 8),
+            Text('Location Debug Info', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildDebugRow('Latitude', pos?.latitude.toStringAsFixed(6) ?? 'N/A'),
+              _buildDebugRow('Longitude', pos?.longitude.toStringAsFixed(6) ?? 'N/A'),
+              _buildDebugRow('Accuracy', pos != null ? '${pos.accuracy.toStringAsFixed(1)} m' : 'N/A'),
+              _buildDebugRow('Speed', pos != null ? '${pos.speed.toStringAsFixed(2)} m/s' : '0.00 m/s'),
+              _buildDebugRow('Time of Last Fix', timeStr),
+              const Divider(height: 16),
+              _buildDebugRow('GPS Status', controller.gpsStatusText),
+              _buildDebugRow('Mode', controller.isGpsDetected ? 'GPS Auto-Detection' : 'Manual Choice'),
+              _buildDebugRow('Follow Mode', controller.isFollowMode ? 'Active' : 'Paused (User panned)'),
+              const Divider(height: 16),
+              _buildDebugRow('Matched Venue', controller.currentVenue?.name ?? (controller.isOutsidePredefined ? 'Outside Predefined Venues' : 'None')),
+              _buildDebugRow('Venue Distance', controller.lastMatchedDistanceMeters != null ? '${controller.lastMatchedDistanceMeters!.toStringAsFixed(1)} m' : 'N/A'),
+              _buildDebugRow('Active Category', controller.currentVenueType.displayNameEn),
+              const Divider(height: 16),
+              const Text('Last Backend Response:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF334155))),
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.all(8),
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: SelectableText(
+                  controller.lastBackendResponse ?? 'None',
+                  style: const TextStyle(fontSize: 11, fontFamily: 'monospace', color: Color(0xFF0F172A)),
+                ),
+              ),
+              if (controller.lastError != null) ...[
+                const SizedBox(height: 8),
+                const Text('Last Error:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.red)),
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEE2E2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: SelectableText(
+                    controller.lastError!,
+                    style: const TextStyle(fontSize: 11, fontFamily: 'monospace', color: Color(0xFF991B1B)),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDebugRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 12, color: Color(0xFF64748B), fontWeight: FontWeight.w500)),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
