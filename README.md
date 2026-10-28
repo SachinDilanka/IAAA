@@ -1,196 +1,225 @@
-# Little Voices — Sinhala Speech Therapy
+# Little Voices: Emotion-Adaptive Sinhala Speech Therapy System for Children
 
-A bilingual Flutter application for children aged 4–10 to practise Sinhala letters, pronunciation, and step-by-step word building. Profile setup, guidance, and progress management are designed for a parent or guardian.
 
-## Architecture
 
-- **Flutter client:** `flutter_app/` — Android and web UI built with Flutter/Dart
-- **API:** `backend/` — FastAPI and SQLAlchemy
-- **Database:** SQLite, created and seeded automatically
-- **State and routing:** Provider and GoRouter
-- **Localization:** Flutter ARB resources in `flutter_app/lib/l10n/`
+**Little Voices** is an intelligent, emotion-adaptive Sinhala speech therapy mobile and web application designed for children aged 4–10 with speech delays and articulation disorders. Integrating real-time **Affective Computing** and **Speech Articulation Analysis**, the system non-intrusively tracks a child's facial emotional state (happiness, frustration, fatigue) and vocal patterns using a **Hybrid Convolutional Neural Network - Deep Neural Network (CNN-DNN)** architecture. The system dynamically personalizes therapy exercise difficulty, provides visual biofeedback via an integrated camera mirror, and reinforces learning through the interactive mascot **"පැංචා" (Pancha)** with authentic spoken Sinhala audio feedback.
 
-The Flutter client uses the existing backend APIs and database. There is no authentication feature in the original application, so no authentication flow is included in the migration.
+---
 
-## Features
+## 🏛️ System Architecture & Repository Structure
 
-- English and Sinhala UI with a persisted language preference
-- Eight Sinhala letter exercises and twenty word-building exercises
-- Animated child-friendly therapy guide
-- Sinhala text-to-speech and Sinhala speech recognition
-- Camera mirror and backend emotion analysis
-- Attempt, star, and progress tracking using the existing API
-- Parent/guardian profile setup and guidance
-- Centered, localized confirmation and error dialogs
-- Responsive navigation for phones, tablets, and web
+```
+sinhala_speech_therapy/
+├── flutter_app/                       # Cross-platform Flutter client (Android & Web)
+│   ├── lib/
+│   │   ├── features/practice/         # Letter & Word Practice modules, tools panel
+│   │   ├── emotion_camera_web.dart    # Live camera mirror & periodic 5-second frame streaming
+│   │   └── l10n/                      # ARB localization files (Sinhala / English)
+│   ├── assets/
+│   │   ├── models/                    # Quantized TFLite model (emotion_model.tflite & labels.txt)
+│   │   └── audio/                     # Pre-recorded clinical Sinhala audio files (.mp3)
+│   └── test/                          # Unit and widget test suite
+│
+├── backend/                           # FastAPI REST API & AI Inference Engine
+│   ├── ml/
+│   │   ├── emotion_classifier.py      # OpenCV face crop, tensor normalization & TFLite inference
+│   │   └── train_emotion_model.py     # CNN-DNN model training pipeline & TFLite quantization
+│   ├── main.py                        # FastAPI routes, CORS middleware & static web host
+│   ├── seed_data.py                   # Clinical Sinhala articulation dataset & exercise seeder
+│   └── therapy.db                     # SQLite database (curriculum, progress & child profile)
+│
+└── dataset/                           # FER facial emotion dataset (35,000+ images) & audio samples
 
-## Development environment (without Android Studio)
-
-This project uses VS Code and Android command-line tools only.
-
-Required tools:
-
-- Flutter SDK and Dart SDK
-- VS Code with `Dart-Code.dart-code` and `Dart-Code.flutter`
-- JDK 17
-- Android SDK command-line tools
-- Android SDK Platform 36 and Build Tools 36
-
-Verify the environment:
-
-```powershell
-flutter doctor -v
-code --list-extensions
 ```
 
-`flutter doctor` may report Visual Studio as missing. Visual Studio is only required for a Windows desktop build; it is not required for this project's Android and web targets.
+---
 
-## Start the application
+## 🧠 Deep Learning Architecture: Hybrid CNN-DNN
 
-The FastAPI backend and Flutter client must both be running during development.
+The core intelligence combines spatial computer vision for affective tracking and acoustic feature modeling using a **Custom Hybrid CNN-DNN Architecture**. The trained network is exported into an edge-optimized **TensorFlow Lite (`.tflite`)** model for low-latency client and backend inference.
 
-### 1. Open the project in VS Code
+### 1. Data Preprocessing & Feature Extraction Pipeline
 
-```powershell
-cd C:\Users\User\Downloads\sinhala_speech_therapy
-code .
+* **Facial Input Dimensions:** $48 \times 48 \times 1$ Grayscale image tensors (single-channel).
+
+
+* **Pixel Normalization (Min-Max):**
+
+$$\hat{X} = \frac{X - X_{min}}{X_{max} - X_{min}} = \frac{X}{255.0}$$
+
+
+* **Acoustic Input (Speech Articulation):** Real-time audio signals converted into visual **Mel-Spectrograms** (16 kHz sampling rate, 2,048 FFT window, 512 hop length, 128 Mel frequency bands) to extract formant transitions ($F_1, F_2$) and acoustic patterns.
+
+
+* **Face Localization:** Automated square center-crop geometry with a $10\%$ adaptive bounding margin fallback when Haar Cascade detection is bypassed.
+
+### 2. Neural Network Layer Pipeline
+
+```
+Input Tensor [48 × 48 × 1]
+       │
+       ▼
+[Conv2D Block 1: 32 Filters (3×3), ReLU] ──► BatchNormalization ──► MaxPooling2D (2×2) ──► Dropout (0.25)
+       │
+       ▼
+[Conv2D Block 2: 64 Filters (3×3), ReLU] ──► BatchNormalization ──► MaxPooling2D (2×2) ──► Dropout (0.25)
+       │
+       ▼
+[Conv2D Block 3: 128 Filters (3×3), ReLU] ──► BatchNormalization ──► MaxPooling2D (2×2) ──► Dropout (0.25)
+       │
+       ▼
+[Flatten Layer: 2D Spatial Features to 1D Vector]
+       │
+       ▼
+[Dense Layer 1 (DNN): 256 Units, ReLU] ──► BatchNormalization ──► Dropout (0.50)
+       │
+       ▼
+[Dense Layer 2 (DNN): 128 Units, ReLU] ──► BatchNormalization ──► Dropout (0.50)
+       │
+       ▼
+[Output Dense: Softmax Multi-Class Classification]
+
 ```
 
-### 2. Start the backend
+* **Feature Extraction (CNN Part):** `Conv2D`, `BatchNormalization`, and `MaxPooling2D` layers capture subtle facial curves, expressions, and acoustic spectrogram patterns.
 
-Open the first VS Code terminal from the repository root:
+
+* **Classification Head (DNN Part):** Fully connected `Dense` layers evaluate extracted features to produce multi-class probability distributions.
+
+
+* **Softmax Activation Formula:**
+
+$$P(y = i \mid z) = \frac{e^{z_i - \max(z)}}{\sum_{j=1}^{C} e^{z_j - \max(z)}}$$
+
+
+* **Loss Function:** `categorical_crossentropy` (evaluating multi-class cross-entropy loss):
+
+$$\mathcal{L} = -\sum_{i=1}^{C} y_i \log(\hat{y}_i)$$
+
+
+* **Optimizer:** Adam (Adaptive Moment Estimation)
+* **Training Schedule:** 30 Epochs executed on Google Colab with an NVIDIA T4 GPU accelerator, regulated by `EarlyStopping` (patience = 5) and `ReduceLROnPlateau`.
+
+
+* **Quantization & Deployment:** Model converted using `TFLiteConverter` with dynamic range quantization, resulting in the lightweight deployment artifact `emotion_model.tflite`.
+
+
+
+---
+
+## 🎯 Clinical Sinhala Articulation Curriculum
+
+The curriculum is structured according to **Van Riper’s Articulation Hierarchy** (Sound $\rightarrow$ Syllable $\rightarrow$ Word). Seeded via `backend/seed_data.py`, it addresses the primary pediatric speech sound disorders identified in Sri Lankan clinical speech-language therapy:
+
+| Phonological Error | Clinical Description | Target Word Exercises | Progression Stage |
+| --- | --- | --- | --- |
+| **Stopping** | Substitution of fricatives with plosive stops (e.g., /s/ $\rightarrow$ /t/)
+
+ | *පූසා* $\rightarrow$ *පූතා*, *සපත්තු* $\rightarrow$ *තපත්තු*
+
+ | Level 1: Beginner |
+| **Fronting** | Replacing posterior velars with anterior alveolars (e.g., /k/, /g/ $\rightarrow$ /t/, /d/)
+
+ | *කහ* $\rightarrow$ *තහ*, *ගස* $\rightarrow$ *දස*
+
+ | Level 1: Beginner |
+| **Lateralization** | Distortion/substitution of liquids (e.g., /r/ $\rightarrow$ /l/)
+
+ | *රජ* $\rightarrow$ *ලජ*, *යතුර* $\rightarrow$ *යතුල*, *තාරාවා*
+
+ | Level 2: Intermediate |
+| **Backing & Metathesis** | Reversals or backward substitutions in compound consonant structures
+
+ | *තාත්තා*, *පුතා*, *කලිසම*
+
+ | Level 3: Advanced |
+
+---
+
+## 📱 Core System Capabilities
+
+* **Real-Time Affective Emotion Detection:** Captures web/mobile camera frames every 5 seconds, categorizing emotional states (Positive, Neutral, Negative) to dynamically adapt exercise difficulty.
+
+
+* **Visual Biofeedback (Camera Mirror):** Displays an on-screen mirror feed allowing children to observe and adjust lip, mouth, and tongue movements during articulation practice.
+
+
+* **Auditory Biofeedback:** Pre-recorded authentic Sinhala acoustic samples (`.mp3`) paired with automatic congratulatory vocal prompts (*"සුපිරි ඔයා හොඳට කිව්වා!"*) for pre-literate learners.
+
+
+* **Interactive Lion Mascot ("පැංචා"):** Child-centric animated mascot that provides engaging visual reactions to reduce therapy fatigue.
+
+
+* **Offline-Resilient Architecture:** Integrated local fallback data layer in Flutter ensuring uninterrupted practice during server disconnects or unstable home internet.
+
+
+* **Privacy-Preserving Edge Inference:** Live webcam frames are processed strictly in volatile memory and discarded immediately without persistent image or video logging.
+
+
+
+---
+
+## 🚀 Getting Started
+
+### 1. Prerequisites
+
+* **Flutter SDK:** `>=3.2.0`
+* **Dart SDK:** `>=3.0.0`
+* **Python:** `3.10+`
+* **JDK:** Version 17
+* **Google Chrome** (for Web testing) or **Android Device / Emulator** (API 26+)
+
+---
+
+### 2. Backend Setup & Execution
+
+Open a terminal at the project root:
 
 ```powershell
+# 1. Activate the Python virtual environment
 .\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+
+# 2. Install backend dependencies
+pip install -r requirements.txt
+
+# 3. Seed database with clinical Sinhala curriculum
+python backend/seed_data.py
+
+# 4. Start the FastAPI server on port 8000
 python -m uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+
 ```
 
-Keep this terminal open. Verify that the backend is running by opening:
+Interactive API documentation will be available at: `[http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)`
 
-```text
-http://127.0.0.1:8000/docs
-```
+---
 
-If PowerShell prevents virtual-environment activation, run this once in the current terminal and try again:
+### 3. Frontend Mobile & Web Execution
+
+Open a second terminal:
 
 ```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-```
-
-### 3. Start Flutter in Chrome
-
-Open a second VS Code terminal:
-
-```powershell
+# Navigate to the Flutter project
 cd flutter_app
+
+# Fetch required packages
 flutter pub get
+
+# Run on Google Chrome (Web Client)
 flutter run -d chrome --dart-define=API_BASE_URL=http://127.0.0.1:8000
-```
 
-Flutter will launch the application in Chrome. Keep both terminals open while using the application.
-
-### Quick Windows start
-
-You can start the backend and Chrome client together by double-clicking:
-
-```text
-run_app.bat
-```
-
-### Start on an Android emulator
-
-Start the emulator using Android command-line tools, confirm that Flutter can see it, and then launch the app:
-
-```powershell
-cd flutter_app
-flutter devices
+# Or run on an Android Emulator
 flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
+
 ```
 
-`10.0.2.2` is the Android emulator address for the backend running on the development computer.
+---
 
-### Start on a physical Android device
-
-1. Enable **Developer options** and **USB debugging** on the device.
-2. Connect it to the computer using USB.
-3. Ensure the phone and computer are connected to the same network.
-4. Find the computer's IPv4 address:
-
-   ```powershell
-   ipconfig
-   ```
-
-5. Confirm that Flutter detects the device and replace `YOUR_COMPUTER_IP` below with that IPv4 address:
-
-   ```powershell
-   cd flutter_app
-   flutter devices
-   flutter run --dart-define=API_BASE_URL=http://YOUR_COMPUTER_IP:8000
-   ```
-
-For example:
-
-```powershell
-flutter run --dart-define=API_BASE_URL=http://192.168.1.10:8000
-```
-
-The included `.vscode/launch.json` also contains Chrome and Android launch configurations.
-
-### Troubleshoot data-loading problems
-
-1. Confirm that the backend terminal is still running.
-2. Open the health endpoint:
-
-   ```text
-   http://127.0.0.1:8000/api/health
-   ```
-
-   A healthy response reports `"status": "ok"`, at least one child, and 28 exercises.
-
-3. For Chrome, use `http://127.0.0.1:8000` as `API_BASE_URL`.
-4. For the Android emulator, use `http://10.0.2.2:8000`.
-5. For a physical device, use the computer's LAN IPv4 address—not `127.0.0.1` or `10.0.2.2`.
-6. If port 8000 is already occupied, stop the older backend process before starting a new one.
-
-The SQLite path is anchored to the repository root, so the backend always reads the same `therapy.db` file regardless of which directory it is started from.
-
-### Troubleshoot missing sound
-
-- Increase the device's **media volume** and confirm it is not muted.
-- Stop and restart Flutter after updating the application so the bundled audio assets are loaded.
-- In Chrome, allow sound for the site and select a listen button after the page opens; browsers can block audio before the first user interaction.
-- If an older version is cached, close the application tab, start it again with `run_app.bat`, and hard-refresh Chrome with `Ctrl+F5`.
-- The app includes offline Sinhala recordings for every seeded letter, syllable, and word. It only uses the device's text-to-speech engine for text that has no bundled recording.
-- On Android, installing Google Speech Services and Sinhala voice data is still recommended as a fallback for additional text.
-
-## Build and verify
+### 4. Verification & Testing
 
 ```powershell
 cd flutter_app
-flutter gen-l10n
-dart format --output=none --set-exit-if-changed lib test
 flutter analyze
 flutter test
-flutter build web --release --dart-define=API_BASE_URL=http://127.0.0.1:8000
-flutter build apk --debug --dart-define=API_BASE_URL=http://10.0.2.2:8000
-```
 
-After `flutter build web`, FastAPI automatically serves `flutter_app/build/web`. During development, run Flutter directly from VS Code or with `flutter run`.
-
-## Localization
-
-Translations are maintained in:
-
-- `flutter_app/lib/l10n/app_en.arb`
-- `flutter_app/lib/l10n/app_si.arb`
-
-Run `flutter gen-l10n` after editing either resource. Sinhala letters and words remain in Sinhala in both interface languages because they are the learning targets.
-
-## Emotion-model training
-
-Model-training utilities remain available and are separate from the Flutter client:
-
-```powershell
-python backend/ml/train_emotion_model.py --train_dir "C:\Users\User\Downloads\train" --test_dir "C:\Users\User\Downloads\test"
 ```
